@@ -261,6 +261,8 @@ private:
 	int			_accel_orb_class_instance;
 	int			_accel_class_instance;
 
+  struct accel_params  _accel_params;
+
 	ringbuffer::RingBuffer	*_gyro_reports;
 
 	struct gyro_scale	_gyro_scale;

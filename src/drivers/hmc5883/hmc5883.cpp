@@ -915,6 +915,10 @@ HMC5883::collect()
 	struct mag_report new_report;
 	bool sensor_is_onboard = false;
 
+  float xraw_f;
+  float yraw_f;
+  float zraw_f;
+
 	/* this should be fairly close to the end of the measurement, so the best approximation of the time */
 	new_report.timestamp = hrt_absolute_time();
 	new_report.error_count = perf_event_count(_comms_errors);
@@ -1030,16 +1034,11 @@ HMC5883::collect()
 	// apply user specified rotation
 	rotate_3f(_rotation, xraw_f, yraw_f, zraw_f);
 
-	new_report.x = ((xraw_f * _range_scale) - _scale.x_offset) * _scale.x_scale;
-
-
-    /* apply magnetic correction matrix */
-    new_report.x =
-      _mag_params.M_xx * magx + _mag_params.M_xy * magy + _mag_params.M_xz * magz;
-    new_report.y =
-      _mag_params.M_yx * magx + _mag_params.M_yy * magy + _mag_params.M_yz * magz;
-    new_report.z =
-      _mag_params.M_zx * magx + _mag_params.M_zy * magy + _mag_params.M_zz * magz;
+  new_report.x = ((xraw_f * _range_scale) - _scale.x_offset) * _scale.x_scale;
+	/* flip axes and negate value for y */
+	new_report.y = ((yraw_f * _range_scale) - _scale.y_offset) * _scale.y_scale;
+	/* z remains z */
+	new_report.z = ((zraw_f * _range_scale) - _scale.z_offset) * _scale.z_scale;
 
 	if (!(_pub_blocked)) {
 
