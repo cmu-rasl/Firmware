@@ -37,9 +37,6 @@
  * System wide parameters
  */
 
-#include <nuttx/config.h>
-#include <systemlib/param/param.h>
-
 /**
  * Auto-start script index.
  *

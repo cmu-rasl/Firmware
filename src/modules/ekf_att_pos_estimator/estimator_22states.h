@@ -380,6 +380,8 @@ public:
      */
     void ZeroVariables();
 
+    void get_covariance(float c[28]);
+
 protected:
 
     /**

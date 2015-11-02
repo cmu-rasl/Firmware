@@ -41,7 +41,7 @@
  * @author Julian Oes <julian@px4.io>
  */
 
-#include <nuttx/config.h>
+#include <px4_config.h>
 #include <systemlib/param/param.h>
 
 /**
@@ -114,7 +114,7 @@ PARAM_DEFINE_FLOAT(BAT_V_CHARGED, 4.2f);
  *
  * @group Battery Calibration
  * @unit V
- * @min 0.0f
+ * @min 0.0
  */
 PARAM_DEFINE_FLOAT(BAT_V_LOAD_DROP, 0.07f);
 
@@ -274,3 +274,16 @@ PARAM_DEFINE_INT32(COM_AUTOS_PAR, 1);
  * @max 2
  */
 PARAM_DEFINE_INT32(COM_RC_IN_MODE, 0);
+
+/**
+ * Time-out for auto disarm after landing
+ *
+ * A non-zero, positive value specifies the time-out period in seconds after which the vehicle will be
+ * automatically disarmed in case a landing situation has been detected during this period.
+ * A value of zero means that automatic disarming is disabled.
+ *
+ * @group Commander
+ * @min 0
+ */
+PARAM_DEFINE_INT32(COM_DISARM_LAND, 0);
+
