@@ -1215,11 +1215,12 @@ MavlinkReceiver::handle_message_request_data_stream(mavlink_message_t *msg)
 	if (req.target_system == mavlink_system.sysid && req.target_component == mavlink_system.compid && req.req_message_rate != 0) {
 		float rate = req.start_stop ? (1000.0f / req.req_message_rate) : 0.0f;
 
-                for (unsigned int i = 0; streams_list[i] != nullptr; i++) {
-                  if (req.req_stream_id == streams_list[i]->get_id()) {
-                    _mavlink->configure_stream_threadsafe(streams_list[i]->get_name(), rate);
-                  }
-                }
+		MavlinkStream *stream;
+		LL_FOREACH(_mavlink->get_streams(), stream) {
+			if (req.req_stream_id == stream->get_id()) {
+				_mavlink->configure_stream_threadsafe(stream->get_name(), rate);
+			}
+		}
 	}
 }
 

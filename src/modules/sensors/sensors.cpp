@@ -2250,9 +2250,6 @@ Sensors::task_main()
 	/* rate limit vehicle status updates to 5Hz */
 	orb_set_interval(_vcontrol_mode_sub, 200);
 
-	/* rate limit gyro to 500 Hz (the gyro signal is lowpassed accordingly earlier) */
-	orb_set_interval(_gyro_sub, 2);
-
 	/*
 	 * do advertisements
 	 */
