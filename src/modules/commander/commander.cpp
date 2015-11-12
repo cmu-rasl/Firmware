@@ -180,6 +180,7 @@ static volatile bool thread_should_exit = false;	/**< daemon exit flag */
 static volatile bool thread_running = false;		/**< daemon status flag */
 static int daemon_task;					/**< Handle of daemon task / thread */
 static bool need_param_autosave = false;		/**< Flag set to true if parameters should be autosaved in next iteration (happens on param update and if functionality is enabled) */
+static bool _usb_telemetry_active = false;
 static hrt_abstime commander_boot_timestamp = 0;
 
 static unsigned int leds_counter;
@@ -200,7 +201,7 @@ static struct home_position_s _home;
 static unsigned _last_mission_instance = 0;
 static manual_control_setpoint_s _last_sp_man;
 
-struct vtol_vehicle_status_s vtol_status;
+static struct vtol_vehicle_status_s vtol_status;
 
 /**
  * The daemon app only briefly exists to start
@@ -403,11 +404,11 @@ int commander_main(int argc, char *argv[])
 
 void usage(const char *reason)
 {
-	if (reason) {
-		PX4_INFO("%s\n", reason);
+	if (reason && *reason > 0) {
+		PX4_INFO("%s", reason);
 	}
 
-	PX4_INFO("usage: commander {start|stop|status|calibrate|check|arm|disarm}\n\n");
+	PX4_INFO("usage: commander {start|stop|status|calibrate|check|arm|disarm}\n");
 }
 
 void print_status()
@@ -1269,7 +1270,7 @@ int commander_thread_main(int argc, char *argv[])
 	float rc_loss_timeout = 0.5;
 	int32_t datalink_regain_timeout = 0;
 
-	uint8_t geofence_action = 0;
+	int32_t geofence_action = 0;
 
 	/* Thresholds for engine failure detection */
 	int32_t ef_throttle_thres = 1.0f;
@@ -1463,6 +1464,11 @@ int commander_thread_main(int argc, char *argv[])
 					}
 				}
 
+				/* set (and don't reset) telemetry via USB as active once a MAVLink connection is up */
+				if (telemetry.type == telemetry_status_s::TELEMETRY_STATUS_RADIO_TYPE_USB) {
+					_usb_telemetry_active = true;
+				}
+
 				telemetry_last_heartbeat[i] = telemetry.heartbeat_time;
 			}
 		}
@@ -1519,18 +1525,19 @@ int commander_thread_main(int argc, char *argv[])
 				/* copy avionics voltage */
 				status.avionics_power_rail_voltage = system_power.voltage5V_v;
 
+				/* if the USB hardware connection went away, reboot */
 				if (status.usb_connected && !system_power.usb_connected) {
 					/*
 					 * apparently the USB cable went away but we are still powered,
 					 * so lets reset to a classic non-usb state.
 					 */
-					usleep(100000);
 					mavlink_log_critical(mavlink_fd, "USB disconnected, rebooting.")
 					usleep(400000);
 					px4_systemreset(false);
 				}
 
-				status.usb_connected = system_power.usb_connected;
+				/* finally judge the USB connected state based on software detection */
+				status.usb_connected = _usb_telemetry_active;
 			}
 		}
 
@@ -2529,7 +2536,7 @@ control_status_leds(vehicle_status_s *status_local, const actuator_armed_s *actu
 			} else if (status_local->battery_warning == vehicle_status_s::VEHICLE_BATTERY_WARNING_CRITICAL) {
 				rgbled_set_color(RGBLED_COLOR_RED);
 			} else {
-				if (status_local->condition_home_position_valid) {
+				if (status_local->condition_home_position_valid && status_local->condition_global_position_valid) {
 					rgbled_set_color(RGBLED_COLOR_GREEN);
 
 				} else {
@@ -3051,11 +3058,10 @@ void *commander_low_prio_loop(void *arg)
 				if (need_param_autosave_timeout > 0 && hrt_elapsed_time(&need_param_autosave_timeout) > 200000ULL) {
 					int ret = param_save_default();
 
-					if (ret == OK) {
-						mavlink_and_console_log_info(mavlink_fd, "settings autosaved");
-
+					if (ret != OK) {
+						mavlink_and_console_log_critical(mavlink_fd, "settings auto save error");
 					} else {
-						mavlink_and_console_log_critical(mavlink_fd, "settings save error");
+						warnx("settings saved.");
 					}
 
 					need_param_autosave = false;
