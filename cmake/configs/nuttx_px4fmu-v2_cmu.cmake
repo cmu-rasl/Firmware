@@ -65,7 +65,7 @@ set(config_module_list
 	#
 	# General system control
 	#
-  #modules/commander
+  modules/commander
   #modules/navigator
 	modules/mavlink
 	modules/gpio_led
