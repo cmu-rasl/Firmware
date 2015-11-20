@@ -879,9 +879,9 @@ void BlockLocalPositionEstimator::correctFlow()
 	if (_sub_flow.get().integration_timespan > 0) {
 
 		// estimate gyro bias for the flow board's gyro using flight controller's calibrated gyro
-		flow_gyrospeed[0] = _sub_flow.get().gyro_x_rate_integral / _sub_flow.get().integration_timespan * 1e6f;
-		flow_gyrospeed[1] = _sub_flow.get().gyro_y_rate_integral / _sub_flow.get().integration_timespan * 1e6f;
-		flow_gyrospeed[2] = _sub_flow.get().gyro_z_rate_integral / _sub_flow.get().integration_timespan * 1e6f;
+		flow_gyrospeed[0] = _sub_flow.get().gyro_x_rate_integral / (_sub_flow.get().integration_timespan / 1e6f);
+		flow_gyrospeed[1] = _sub_flow.get().gyro_y_rate_integral / (_sub_flow.get().integration_timespan / 1e6f);
+		flow_gyrospeed[2] = _sub_flow.get().gyro_z_rate_integral / (_sub_flow.get().integration_timespan / 1e6f);
 
 		// exponential moving average
 		_flowGyroBias[0] = alpha * (flow_gyrospeed[0] - _sub_att.get().pitchspeed) + (1.0f - alpha) * _flowGyroBias[0];
@@ -896,11 +896,11 @@ void BlockLocalPositionEstimator::correctFlow()
 
 		// calculate velocity over ground
 		flow_speed[0] = ((_sub_flow.get().pixel_flow_x_integral - _sub_flow.get().gyro_x_rate_integral) /
-				 (_sub_flow.get().integration_timespan * 1e6f)
+				 (_sub_flow.get().integration_timespan / 1e6f)
 				 + _flowGyroBias[0] - yaw_comp[0]) *
 				_x(X_z);		// TODO use terrain estimate here
 		flow_speed[1] = ((_sub_flow.get().pixel_flow_y_integral - _sub_flow.get().gyro_y_rate_integral) /
-				 (_sub_flow.get().integration_timespan * 1e6f) -
+				 (_sub_flow.get().integration_timespan / 1e6f) -
 				 + _flowGyroBias[1] - yaw_comp[1]) *
 				_x(X_z);		// TODO use terrain estimate here
 
