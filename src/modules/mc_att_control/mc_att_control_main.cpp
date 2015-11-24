@@ -167,6 +167,14 @@ private:
 	math::Vector<3>		_att_control;	/**< attitude control vector */
 
 	math::Matrix<3, 3>  _I;				/**< identity matrix */
+	math::Matrix<3, 3>  _R_prev;        /**< previous rotation matrix to determine angular velocity */
+
+	math::Vector<3>     _dsthat;        /**< disturbance estimate for l1 adaptive controller */
+	math::Vector<3>     _avlhat;        /**< angular velocity estimate for l1 adaptive controller */
+	math::Vector<3>     _lpd;           /**< l1 adaptive correction */
+
+
+
 
 	struct {
 		param_t roll_p;
@@ -194,6 +202,25 @@ private:
 		param_t acro_yaw_max;
 		param_t rattitude_thres;
 
+		param_t enable_l1;
+		param_t l1_inertia_xx;
+		param_t l1_inertia_xy;
+		param_t l1_inertia_xz;
+		param_t l1_inertia_yy;
+		param_t l1_inertia_yz;
+		param_t l1_inertia_zz;
+		param_t l1_bandwidth_x;
+		param_t l1_bandwidth_y;
+		param_t l1_bandwidth_z;
+		param_t l1_ksp_x;
+		param_t l1_ksp_y;
+		param_t l1_ksp_z;
+		param_t l1_gamma;
+		param_t l1_init_dist_x;
+		param_t l1_init_dist_y;
+		param_t l1_init_dist_z;
+		param_t l1_engage_level;
+
 	}		_params_handles;		/**< handles for interesting parameters */
 
 	struct {
@@ -211,6 +238,15 @@ private:
 
 		math::Vector<3> acro_rate_max;		/**< max attitude rates in acro mode */
 		float rattitude_thres;
+
+		bool                enable_l1;     /**< bool to enable l1 adaptive control */
+		math::Matrix<3, 3>  inertia;       /**< inertia matrix */
+		math::Matrix<3, 3>  inertia_inv;   /**< inverse of the inertia matrix */
+		math::Vector<3>     init_dist;     /**< l1 initial disturbance */
+		math::Vector<3>     bandwidth;     /**< l1 control bandwidth in x,y,z */
+		math::Vector<3>     Ksp;           /**< l1 state predictor gains in x,y,z */
+		float               gamma;         /**< l1 adaptation gain */
+		float               engage_level;  /**< weight threshold to determine activation of l1 */
 	}		_params;
 
 	/**
@@ -352,6 +388,20 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_att_control.zero();
 
 	_I.identity();
+	_R_prev.identity();
+
+	_dsthat.zero();
+	_avlhat.zero();
+	_lpd.zero();
+
+	_params.enable_l1 = false;
+	_params.init_dist.zero();
+	_params.bandwidth.zero();
+	_params.inertia.identity();
+	_params.inertia_inv.identity();
+	_params.Ksp.zero();
+	_params.gamma = 0.0f;
+	_params.engage_level = 0.0f;
 
 	_params_handles.roll_p			= 	param_find("MC_ROLL_P");
 	_params_handles.roll_rate_p		= 	param_find("MC_ROLLRATE_P");
@@ -376,6 +426,25 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_params_handles.acro_pitch_max	= 	param_find("MC_ACRO_P_MAX");
 	_params_handles.acro_yaw_max	= 	param_find("MC_ACRO_Y_MAX");
 	_params_handles.rattitude_thres = 	param_find("MC_RATT_TH");
+
+	_params_handles.enable_l1       =   param_find("MC_ENABLE_L1");
+	_params_handles.l1_inertia_xx   =   param_find("L1_INERTIA_XX");
+	_params_handles.l1_inertia_xy   =   param_find("L1_INERTIA_XY");
+	_params_handles.l1_inertia_xz   =   param_find("L1_INERTIA_XZ");
+	_params_handles.l1_inertia_yy   =   param_find("L1_INERTIA_YY");
+	_params_handles.l1_inertia_yz   =   param_find("L1_INERTIA_YZ");
+	_params_handles.l1_inertia_zz   =   param_find("L1_INERTIA_ZZ");
+	_params_handles.l1_bandwidth_x  =   param_find("L1_BANDWIDTH_X");
+	_params_handles.l1_bandwidth_y  =   param_find("L1_BANDWIDTH_Y");
+	_params_handles.l1_bandwidth_z  =   param_find("L1_BANDWIDTH_Z");
+	_params_handles.l1_ksp_x        =   param_find("L1_KSP_X");
+	_params_handles.l1_ksp_y        =   param_find("L1_KSP_Y");
+	_params_handles.l1_ksp_z        =   param_find("L1_KSP_Z");
+	_params_handles.l1_gamma        =   param_find("L1_GAMMA");
+	_params_handles.l1_init_dist_x  =   param_find("L1_INIT_DIST_X");
+	_params_handles.l1_init_dist_y  =   param_find("L1_INIT_DIST_Y");
+	_params_handles.l1_init_dist_z  =   param_find("L1_INIT_DIST_Z");
+	_params_handles.l1_engage_level =   param_find("L1_ENGAGE_LEVEL");
 
 	/* fetch initial parameter values */
 	parameters_update();
@@ -468,6 +537,56 @@ MulticopterAttitudeControl::parameters_update()
 	param_get(_params_handles.rattitude_thres, &_params.rattitude_thres);
 
 	_actuators_0_circuit_breaker_enabled = circuit_breaker_enabled("CBRK_RATE_CTRL", CBRK_RATE_CTRL_KEY);
+
+	/* L1 adaptive parameters */
+	param_get(_params_handles.enable_l1, &_params.enable_l1);
+
+	/* Fill out the Inertia Matrix */
+	param_get(_params_handles.l1_inertia_xx, &v);
+	_params.inertia(0, 0) = v;
+	param_get(_params_handles.l1_inertia_xy, &v);
+	_params.inertia(0, 1) = -v;
+	_params.inertia(1, 0) = -v;
+	param_get(_params_handles.l1_inertia_xz, &v);
+	_params.inertia(0, 2) = -v;
+	_params.inertia(2, 0) = -v;
+	param_get(_params_handles.l1_inertia_yy, &v);
+	_params.inertia(1, 1) = v;
+	param_get(_params_handles.l1_inertia_yz, &v);
+	_params.inertia(1, 2) = -v;
+	_params.inertia(2, 1) = -v;
+	param_get(_params_handles.l1_inertia_zz, &v);
+	_params.inertia(2, 2) = v;
+
+	_params.inertia_inv = _params.inertia.inversed();
+
+	/* Parameters for the L1 adaptive control */
+	param_get(_params_handles.l1_bandwidth_x, &v);
+	_params.bandwidth(0) = v;
+	param_get(_params_handles.l1_bandwidth_y, &v);
+	_params.bandwidth(1) = v;
+	param_get(_params_handles.l1_bandwidth_z, &v);
+	_params.bandwidth(2) = v;
+
+	param_get(_params_handles.l1_ksp_x, &v);
+	_params.Ksp(0) = v;
+	param_get(_params_handles.l1_ksp_y, &v);
+	_params.Ksp(1) = v;
+	param_get(_params_handles.l1_ksp_z, &v);
+	_params.Ksp(2) = v;
+
+	param_get(_params_handles.l1_gamma, &v);
+	_params.gamma = v;
+
+	param_get(_params_handles.l1_init_dist_x, &v);
+	_params.init_dist(0) = v;
+	param_get(_params_handles.l1_init_dist_y, &v);
+	_params.init_dist(1) = v;
+	param_get(_params_handles.l1_init_dist_z, &v);
+	_params.init_dist(2) = v;
+
+	param_get(_params_handles.l1_engage_level, &v);
+	_params.engage_level = v;
 
 	return OK;
 }
@@ -686,9 +805,16 @@ MulticopterAttitudeControl::control_attitude(float dt)
 void
 MulticopterAttitudeControl::control_attitude_rates(float dt)
 {
-	/* reset integral if disarmed */
+	/* reset state estimator if disarmed */
 	if (!_armed.armed || !_vehicle_status.is_rotary_wing) {
-		_rates_int.zero();
+		if (!_params.enable_l1) {
+			_rates_int.zero();
+
+		} else {
+			_dsthat = _params.init_dist;
+			_lpd = _dsthat;
+			_avlhat.zero();
+		}
 	}
 
 	/* current body angular rates */
@@ -699,19 +825,76 @@ MulticopterAttitudeControl::control_attitude_rates(float dt)
 
 	/* angular rates error */
 	math::Vector<3> rates_err = _rates_sp - rates;
-	_att_control = _params.rate_p.emult(rates_err) + _params.rate_d.emult(_rates_prev - rates) / dt + _rates_int + _params.rate_ff.emult(_rates_sp - _rates_sp_prev) / dt;
+
+	if (_params.enable_l1) {
+		/* current body angular velocity */
+		math::Vector<3> angvel;
+		angvel.zero();
+
+		/** Note that the angular velocity is not the same as body rpy rates
+		 * http://math.stackexchange.com/questions/668866/how-do-you-find-angular-velocity-given-a-pair-of-3x3-rotation-matrices
+		 */
+		math::Matrix<3, 3> R2R1T, skewmat;
+		math::Quaternion q_att(_ctrl_state.q[0], _ctrl_state.q[1], _ctrl_state.q[2], _ctrl_state.q[3]);
+		math::Matrix<3, 3> R = q_att.to_dcm();
+
+		R2R1T = R * _R_prev.transposed();
+		// Get trace
+		float trace = 0.0f;
+
+		for (int i = 0; i < 3; i++) {
+			trace += R2R1T(i, i);
+		}
+
+		float theta = acosf((trace - 1.0f) / 2.0f);
+		skewmat = (R2R1T - R2R1T.transposed()) / (2.0f * sinf(theta));
+		skewmat = skewmat * theta / dt;
+		angvel(0) = (skewmat(2, 1) - skewmat(1, 2)) / 2.0f;
+		angvel(1) = (skewmat(0, 2) - skewmat(2, 0)) / 2.0f;
+		angvel(2) = (skewmat(1, 0) - skewmat(0, 1)) / 2.0f;
+		_R_prev = R;
+
+		/* Set control output */
+		_att_control = _params.rate_p.emult(rates_err) + _params.rate_d.emult(_rates_prev - rates) / dt - _lpd +
+			       _params.rate_ff.emult(_rates_sp - _rates_sp_prev) / dt;
+
+		/* Leunberger state predictor */
+		math::Vector<3> werr, avlhatdot, dsthatdot;
+		werr = _avlhat - angvel;
+
+		// % is the cross operator
+		avlhatdot = _params.inertia_inv * (_att_control + _dsthat - (_avlhat % (_params.inertia * _avlhat))) -
+			    _params.Ksp.emult(werr);
+		dsthatdot = (_params.inertia * werr) * (-_params.gamma);
+
+		_avlhat += avlhatdot * dt;
+		_dsthat += dsthatdot * dt;
+		_lpd += _params.bandwidth.emult(_dsthat - _lpd) * dt;
+	}
+
+	else {
+		_att_control = _params.rate_p.emult(rates_err) + _params.rate_d.emult(_rates_prev - rates) / dt + _rates_int +
+			       _params.rate_ff.emult(_rates_sp - _rates_sp_prev) / dt;
+	}
+
 	_rates_sp_prev = _rates_sp;
 	_rates_prev = rates;
 
+
 	/* update integral only if not saturated on low limit and if motor commands are not saturated */
-	if (_thrust_sp > MIN_TAKEOFF_THRUST && !_motor_limits.lower_limit && !_motor_limits.upper_limit ) {
+	if (_thrust_sp > MIN_TAKEOFF_THRUST && !_motor_limits.lower_limit && !_motor_limits.upper_limit) {
 		for (int i = 0; i < 3; i++) {
 			if (fabsf(_att_control(i)) < _thrust_sp) {
 				float rate_i = _rates_int(i) + _params.rate_i(i) * rates_err(i) * dt;
 
 				if (PX4_ISFINITE(rate_i) && rate_i > -RATES_I_LIMIT && rate_i < RATES_I_LIMIT &&
 				    _att_control(i) > -RATES_I_LIMIT && _att_control(i) < RATES_I_LIMIT) {
-					_rates_int(i) = rate_i;
+					if (!_params.enable_l1) {
+						_rates_int(i) = rate_i;
+
+					} else {
+						_rates_int(i) = _lpd(i);
+					}
 				}
 			}
 		}

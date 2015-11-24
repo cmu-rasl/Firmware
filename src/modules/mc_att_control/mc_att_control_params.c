@@ -281,3 +281,183 @@ PARAM_DEFINE_FLOAT(MC_ACRO_Y_MAX, 360.0f);
  * @group Multicopter Attitude Control
  */
  PARAM_DEFINE_FLOAT(MC_RATT_TH, 1.0f);
+
+/**
+* Parameter to enable L1 adaptive control
+*
+* This performs L1 adaptive estimation of the disturbance of the system
+* and compensates for it leading to better attitude hold
+*
+* @min 0
+* @max 1
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_INT32(MC_CONTROL_ENABLE_L1, 0);
+
+/**
+* Moment of Inertia about XX
+*
+* @unit N m^2
+* @min 0.0
+* @max 10.0
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_FLOAT(L1_INERTIA_XX, 0.0f);
+
+/**
+* Moment of Inertia about XY
+*
+* @unit N m^2
+* @min 0.0
+* @max 10.0
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_FLOAT(L1_INERTIA_XY, 0.0f);
+
+/**
+* Moment of Inertia about XZ
+*
+* @unit N m^2
+* @min 0.0
+* @max 10.0
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_FLOAT(L1_INERTIA_XZ, 0.0f);
+
+/**
+* Moment of Inertia about YY
+*
+* @unit N m^2
+* @min 0.0
+* @max 10.0
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_FLOAT(L1_INERTIA_YY, 0.0f);
+
+/**
+* Moment of Inertia about YZ
+*
+* @unit N m^2
+* @min 0.0
+* @max 10.0
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_FLOAT(L1_INERTIA_YZ, 0.0f);
+
+/**
+* Moment of Inertia about ZZ
+*
+* @unit N m^2
+* @min 0.0
+* @max 10.0
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_FLOAT(L1_INERTIA_ZZ, 0.0f);
+
+/**
+* Control Bandwith in X
+*
+* @unit ??
+* @min 0.0
+* @max 1000.0
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_FLOAT(L1_BANDWIDTH_X, 0.0f);
+
+/**
+* Control Bandwidth in Y
+*
+* @unit ??
+* @min 0.0
+* @max 1000.0
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_FLOAT(L1_BANDWIDTH_Y, 0.0f);
+
+/**
+* Control Bandwidth in Z
+*
+* @unit ??
+* @min 0.0
+* @max 1000.0
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_FLOAT(L1_BANDWIDTH_Z, 0.0f);
+
+/**
+* Gain on state predictor in X
+*
+* @min 0.0
+* @max 1000.0
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_FLOAT(L1_KSP_X, 400.0f);
+
+/**
+* Gain on state predictor in Y
+*
+* @min 0.0
+* @max 1000.0
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_FLOAT(L1_KSP_Y, 400.0f);
+
+/**
+* Gain on state predictor in Z
+*
+* @unit ??
+* @min 0.0
+* @max 1000.0
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_FLOAT(L1_KSP_Z, 400.0f);
+
+/**
+* Adaptation gain
+*
+* @min 0.0
+* @max 10000.0
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_FLOAT(L1_GAMMA, 5000.0f);
+
+/**
+* Initial disturbance estimate in X
+*
+* @unit N m
+* @min 0.0
+* @max 100.0
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_FLOAT(L1_INIT_DIST_X, 0.0f);
+
+/**
+* Initial disturbance estimate in Y
+*
+* @unit N m
+* @min 0.0
+* @max 100.0
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_FLOAT(L1_INIT_DIST_Y, 0.0f);
+
+/**
+* Initial disturbance estimate in Z
+*
+* @unit N m
+* @min 0.0
+* @max 100.0
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_FLOAT(L1_INIT_DIST_Z, 0.0f);
+
+/**
+* Threshold on total force before which L1 is initialized
+*
+* This is a fraction of the weight of the vehicle
+*
+* @min 0.0
+* @max 1.0
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_FLOAT(L1_ENGAGE_LEVEL, 0.3f);
