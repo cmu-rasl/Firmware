@@ -292,7 +292,7 @@ PARAM_DEFINE_FLOAT(MC_ACRO_Y_MAX, 360.0f);
 * @max 1
 * @group Multicoptor Attitude Control
 */
-PARAM_DEFINE_INT32(MC_CONTROL_ENABLE_L1, 0);
+PARAM_DEFINE_INT32(MC_ENABLE_L1, 0);
 
 /**
 * Moment of Inertia about XX
