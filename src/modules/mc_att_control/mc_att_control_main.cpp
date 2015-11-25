@@ -81,6 +81,7 @@
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/multirotor_motor_limits.h>
 #include <uORB/topics/mc_att_ctrl_status.h>
+#include <uORB/topics/l1_adaptive_debug.h>
 #include <systemlib/param/param.h>
 #include <systemlib/err.h>
 #include <systemlib/perf_counter.h>
@@ -139,6 +140,7 @@ private:
 	orb_advert_t	_v_rates_sp_pub;		/**< rate setpoint publication */
 	orb_advert_t	_actuators_0_pub;		/**< attitude actuator controls publication */
 	orb_advert_t	_controller_status_pub;	/**< controller status publication */
+	orb_advert_t    _l1_adaptive_debug_pub; /**< l1 adaptive debug publication */
 
 	orb_id_t _rates_sp_id;	/**< pointer to correct rates setpoint uORB metadata structure */
 	orb_id_t _actuators_id;	/**< pointer to correct actuator controls0 uORB metadata structure */
@@ -155,6 +157,7 @@ private:
 	struct vehicle_status_s				_vehicle_status;	/**< vehicle status */
 	struct multirotor_motor_limits_s	_motor_limits;		/**< motor limits */
 	struct mc_att_ctrl_status_s 		_controller_status; /**< controller status */
+	struct l1_adaptive_debug_s          _l1_adaptive_debug; /**< l1 adaptive debug info */
 
 	perf_counter_t	_loop_perf;			/**< loop performance counter */
 	perf_counter_t	_controller_latency_perf;
@@ -341,16 +344,17 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_armed_sub(-1),
 	_vehicle_status_sub(-1),
 
-/* publications */
+	/* publications */
 	_v_rates_sp_pub(nullptr),
 	_actuators_0_pub(nullptr),
 	_controller_status_pub(nullptr),
+	_l1_adaptive_debug_pub(nullptr),
 	_rates_sp_id(0),
 	_actuators_id(0),
 
 	_actuators_0_circuit_breaker_enabled(false),
 
-/* performance counters */
+	/* performance counters */
 	_loop_perf(perf_alloc(PC_ELAPSED, "mc_att_control")),
 	_controller_latency_perf(perf_alloc_once(PC_ELAPSED, "ctrl_latency"))
 
@@ -364,7 +368,8 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	memset(&_armed, 0, sizeof(_armed));
 	memset(&_vehicle_status, 0, sizeof(_vehicle_status));
 	memset(&_motor_limits, 0, sizeof(_motor_limits));
-	memset(&_controller_status,0,sizeof(_controller_status));
+	memset(&_controller_status, 0, sizeof(_controller_status));
+	memset(&_l1_adaptive_debug, 0, sizeof(_l1_adaptive_debug));
 	_vehicle_status.is_rotary_wing = true;
 
 	_params.att_p.zero();
@@ -870,6 +875,31 @@ MulticopterAttitudeControl::control_attitude_rates(float dt)
 		_avlhat += avlhatdot * dt;
 		_dsthat += dsthatdot * dt;
 		_lpd += _params.bandwidth.emult(_dsthat - _lpd) * dt;
+
+		/* publish debug data*/
+		_l1_adaptive_debug.timestamp = hrt_absolute_time();
+		_l1_adaptive_debug.avl_hat[0]  = _avlhat(0);
+		_l1_adaptive_debug.avl_hat[1]  = _avlhat(1);
+		_l1_adaptive_debug.avl_hat[2]  = _avlhat(2);
+		_l1_adaptive_debug.dst_hat[0]  = _dsthat(0);
+		_l1_adaptive_debug.dst_hat[1]  = _dsthat(1);
+		_l1_adaptive_debug.dst_hat[2]  = _dsthat(2);
+		_l1_adaptive_debug.ang_vel[0]  = angvel(0);
+		_l1_adaptive_debug.ang_vel[1]  = angvel(1);
+		_l1_adaptive_debug.ang_vel[2]  = angvel(2);
+		_l1_adaptive_debug.lpd[0]      = _lpd(0);
+		_l1_adaptive_debug.lpd[1]      = _lpd(1);
+		_l1_adaptive_debug.lpd[2]      = _lpd(2);
+		_l1_adaptive_debug.rates[0]    = rates(0);
+		_l1_adaptive_debug.rates[1]    = rates(1);
+		_l1_adaptive_debug.rates[2]    = rates(2);
+
+		if (_l1_adaptive_debug_pub != nullptr) {
+			orb_publish(ORB_ID(l1_adaptive_debug), _l1_adaptive_debug_pub, &_l1_adaptive_debug);
+
+		} else {
+			_l1_adaptive_debug_pub = orb_advertise(ORB_ID(l1_adaptive_debug), &_l1_adaptive_debug);
+		}
 	}
 
 	else {

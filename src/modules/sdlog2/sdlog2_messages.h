@@ -478,6 +478,16 @@ struct log_MACS_s {
 	float yaw_rate_integ;
 };
 
+/* --- L1AC - L1 ADAPTIVE CONTROLLER DEBUG --- */
+#define LOG_L1AC_MSG 48
+struct log_L1AC_s {
+	float avl_hat[3];
+	float dst_hat[3];
+	float ang_vel[3];
+	float lpd[3];
+	float rates[3];
+};
+
 /* --- CONTROL STATE --- */
 #define LOG_CTS_MSG 47
 struct log_CTS_s {
@@ -564,6 +574,7 @@ static const struct log_format_s log_formats[] = {
 	LOG_FORMAT(ENCD, "qfqf",	"cnt0,vel0,cnt1,vel1"),
 	LOG_FORMAT(TSYN, "Q", 		"TimeOffset"),
 	LOG_FORMAT(MACS, "fff", "RRint,PRint,YRint"),
+	LOG_FORMAT(L1AC, "fffffffffffffff", "ahx,ahy,ahz,dx,dy,dz,ax,ay,az,lpdx,lpdy,lpz,rx,ry,rz"),
 
 	/* system-level messages, ID >= 0x80 */
 	/* FMT: don't write format of format message, it's useless */
