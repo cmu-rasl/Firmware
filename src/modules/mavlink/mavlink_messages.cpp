@@ -74,6 +74,8 @@
 #include <uORB/topics/camera_trigger.h>
 #include <uORB/topics/vehicle_land_detected.h>
 #include <uORB/topics/estimator_status.h>
+#include <uORB/topics/l1_adaptive_debug.h>
+
 #include <drivers/drv_rc_input.h>
 #include <drivers/drv_pwm_output.h>
 #include <systemlib/err.h>
@@ -81,6 +83,8 @@
 
 #include "mavlink_messages.h"
 #include "mavlink_main.h"
+
+#include "v1.0/cmu_mavlink/mavlink_msg_l1_adaptive_debug.h"
 
 static uint16_t cm_uint16_from_m_float(float m);
 static void get_mavlink_mode_state(struct vehicle_status_s *status, struct position_setpoint_triplet_s *pos_sp_triplet,
@@ -2618,6 +2622,86 @@ protected:
 	}
 };
 
+class MavlinkStreamL1AdaptiveDebug : public MavlinkStream
+{
+public:
+	const char *get_name() const
+	{
+		return MavlinkStreamL1AdaptiveDebug::get_name_static();
+	}
+
+	static const char *get_name_static()
+	{
+		return "L1_ADAPTIVE_DEBUG";
+	}
+
+	uint8_t get_id()
+	{
+		return MAVLINK_MSG_ID_L1_ADAPTIVE_DEBUG;
+	}
+
+	static MavlinkStream *new_instance(Mavlink *mavlink)
+	{
+		return new MavlinkStreamL1AdaptiveDebug(mavlink);
+	}
+
+	unsigned get_size()
+	{
+		return _l1_adaptive_debug_sub->is_published() ? (MAVLINK_MSG_ID_L1_ADAPTIVE_DEBUG_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES) :
+		       0;
+	}
+
+private:
+	MavlinkOrbSubscription *_l1_adaptive_debug_sub;
+	uint64_t _l1_adaptive_debug_time;
+
+	/* do not allow top copying this class */
+	MavlinkStreamL1AdaptiveDebug(MavlinkStreamL1AdaptiveDebug &);
+	MavlinkStreamL1AdaptiveDebug &operator = (const MavlinkStreamL1AdaptiveDebug &);
+
+protected:
+	explicit MavlinkStreamL1AdaptiveDebug(Mavlink *mavlink) : MavlinkStream(mavlink),
+		_l1_adaptive_debug_sub(_mavlink->add_orb_subscription(ORB_ID(l1_adaptive_debug))),
+		_l1_adaptive_debug_time(0)
+	{}
+
+	void send(const hrt_abstime t)
+	{
+		struct l1_adaptive_debug_s l1_adaptive_debug;
+
+		if (_l1_adaptive_debug_sub->update(&_l1_adaptive_debug_time, &l1_adaptive_debug)) {
+
+			mavlink_l1_adaptive_debug_t msg;
+
+			msg.timestamp = l1_adaptive_debug.timestamp / 1000; /* us to ms */
+			msg.seq_id = l1_adaptive_debug.seq_id;
+
+			for (int i = 0; i < 3; i++) {
+				msg.avl_hat[i] = l1_adaptive_debug.avl_hat[i];
+			}
+
+			for (int i = 0; i < 3; i++) {
+				msg.dst_hat[i] = l1_adaptive_debug.dst_hat[i];
+			}
+
+			for (int i = 0; i < 3; i++) {
+				msg.ang_vel[i] = l1_adaptive_debug.ang_vel[i];
+			}
+
+			for (int i = 0; i < 3; i++) {
+				msg.lpd[i] = l1_adaptive_debug.lpd[i];
+			}
+
+			for (int i = 0; i < 3; i++) {
+				msg.rates[i] = l1_adaptive_debug.rates[i];
+			}
+
+			_mavlink->send_message(MAVLINK_MSG_ID_L1_ADAPTIVE_DEBUG, &msg);
+		}
+	}
+};
+
+
 const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamHeartbeat::new_instance, &MavlinkStreamHeartbeat::get_name_static),
 	new StreamListItem(&MavlinkStreamStatustext::new_instance, &MavlinkStreamStatustext::get_name_static),
@@ -2655,5 +2739,6 @@ const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamCameraTrigger::new_instance, &MavlinkStreamCameraTrigger::get_name_static),
 	new StreamListItem(&MavlinkStreamDistanceSensor::new_instance, &MavlinkStreamDistanceSensor::get_name_static),
 	new StreamListItem(&MavlinkStreamExtendedSysState::new_instance, &MavlinkStreamExtendedSysState::get_name_static),
+	new StreamListItem(&MavlinkStreamL1AdaptiveDebug::new_instance, &MavlinkStreamL1AdaptiveDebug::get_name_static),
 	nullptr
 };
