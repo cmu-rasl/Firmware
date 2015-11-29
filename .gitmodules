@@ -1,6 +1,7 @@
 [submodule "mavlink/include/mavlink/v1.0"]
 	path = mavlink/include/mavlink/v1.0
 	url = git://github.com/cmu-rasl/c_library.git
+	branch = master
 [submodule "NuttX"]
 	path = NuttX
 	url = git://github.com/PX4/NuttX.git
