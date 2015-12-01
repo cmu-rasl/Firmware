@@ -168,6 +168,7 @@ private:
 	math::Vector<3>		_rates_int;		/**< angular rates integral error */
 	float				_thrust_sp;		/**< thrust setpoint */
 	math::Vector<3>		_att_control;	/**< attitude control vector */
+	math::Vector<3>     _prev_att_control; /**< previous attitude control command */
 
 	math::Matrix<3, 3>  _I;				/**< identity matrix */
 	math::Matrix<3, 3>  _R_prev;        /**< previous rotation matrix to determine angular velocity */
@@ -391,6 +392,7 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_rates_int.zero();
 	_thrust_sp = 0.0f;
 	_att_control.zero();
+	_prev_att_control.zero();
 
 	_I.identity();
 	_R_prev.identity();
@@ -547,23 +549,33 @@ MulticopterAttitudeControl::parameters_update()
 	param_get(_params_handles.enable_l1, &_params.enable_l1);
 
 	/* Fill out the Inertia Matrix */
+	float Ivalues[9];
+	memset(Ivalues, 0, sizeof(Ivalues));
 	param_get(_params_handles.l1_inertia_xx, &v);
-	_params.inertia(0, 0) = v;
-	param_get(_params_handles.l1_inertia_xy, &v);
-	_params.inertia(0, 1) = -v;
-	_params.inertia(1, 0) = -v;
-	param_get(_params_handles.l1_inertia_xz, &v);
-	_params.inertia(0, 2) = -v;
-	_params.inertia(2, 0) = -v;
-	param_get(_params_handles.l1_inertia_yy, &v);
-	_params.inertia(1, 1) = v;
-	param_get(_params_handles.l1_inertia_yz, &v);
-	_params.inertia(1, 2) = -v;
-	_params.inertia(2, 1) = -v;
-	param_get(_params_handles.l1_inertia_zz, &v);
-	_params.inertia(2, 2) = v;
+	Ivalues[0] = v;
 
+	param_get(_params_handles.l1_inertia_xy, &v);
+	Ivalues[1] = -v;
+	Ivalues[3] = -v;
+
+	param_get(_params_handles.l1_inertia_xz, &v);
+	Ivalues[2] = -v;
+	Ivalues[6] = -v;
+
+	param_get(_params_handles.l1_inertia_yy, &v);
+	Ivalues[4] = v;
+
+	param_get(_params_handles.l1_inertia_yz, &v);
+	Ivalues[5] = -v;
+	Ivalues[7] = -v;
+
+	param_get(_params_handles.l1_inertia_zz, &v);
+	Ivalues[8] = v;
+
+	_params.inertia.set(Ivalues);
+	// The inverse method resets the inertia matrix to identity, so we reset the inertia matrix after a call to inverse
 	_params.inertia_inv = _params.inertia.inversed();
+	_params.inertia.set(Ivalues);
 
 	/* Parameters for the L1 adaptive control */
 	param_get(_params_handles.l1_bandwidth_x, &v);
@@ -819,6 +831,7 @@ MulticopterAttitudeControl::control_attitude_rates(float dt)
 			_dsthat = _params.init_dist;
 			_lpd = _dsthat;
 			_avlhat.zero();
+			_prev_att_control.zero();
 		}
 	}
 
@@ -831,100 +844,75 @@ MulticopterAttitudeControl::control_attitude_rates(float dt)
 	/* angular rates error */
 	math::Vector<3> rates_err = _rates_sp - rates;
 
+
+	/* current body angular velocity */
+	math::Vector<3> angvel;
+	angvel.zero();
+	angvel = rates;
+
+	/* Leunberger state predictor */
+	math::Vector<3> werr, avlhatdot, dsthatdot;
+	werr = _avlhat - angvel;
+
+	// % is the cross operator
+	avlhatdot = _params.inertia_inv * (_dsthat - (_avlhat % (_params.inertia * _avlhat))) -
+		    _params.Ksp.emult(werr) + (_att_control - _prev_att_control) / dt;
+	dsthatdot = (_params.inertia * werr) * (-_params.gamma);
+
+	_avlhat += avlhatdot * dt;
+	_dsthat += dsthatdot * dt;
+	_lpd += _params.bandwidth.emult(_dsthat - _lpd) * dt;
+
+	/* publish debug data*/
+	_l1_adaptive_debug.timestamp = hrt_absolute_time();
+	_l1_adaptive_debug.avl_hat[0]  = _avlhat(0);
+	_l1_adaptive_debug.avl_hat[1]  = _avlhat(1);
+	_l1_adaptive_debug.avl_hat[2]  = _avlhat(2);
+	_l1_adaptive_debug.dst_hat[0]  = _dsthat(0);
+	_l1_adaptive_debug.dst_hat[1]  = _dsthat(1);
+	_l1_adaptive_debug.dst_hat[2]  = _dsthat(2);
+	_l1_adaptive_debug.ang_vel[0]  = angvel(0);
+	_l1_adaptive_debug.ang_vel[1]  = angvel(1);
+	_l1_adaptive_debug.ang_vel[2]  = angvel(2);
+	_l1_adaptive_debug.lpd[0]      = _lpd(0);
+	_l1_adaptive_debug.lpd[1]      = _lpd(1);
+	_l1_adaptive_debug.lpd[2]      = _lpd(2);
+	_l1_adaptive_debug.rates[0]    = avlhatdot(0);
+	_l1_adaptive_debug.rates[1]    = avlhatdot(1);
+	_l1_adaptive_debug.rates[2]    = avlhatdot(2);
+
+	if (_l1_adaptive_debug_pub != nullptr) {
+		orb_publish(ORB_ID(l1_adaptive_debug), _l1_adaptive_debug_pub, &_l1_adaptive_debug);
+
+	} else {
+		_l1_adaptive_debug_pub = orb_advertise(ORB_ID(l1_adaptive_debug), &_l1_adaptive_debug);
+	}
+
+	/* Set control output */
 	if (_params.enable_l1) {
-		/* current body angular velocity */
-		math::Vector<3> angvel;
-		angvel.zero();
-
-		/** Note that the angular velocity is not the same as body rpy rates
-		 * http://math.stackexchange.com/questions/668866/how-do-you-find-angular-velocity-given-a-pair-of-3x3-rotation-matrices
-		 */
-		math::Matrix<3, 3> R2R1T, skewmat;
-		math::Quaternion q_att(_ctrl_state.q[0], _ctrl_state.q[1], _ctrl_state.q[2], _ctrl_state.q[3]);
-		math::Matrix<3, 3> R = q_att.to_dcm();
-
-		R2R1T = R * _R_prev.transposed();
-		// Get trace
-		float trace = 0.0f;
-
-		for (int i = 0; i < 3; i++) {
-			trace += R2R1T(i, i);
-		}
-
-		float theta = acosf((trace - 1.0f) / 2.0f);
-		skewmat = (R2R1T - R2R1T.transposed()) / (2.0f * sinf(theta));
-		skewmat = skewmat * theta / dt;
-		angvel(0) = (skewmat(2, 1) - skewmat(1, 2)) / 2.0f;
-		angvel(1) = (skewmat(0, 2) - skewmat(2, 0)) / 2.0f;
-		angvel(2) = (skewmat(1, 0) - skewmat(0, 1)) / 2.0f;
-		_R_prev = R;
-
-		/* Set control output */
 		_att_control = _params.rate_p.emult(rates_err) + _params.rate_d.emult(_rates_prev - rates) / dt - _lpd +
 			       _params.rate_ff.emult(_rates_sp - _rates_sp_prev) / dt;
 
-		/* Leunberger state predictor */
-		math::Vector<3> werr, avlhatdot, dsthatdot;
-		werr = _avlhat - angvel;
-
-		// % is the cross operator
-		avlhatdot = _params.inertia_inv * (_att_control + _dsthat - (_avlhat % (_params.inertia * _avlhat))) -
-			    _params.Ksp.emult(werr);
-		dsthatdot = (_params.inertia * werr) * (-_params.gamma);
-
-		_avlhat += avlhatdot * dt;
-		_dsthat += dsthatdot * dt;
-		_lpd += _params.bandwidth.emult(_dsthat - _lpd) * dt;
-
-		/* publish debug data*/
-		_l1_adaptive_debug.timestamp = hrt_absolute_time();
-		_l1_adaptive_debug.avl_hat[0]  = _avlhat(0);
-		_l1_adaptive_debug.avl_hat[1]  = _avlhat(1);
-		_l1_adaptive_debug.avl_hat[2]  = _avlhat(2);
-		_l1_adaptive_debug.dst_hat[0]  = _dsthat(0);
-		_l1_adaptive_debug.dst_hat[1]  = _dsthat(1);
-		_l1_adaptive_debug.dst_hat[2]  = _dsthat(2);
-		_l1_adaptive_debug.ang_vel[0]  = angvel(0);
-		_l1_adaptive_debug.ang_vel[1]  = angvel(1);
-		_l1_adaptive_debug.ang_vel[2]  = angvel(2);
-		_l1_adaptive_debug.lpd[0]      = _lpd(0);
-		_l1_adaptive_debug.lpd[1]      = _lpd(1);
-		_l1_adaptive_debug.lpd[2]      = _lpd(2);
-		_l1_adaptive_debug.rates[0]    = rates(0);
-		_l1_adaptive_debug.rates[1]    = rates(1);
-		_l1_adaptive_debug.rates[2]    = rates(2);
-
-		if (_l1_adaptive_debug_pub != nullptr) {
-			orb_publish(ORB_ID(l1_adaptive_debug), _l1_adaptive_debug_pub, &_l1_adaptive_debug);
-
-		} else {
-			_l1_adaptive_debug_pub = orb_advertise(ORB_ID(l1_adaptive_debug), &_l1_adaptive_debug);
-		}
-	}
-
-	else {
+	} else {
 		_att_control = _params.rate_p.emult(rates_err) + _params.rate_d.emult(_rates_prev - rates) / dt + _rates_int +
 			       _params.rate_ff.emult(_rates_sp - _rates_sp_prev) / dt;
 	}
 
 	_rates_sp_prev = _rates_sp;
 	_rates_prev = rates;
+	_prev_att_control = _att_control;
 
 
 	/* update integral only if not saturated on low limit and if motor commands are not saturated */
-	if (_thrust_sp > MIN_TAKEOFF_THRUST && !_motor_limits.lower_limit && !_motor_limits.upper_limit) {
+	if (!_params.enable_l1 && _thrust_sp > MIN_TAKEOFF_THRUST && !_motor_limits.lower_limit && !_motor_limits.upper_limit) {
 		for (int i = 0; i < 3; i++) {
 			if (fabsf(_att_control(i)) < _thrust_sp) {
 				float rate_i = _rates_int(i) + _params.rate_i(i) * rates_err(i) * dt;
 
 				if (PX4_ISFINITE(rate_i) && rate_i > -RATES_I_LIMIT && rate_i < RATES_I_LIMIT &&
 				    _att_control(i) > -RATES_I_LIMIT && _att_control(i) < RATES_I_LIMIT) {
-					if (!_params.enable_l1) {
-						_rates_int(i) = rate_i;
+					_rates_int(i) = rate_i;
 
-					} else {
-						_rates_int(i) = _lpd(i);
-					}
 				}
 			}
 		}
