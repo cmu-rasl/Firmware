@@ -207,6 +207,7 @@ private:
 		param_t rattitude_thres;
 
 		param_t enable_l1;
+		param_t enable_debug;
 		param_t l1_inertia_xx;
 		param_t l1_inertia_xy;
 		param_t l1_inertia_xz;
@@ -244,6 +245,7 @@ private:
 		float rattitude_thres;
 
 		bool                enable_l1;     /**< bool to enable l1 adaptive control */
+		bool                enable_debug;   /**< bool to enable publishing debug information */
 		math::Matrix<3, 3>  inertia;       /**< inertia matrix */
 		math::Matrix<3, 3>  inertia_inv;   /**< inverse of the inertia matrix */
 		math::Vector<3>     init_dist;     /**< l1 initial disturbance */
@@ -402,6 +404,7 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_lpd.zero();
 
 	_params.enable_l1 = false;
+	_params.enable_debug = false;
 	_params.init_dist.zero();
 	_params.bandwidth.zero();
 	_params.inertia.identity();
@@ -435,6 +438,7 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_params_handles.rattitude_thres = 	param_find("MC_RATT_TH");
 
 	_params_handles.enable_l1       =   param_find("MC_ENABLE_L1");
+	_params_handles.enable_debug    =   param_find("L1_ENABLE_DEBUG");
 	_params_handles.l1_inertia_xx   =   param_find("L1_INERTIA_XX");
 	_params_handles.l1_inertia_xy   =   param_find("L1_INERTIA_XY");
 	_params_handles.l1_inertia_xz   =   param_find("L1_INERTIA_XZ");
@@ -448,9 +452,9 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_params_handles.l1_ksp_y        =   param_find("L1_KSP_Y");
 	_params_handles.l1_ksp_z        =   param_find("L1_KSP_Z");
 	_params_handles.l1_gamma        =   param_find("L1_GAMMA");
-	_params_handles.l1_init_dist_x  =   param_find("L1_INIT_DIST_X");
-	_params_handles.l1_init_dist_y  =   param_find("L1_INIT_DIST_Y");
-	_params_handles.l1_init_dist_z  =   param_find("L1_INIT_DIST_Z");
+	_params_handles.l1_init_dist_x  =   param_find("L1_INIT_DISTX");
+	_params_handles.l1_init_dist_y  =   param_find("L1_INIT_DISTY");
+	_params_handles.l1_init_dist_z  =   param_find("L1_INIT_DISTZ");
 	_params_handles.l1_engage_level =   param_find("L1_ENGAGE_LEVEL");
 
 	/* fetch initial parameter values */
@@ -547,6 +551,7 @@ MulticopterAttitudeControl::parameters_update()
 
 	/* L1 adaptive parameters */
 	param_get(_params_handles.enable_l1, &_params.enable_l1);
+	param_get(_params_handles.enable_debug, &_params.enable_debug);
 
 	/* Fill out the Inertia Matrix */
 	float Ivalues[9];
@@ -844,52 +849,56 @@ MulticopterAttitudeControl::control_attitude_rates(float dt)
 	/* angular rates error */
 	math::Vector<3> rates_err = _rates_sp - rates;
 
-
-	/* current body angular velocity */
-	math::Vector<3> angvel;
-	angvel.zero();
-	angvel = rates;
-
-	/* Leunberger state predictor */
-	math::Vector<3> werr, avlhatdot, dsthatdot;
-	werr = _avlhat - angvel;
-
-	// % is the cross operator
-	avlhatdot = _params.inertia_inv * (_dsthat - (_avlhat % (_params.inertia * _avlhat))) -
-		    _params.Ksp.emult(werr) + (_att_control - _prev_att_control) / dt;
-	dsthatdot = (_params.inertia * werr) * (-_params.gamma);
-
-	_avlhat += avlhatdot * dt;
-	_dsthat += dsthatdot * dt;
-	_lpd += _params.bandwidth.emult(_dsthat - _lpd) * dt;
-
-	/* publish debug data*/
-	_l1_adaptive_debug.timestamp = hrt_absolute_time();
-	_l1_adaptive_debug.avl_hat[0]  = _avlhat(0);
-	_l1_adaptive_debug.avl_hat[1]  = _avlhat(1);
-	_l1_adaptive_debug.avl_hat[2]  = _avlhat(2);
-	_l1_adaptive_debug.dst_hat[0]  = _dsthat(0);
-	_l1_adaptive_debug.dst_hat[1]  = _dsthat(1);
-	_l1_adaptive_debug.dst_hat[2]  = _dsthat(2);
-	_l1_adaptive_debug.ang_vel[0]  = angvel(0);
-	_l1_adaptive_debug.ang_vel[1]  = angvel(1);
-	_l1_adaptive_debug.ang_vel[2]  = angvel(2);
-	_l1_adaptive_debug.lpd[0]      = _lpd(0);
-	_l1_adaptive_debug.lpd[1]      = _lpd(1);
-	_l1_adaptive_debug.lpd[2]      = _lpd(2);
-	_l1_adaptive_debug.rates[0]    = avlhatdot(0);
-	_l1_adaptive_debug.rates[1]    = avlhatdot(1);
-	_l1_adaptive_debug.rates[2]    = avlhatdot(2);
-
-	if (_l1_adaptive_debug_pub != nullptr) {
-		orb_publish(ORB_ID(l1_adaptive_debug), _l1_adaptive_debug_pub, &_l1_adaptive_debug);
-
-	} else {
-		_l1_adaptive_debug_pub = orb_advertise(ORB_ID(l1_adaptive_debug), &_l1_adaptive_debug);
-	}
-
 	/* Set control output */
 	if (_params.enable_l1) {
+		/* current body angular velocity */
+		math::Vector<3> angvel;
+		angvel.zero();
+		angvel = rates;
+
+		/* Leunberger state predictor */
+		math::Vector<3> werr, avlhatdot, dsthatdot;
+		werr = _avlhat - angvel;
+
+		// % is the cross operator
+		avlhatdot = _params.inertia_inv * (_dsthat - (_avlhat % (_params.inertia * _avlhat))) -
+			    _params.Ksp.emult(werr) + (_att_control - _prev_att_control) / dt;
+		dsthatdot = (_params.inertia * werr) * (-_params.gamma);
+
+		_avlhat += avlhatdot * dt;
+		_dsthat += dsthatdot * dt;
+		_lpd += _params.bandwidth.emult(_dsthat - _lpd) * dt;
+
+		if (_params.enable_debug) {
+			/* publish debug data*/
+			_l1_adaptive_debug.timestamp = hrt_absolute_time();
+			_l1_adaptive_debug.avl_hat[0]  = _avlhat(0);
+			_l1_adaptive_debug.avl_hat[1]  = _avlhat(1);
+			_l1_adaptive_debug.avl_hat[2]  = _avlhat(2);
+			_l1_adaptive_debug.dst_hat[0]  = _dsthat(0);
+			_l1_adaptive_debug.dst_hat[1]  = _dsthat(1);
+			_l1_adaptive_debug.dst_hat[2]  = _dsthat(2);
+			_l1_adaptive_debug.ang_vel[0]  = angvel(0);
+			_l1_adaptive_debug.ang_vel[1]  = angvel(1);
+			_l1_adaptive_debug.ang_vel[2]  = angvel(2);
+			_l1_adaptive_debug.lpd[0]      = _lpd(0);
+			_l1_adaptive_debug.lpd[1]      = _lpd(1);
+			_l1_adaptive_debug.lpd[2]      = _lpd(2);
+			_l1_adaptive_debug.rates[0]    = avlhatdot(0);
+			_l1_adaptive_debug.rates[1]    = avlhatdot(1);
+			_l1_adaptive_debug.rates[2]    = avlhatdot(2);
+
+			if (_l1_adaptive_debug_pub != nullptr) {
+				orb_publish(ORB_ID(l1_adaptive_debug), _l1_adaptive_debug_pub, &_l1_adaptive_debug);
+
+			} else {
+				_l1_adaptive_debug_pub = orb_advertise(ORB_ID(l1_adaptive_debug), &_l1_adaptive_debug);
+			}
+
+		}
+	}
+
+	if (_params.enable_l1 && _thrust_sp > _params.engage_level) {
 		_att_control = _params.rate_p.emult(rates_err) + _params.rate_d.emult(_rates_prev - rates) / dt - _lpd +
 			       _params.rate_ff.emult(_rates_sp - _rates_sp_prev) / dt;
 

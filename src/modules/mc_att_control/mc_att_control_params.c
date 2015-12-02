@@ -295,6 +295,15 @@ PARAM_DEFINE_FLOAT(MC_ACRO_Y_MAX, 360.0f);
 PARAM_DEFINE_INT32(MC_ENABLE_L1, 0);
 
 /**
+* Parameter to enable L1 adaptive control debug information
+*
+* @min 0
+* @max 1
+* @group Multicoptor Attitude Control
+*/
+PARAM_DEFINE_INT32(L1_ENABLE_DEBUG, 0);
+
+/**
 * Moment of Inertia about XX
 *
 * @unit N m^2
@@ -429,7 +438,7 @@ PARAM_DEFINE_FLOAT(L1_GAMMA, 5000.0f);
 * @max 100.0
 * @group Multicoptor Attitude Control
 */
-PARAM_DEFINE_FLOAT(L1_INIT_DIST_X, 0.0f);
+PARAM_DEFINE_FLOAT(L1_INIT_DISTX, 0.0f);
 
 /**
 * Initial disturbance estimate in Y
@@ -439,7 +448,7 @@ PARAM_DEFINE_FLOAT(L1_INIT_DIST_X, 0.0f);
 * @max 100.0
 * @group Multicoptor Attitude Control
 */
-PARAM_DEFINE_FLOAT(L1_INIT_DIST_Y, 0.0f);
+PARAM_DEFINE_FLOAT(L1_INIT_DISTY, 0.0f);
 
 /**
 * Initial disturbance estimate in Z
@@ -449,7 +458,7 @@ PARAM_DEFINE_FLOAT(L1_INIT_DIST_Y, 0.0f);
 * @max 100.0
 * @group Multicoptor Attitude Control
 */
-PARAM_DEFINE_FLOAT(L1_INIT_DIST_Z, 0.0f);
+PARAM_DEFINE_FLOAT(L1_INIT_DISTZ, 0.0f);
 
 /**
 * Threshold on total force before which L1 is initialized
