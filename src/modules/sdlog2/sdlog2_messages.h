@@ -479,7 +479,7 @@ struct log_MACS_s {
 };
 
 /* --- L1AC - L1 ADAPTIVE CONTROLLER DEBUG --- */
-#define LOG_L1AC_MSG 48
+#define LOG_L1AC_MSG 49
 struct log_L1AC_s {
 	float avl_hat[3];
 	float dst_hat[3];
@@ -487,6 +487,7 @@ struct log_L1AC_s {
 	float lpd[3];
 	float rates[3];
 };
+/* WARNING: ID 46 is already in use for ATTC1 */
 
 /* --- CONTROL STATE --- */
 #define LOG_CTS_MSG 47
@@ -500,7 +501,20 @@ struct log_CTS_s {
 	float yaw_rate;
 };
 
-/* WARNING: ID 46 is already in use for ATTC1 */
+/* --- FFLW - FILTERED OPTICAL FLOW STATUS */
+#define LOG_FFLW_MSG 48
+struct log_FFLW_s {
+	float x_vel_integ;
+	float y_vel_integ;
+	float x_vel;
+	float y_vel;
+	float gyro_x_rate;
+	float gyro_y_rate;
+	float gyro_z_rate;
+	float gyro_x_bias;
+	float gyro_y_bias;
+	float gyro_z_bias;
+};
 
 /********** SYSTEM MESSAGES, ID > 0x80 **********/
 
@@ -574,6 +588,7 @@ static const struct log_format_s log_formats[] = {
 	LOG_FORMAT(ENCD, "qfqf",	"cnt0,vel0,cnt1,vel1"),
 	LOG_FORMAT(TSYN, "Q", 		"TimeOffset"),
 	LOG_FORMAT(MACS, "fff", "RRint,PRint,YRint"),
+	LOG_FORMAT(FFLW, "ffffffffff", "XIntg,YIntg,VelX,VelY,RateX,RateY,RateZ,BiasX,BiasY,BiasZ"),
 	LOG_FORMAT(L1AC, "fffffffffffffff", "ahx,ahy,ahz,dx,dy,dz,ax,ay,az,lpdx,lpdy,lpz,rx,ry,rz"),
 
 	/* system-level messages, ID >= 0x80 */
