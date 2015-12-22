@@ -279,7 +279,7 @@ void BlockLocalPositionEstimator::update()
 	}
 
 	// determine if we should start estimating
-	_canEstimateZ = _baroInitialized && !_baroFault;
+    _canEstimateZ = (_baroInitialized && !_baroFault) || (_mocapInitialized && !_mocapTimeout && !_mocapFault);
 	_canEstimateXY =
 		(_gpsInitialized && !_gpsFault) ||
 		(_flowInitialized && !_flowFault) ||
