@@ -1358,9 +1358,9 @@ void BlockLocalPositionEstimator::correctmocap()
 
 	Vector<float, n_y_mocap> y;
 	y.setZero();
-	y(Y_mocap_x) = _sub_mocap.get().x - _mocapHome(0);
-	y(Y_mocap_y) = _sub_mocap.get().y - _mocapHome(1);
-	y(Y_mocap_z) = _sub_mocap.get().z - _mocapHome(2);
+    y(Y_mocap_x) = _sub_mocap.get().x;// - _mocapHome(0);
+    y(Y_mocap_y) = _sub_mocap.get().y;// - _mocapHome(1);
+    y(Y_mocap_z) = _sub_mocap.get().z;// - _mocapHome(2);
 
 	// mocap measurement matrix, measures position
 	Matrix<float, n_y_mocap, n_x> C;
