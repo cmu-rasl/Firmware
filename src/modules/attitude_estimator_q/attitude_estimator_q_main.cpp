@@ -538,6 +538,9 @@ void AttitudeEstimatorQ::task_main()
 		att.pitch = euler(1);
 		att.yaw = euler(2);
 
+    for (int i = 0; i < 4; i++)
+      att.q[i] = _q(i);
+
 		att.rollspeed = _rates(0);
 		att.pitchspeed = _rates(1);
 		att.yawspeed = _rates(2);
