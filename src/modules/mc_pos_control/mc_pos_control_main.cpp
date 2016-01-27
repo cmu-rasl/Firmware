@@ -185,6 +185,10 @@ private:
 		param_t hold_z_dz;
 		param_t hold_max_xy;
 		param_t hold_max_z;
+    param_t use_gravity_offset;
+    param_t mass;
+    param_t gravity_magnitude;
+    param_t max_thrust_newtons;
 	}		_params_handles;		/**< handles for interesting parameters */
 
 	struct {
@@ -202,6 +206,8 @@ private:
 		float hold_max_xy;
 		float hold_max_z;
 
+    bool use_gravity_offset;
+
 		math::Vector<3> pos_p;
 		math::Vector<3> vel_p;
 		math::Vector<3> vel_i;
@@ -209,6 +215,7 @@ private:
 		math::Vector<3> vel_ff;
 		math::Vector<3> vel_max;
 		math::Vector<3> sp_offs_max;
+		math::Vector<3> normalized_gravity;
 	}		_params;
 
 	struct map_projection_reference_s _ref_pos;
@@ -366,6 +373,8 @@ MulticopterPositionControl::MulticopterPositionControl() :
 
 	memset(&_ref_pos, 0, sizeof(_ref_pos));
 
+  _params.use_gravity_offset = false;
+
 	_params.pos_p.zero();
 	_params.vel_p.zero();
 	_params.vel_i.zero();
@@ -373,6 +382,8 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	_params.vel_max.zero();
 	_params.vel_ff.zero();
 	_params.sp_offs_max.zero();
+  _params.normalized_gravity.zero();
+  _params.normalized_gravity(2) = 1.0f;
 
 	_pos.zero();
 	_pos_sp.zero();
@@ -408,7 +419,10 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	_params_handles.hold_z_dz = param_find("MPC_HOLD_Z_DZ");
 	_params_handles.hold_max_xy = param_find("MPC_HOLD_MAX_XY");
 	_params_handles.hold_max_z = param_find("MPC_HOLD_MAX_Z");
-
+  _params_handles.use_gravity_offset = param_find("MPC_USE_GRAVITY_OFFSET");
+  _params_handles.mass = param_find("MPC_VEHICLE_MASS");
+  _params_handles.gravity_magnitude = param_find("MPC_GRAVITY_MAGNITUDE");
+  _params_handles.max_thrust_newtons = param_find("MPC_MAX_THRUST_NEWTONS");
 
 	/* fetch initial parameter values */
 	parameters_update(true);
@@ -463,6 +477,10 @@ MulticopterPositionControl::parameters_update(bool force)
 		param_get(_params_handles.tilt_max_land, &_params.tilt_max_land);
 		_params.tilt_max_land = math::radians(_params.tilt_max_land);
 
+    bool u;
+    param_get(_params_handles.use_gravity_offset, &u);
+    _params.use_gravity_offset = u;
+
 		float v;
 		param_get(_params_handles.xy_p, &v);
 		_params.pos_p(0) = v;
@@ -506,6 +524,14 @@ MulticopterPositionControl::parameters_update(bool force)
 		_params.hold_max_xy = (v < 0.0f ? 0.0f : v);
 		param_get(_params_handles.hold_max_z, &v);
 		_params.hold_max_z = (v < 0.0f ? 0.0f : v);
+
+    // normalized_gravity = [0,0,mass*gravity_magnitude/(max thrust from all rotors)]
+    param_get(_params_handles.mass, &v);
+    _params.normalized_gravity(2) *= v;
+    param_get(_params_handles.gravity_magnitude, &v);
+    _params.normalized_gravity(2) *= v;
+    param_get(_params_handles.max_thrust_newtons, &v);
+    _params.normalized_gravity(2) /= v;
 
 		_params.sp_offs_max = _params.vel_max.edivide(_params.pos_p) * 2.0f;
 
@@ -1290,6 +1316,9 @@ MulticopterPositionControl::task_main()
 
 					/* thrust vector in NED frame */
 					math::Vector<3> thrust_sp = vel_err.emult(_params.vel_p) + vel_err_d.emult(_params.vel_d) + thrust_int;
+
+          if (_params.use_gravity_offset)
+            thrust_sp += _params.normalized_gravity;
 
 					if (!_control_mode.flag_control_velocity_enabled) {
 						thrust_sp(0) = 0.0f;
