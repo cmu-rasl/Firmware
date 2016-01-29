@@ -637,22 +637,37 @@ bool AttitudeEstimatorQ::init()
 	Vector<3> k = -_accel;
 	k.normalize();
 
-	// 'i' is Earth X axis (North) unit vector in body frame, orthogonal with 'k'
-	Vector<3> i = (_mag - k * (_mag * k));
-	i.normalize();
+  // If using magnetometer or vision, set initial heading to magnetometer heading
+  if (_ext_hdg_mode < 2)
+  {
+    // 'i' is Earth X axis (North) unit vector in body frame, orthogonal with 'k'
+    Vector<3> i = (_mag - k * (_mag * k));
+    i.normalize();
 
-	// 'j' is Earth Y axis (East) unit vector in body frame, orthogonal with 'k' and 'i'
-	Vector<3> j = k % i;
+    // 'j' is Earth Y axis (East) unit vector in body frame, orthogonal with 'k' and 'i'
+    Vector<3> j = k % i;
 
-	// Fill rotation matrix
-	Matrix<3, 3> R;
-	R.set_row(0, i);
-	R.set_row(1, j);
-	R.set_row(2, k);
+    // Fill rotation matrix
+    Matrix<3, 3> R;
+    R.set_row(0, i);
+    R.set_row(1, j);
+    R.set_row(2, k);
 
-	// Convert to quaternion
-	_q.from_dcm(R);
-	_q.normalize();
+    // Convert to quaternion
+    _q.from_dcm(R);
+    _q.normalize();
+  }
+  else if (_ext_hdg_mode == 2 && _ext_hdg_good)
+  {
+    // If using mocap, set initial quaternion directly
+    orb_copy(ORB_ID(att_pos_mocap), _mocap_sub, &_mocap);
+	  _q = _mocap.q;
+  }
+  else // If using mocap and the observation is bad, do not initialize
+  {
+    _inited = false;
+    return _inited;
+  }
 
 	if (PX4_ISFINITE(_q(0)) && PX4_ISFINITE(_q(1)) &&
 	    PX4_ISFINITE(_q(2)) && PX4_ISFINITE(_q(3)) &&
@@ -702,7 +717,7 @@ bool AttitudeEstimatorQ::update(float dt)
 		}
 	}
 
-	if (_ext_hdg_mode == 0  || !_ext_hdg_good) {
+	if (_ext_hdg_mode == 0) {
 		// Magnetometer correction
 		// Project mag field vector to global frame and extract XY component
 		Vector<3> mag_earth = _q.conjugate(_mag);
