@@ -487,6 +487,22 @@ struct log_L1AC_s {
 	float lpd[3];
 	float rates[3];
 };
+
+/* --- OMCP - MOCAP ATTITUDE, POSITION AND VELOCITY --- */
+#define LOG_OMCP_MSG 50
+struct log_OMCP_s {
+	float qw;
+	float qx;
+	float qy;
+	float qz;
+	float x;
+	float y;
+	float z;
+  float vx;
+  float vy;
+  float vz;
+};
+
 /* WARNING: ID 46 is already in use for ATTC1 */
 
 /* --- CONTROL STATE --- */
@@ -578,6 +594,7 @@ static const struct log_format_s log_formats[] = {
 	LOG_FORMAT(EST3, "ffffffffffffffff",    "P12,P13,P14,P15,P16,P17,P18,P19,P20,P21,P22,P23,P24,P25,P26,P27"),
 	LOG_FORMAT(PWR, "fffBBBBB",		"Periph5V,Servo5V,RSSI,UsbOk,BrickOk,ServoOk,PeriphOC,HipwrOC"),
 	LOG_FORMAT(MOCP, "fffffff",		"QuatW,QuatX,QuatY,QuatZ,X,Y,Z"),
+	LOG_FORMAT(OMCP, "ffffffffff",		"QuatW,QuatX,QuatY,QuatZ,X,Y,Z,VX,VY,VZ"),
 	LOG_FORMAT(VISN, "ffffffffff",		"X,Y,Z,VX,VY,VZ,QuatW,QuatX,QuatY,QuatZ"),
 	LOG_FORMAT(GS0A, "BBBBBBBBBBBBBBBB",	"s0,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15"),
 	LOG_FORMAT(GS0B, "BBBBBBBBBBBBBBBB",	"s0,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,s15"),

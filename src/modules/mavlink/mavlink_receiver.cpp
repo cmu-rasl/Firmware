@@ -621,6 +621,42 @@ MavlinkReceiver::handle_message_att_pos_mocap(mavlink_message_t *msg)
 }
 
 void
+MavlinkReceiver::handle_message_odom_mocap(mavlink_message_t *msg)
+{
+  mavlink_odom_mocap_t mocap;
+  mavlink_msg_odom_mocap_decode(msg, &mocap);
+
+  struct odom_mocap_s odom_mocap;
+  memset(&odom_mocap, 0, sizeof(odom_mocap));
+
+  // Use the component ID to identify the mocap system
+  odom_mocap.id = msg->compid;
+
+  odom_mocap.timestamp_boot = hrt_absolute_time(); // Monotonic time
+  odom_mocap.timestamp_computer = sync_stamp(mocap.time_usec); // Synced time
+
+  odom_mocap.q[0] = mocap.q[0];
+  odom_mocap.q[1] = mocap.q[1];
+  odom_mocap.q[2] = mocap.q[2];
+  odom_mocap.q[3] = mocap.q[3];
+
+  odom_mocap.x = mocap.x;
+  odom_mocap.y = mocap.y;
+  odom_mocap.z = mocap.z;
+
+  odom_mocap.vx = mocap.vx;
+  odom_mocap.vy = mocap.vy;
+  odom_mocap.vz = mocap.vz;
+
+  if (_odom_mocap_pub == nullptr) {
+    _odom_mocap_pub = orb_advertise(ORB_ID(odom_mocap), &odom_mocap);
+
+  } else {
+    orb_publish(ORB_ID(odom_mocap), _odom_mocap_pub, &odom_mocap);
+  }
+}
+
+void
 MavlinkReceiver::handle_message_set_position_target_local_ned(mavlink_message_t *msg)
 {
 	mavlink_set_position_target_local_ned_t set_position_target_local_ned;

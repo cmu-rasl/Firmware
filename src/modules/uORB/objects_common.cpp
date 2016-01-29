@@ -269,3 +269,6 @@ ORB_DEFINE(camera_trigger, struct camera_trigger_s);
 
 #include "topics/l1_adaptive_debug.h"
 ORB_DEFINE(l1_adaptive_debug, struct l1_adaptive_debug_s);
+
+#include "topics/odom_mocap.h"
+ORB_DEFINE(odom_mocap, struct odom_mocap_s);

@@ -28,7 +28,7 @@ using namespace Eigen;
 #include <uORB/topics/home_position.h>
 #include <uORB/topics/vehicle_gps_position.h>
 #include <uORB/topics/vision_position_estimate.h>
-#include <uORB/topics/att_pos_mocap.h>
+#include <uORB/topics/odom_mocap.h>
 
 // uORB Publications
 #include <uORB/Publication.hpp>
@@ -105,7 +105,7 @@ class BlockLocalPositionEstimator : public control::SuperBlock
 //
 // 	vision: px, py, pz, vx, vy, vz
 //
-// 	mocap: px, py, pz
+// 	mocap: px, py, pz, vx, vy, vz
 //
 public:
 	BlockLocalPositionEstimator();
@@ -135,7 +135,7 @@ private:
 	enum {Y_sonar_z = 0};
 	enum {Y_gps_x = 0, Y_gps_y, Y_gps_z, Y_gps_vx, Y_gps_vy, Y_gps_vz};
 	enum {Y_vision_x = 0, Y_vision_y, Y_vision_z, Y_vision_vx, Y_vision_vy, Y_vision_vz};
-	enum {Y_mocap_x = 0, Y_mocap_y, Y_mocap_z};
+	enum {Y_mocap_x = 0, Y_mocap_y, Y_mocap_z, Y_mocap_vx, Y_mocap_vy, Y_mocap_vz};
 	enum {POLL_FLOW, POLL_SENSORS, POLL_PARAM};
 
 	// methods
@@ -186,7 +186,7 @@ private:
 	uORB::Subscription<home_position_s> _sub_home;
 	uORB::Subscription<vehicle_gps_position_s> _sub_gps;
 	uORB::Subscription<vision_position_estimate_s> _sub_vision_pos;
-	uORB::Subscription<att_pos_mocap_s> _sub_mocap;
+	uORB::Subscription<odom_mocap_s> _sub_mocap;
 	uORB::Subscription<distance_sensor_s> *_distance_subs[ORB_MULTI_MAX_INSTANCES];
 	uORB::Subscription<distance_sensor_s> *_sub_lidar;
 	uORB::Subscription<distance_sensor_s> *_sub_sonar;
@@ -227,6 +227,7 @@ private:
 	BlockParamFloat  _beta_max;
 
 	BlockParamFloat  _mocap_p_stddev;
+  BlockParamFloat  _mocap_v_stddev;
 
 	BlockParamFloat  _flow_board_x_offs;
 	BlockParamFloat  _flow_board_y_offs;

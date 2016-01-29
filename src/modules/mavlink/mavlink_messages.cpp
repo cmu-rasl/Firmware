@@ -1411,6 +1411,71 @@ protected:
 	}
 };
 
+class MavlinkStreamOdomMocap : public MavlinkStream
+{
+public:
+	const char *get_name() const
+	{
+		return MavlinkStreamOdomMocap::get_name_static();
+	}
+
+	static const char *get_name_static()
+	{
+		return "ODOM_MOCAP";
+	}
+
+	uint8_t get_id()
+	{
+		return MAVLINK_MSG_ID_ODOM_MOCAP;
+	}
+
+	static MavlinkStream *new_instance(Mavlink *mavlink)
+	{
+		return new MavlinkStreamOdomMocap(mavlink);
+	}
+
+	unsigned get_size()
+	{
+		return MAVLINK_MSG_ID_ODOM_MOCAP_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES;
+	}
+
+private:
+	MavlinkOrbSubscription *_mocap_sub;
+	uint64_t _mocap_time;
+
+	/* do not allow top copying this class */
+	MavlinkStreamOdomMocap(MavlinkStreamOdomMocap &);
+	MavlinkStreamOdomMocap& operator = (const MavlinkStreamOdomMocap &);
+
+protected:
+	explicit MavlinkStreamOdomMocap(Mavlink *mavlink) : MavlinkStream(mavlink),
+		_mocap_sub(_mavlink->add_orb_subscription(ORB_ID(odom_mocap))),
+		_mocap_time(0)
+	{}
+
+	void send(const hrt_abstime t)
+	{
+		struct odom_mocap_s mocap;
+
+		if (_mocap_sub->update(&_mocap_time, &mocap)) {
+			mavlink_odom_mocap_t msg;
+
+			msg.time_usec = mocap.timestamp_boot;
+			msg.q[0] = mocap.q[0];
+			msg.q[1] = mocap.q[1];
+			msg.q[2] = mocap.q[2];
+			msg.q[3] = mocap.q[3];
+			msg.x = mocap.x;
+			msg.y = mocap.y;
+			msg.z = mocap.z;
+			msg.vx = mocap.vx;
+			msg.vy = mocap.vy;
+			msg.vz = mocap.vz;
+
+			_mavlink->send_message(MAVLINK_MSG_ID_ODOM_MOCAP, &msg);
+		}
+	}
+};
 
 class MavlinkStreamHomePosition : public MavlinkStream
 {
