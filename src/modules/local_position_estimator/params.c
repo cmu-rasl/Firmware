@@ -173,10 +173,20 @@ PARAM_DEFINE_INT32(LPE_NO_VISION, 0);
  *
  * @group Local Position Estimator
  * @unit m
- * @min 0.01
+ * @min 0.002
  * @max 1
  */
 PARAM_DEFINE_FLOAT(LPE_VIC_P, 0.05f);
+
+/**
+ * Vicon velocity standard deviation.
+ *
+ * @group Local Position Estimator
+ * @unit m/s
+ * @min 0.005
+ * @max 1
+ */
+PARAM_DEFINE_FLOAT(LPE_VIC_V, 0.05f);
 
 /**
  * Position propagation process noise power (variance*sampling rate).

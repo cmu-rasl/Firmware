@@ -33,7 +33,7 @@ BlockLocalPositionEstimator::BlockLocalPositionEstimator() :
 	_sub_home(ORB_ID(home_position), 0, 0, &getSubscriptions()),
 	_sub_gps(ORB_ID(vehicle_gps_position), 0, 0, &getSubscriptions()),
 	_sub_vision_pos(ORB_ID(vision_position_estimate), 0, 0, &getSubscriptions()),
-	_sub_mocap(ORB_ID(att_pos_mocap), 0, 0, &getSubscriptions()),
+	_sub_mocap(ORB_ID(odom_mocap), 0, 0, &getSubscriptions()),
 	_distance_subs(),
 	_sub_lidar(NULL),
 	_sub_sonar(NULL),
@@ -65,6 +65,7 @@ BlockLocalPositionEstimator::BlockLocalPositionEstimator() :
 	_no_vision(this, "NO_VISION"),
 	_beta_max(this, "BETA_MAX"),
 	_mocap_p_stddev(this, "VIC_P"),
+	_mocap_v_stddev(this, "VIC_V"),
 	_flow_board_x_offs(NULL, "SENS_FLOW_X_OFF"),
 	_flow_board_y_offs(NULL, "SENS_FLOW_Y_OFF"),
 	_pn_p_noise_power(this, "PN_P"),
@@ -1358,9 +1359,12 @@ void BlockLocalPositionEstimator::correctmocap()
 
 	Vector<float, n_y_mocap> y;
 	y.setZero();
-    y(Y_mocap_x) = _sub_mocap.get().x;// - _mocapHome(0);
-    y(Y_mocap_y) = _sub_mocap.get().y;// - _mocapHome(1);
-    y(Y_mocap_z) = _sub_mocap.get().z;// - _mocapHome(2);
+    y(Y_mocap_x) = _sub_mocap.get().x;
+    y(Y_mocap_y) = _sub_mocap.get().y;
+    y(Y_mocap_z) = _sub_mocap.get().z;
+    y(Y_mocap_vx) = _sub_mocap.get().vx;
+    y(Y_mocap_vy) = _sub_mocap.get().vy;
+    y(Y_mocap_vz) = _sub_mocap.get().vz;
 
 	// mocap measurement matrix, measures position
 	Matrix<float, n_y_mocap, n_x> C;
@@ -1368,6 +1372,9 @@ void BlockLocalPositionEstimator::correctmocap()
 	C(Y_mocap_x, X_x) = 1;
 	C(Y_mocap_y, X_y) = 1;
 	C(Y_mocap_z, X_z) = 1;
+  C(Y_mocap_vx, X_vx) = 1;
+  C(Y_mocap_vy, X_vy) = 1;
+  C(Y_mocap_vz, X_vz) = 1;
 
 	// noise matrix
 	Matrix<float, n_y_mocap, n_y_mocap> R;
@@ -1377,6 +1384,12 @@ void BlockLocalPositionEstimator::correctmocap()
 	R(Y_mocap_x, Y_mocap_x) = mocap_p_var;
 	R(Y_mocap_y, Y_mocap_y) = mocap_p_var;
 	R(Y_mocap_z, Y_mocap_z) = mocap_p_var;
+
+  float mocap_v_var = _mocap_v_stddev.get()* \
+			    _mocap_v_stddev.get();
+	R(Y_mocap_vx, Y_mocap_vx) = mocap_v_var;
+	R(Y_mocap_vy, Y_mocap_vy) = mocap_v_var;
+	R(Y_mocap_vz, Y_mocap_vz) = mocap_v_var;
 
 	// residual
 	Matrix<float, n_y_mocap, n_y_mocap> S_I = inv<float, n_y_mocap>((C * _P * C.transpose()) + R);

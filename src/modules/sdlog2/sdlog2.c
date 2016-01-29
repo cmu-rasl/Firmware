@@ -111,6 +111,7 @@
 #include <uORB/topics/time_offset.h>
 #include <uORB/topics/mc_att_ctrl_status.h>
 #include <uORB/topics/l1_adaptive_debug.h>
+#include <uORB/topics/odom_mocap.h>
 
 #include <systemlib/systemlib.h>
 #include <systemlib/param/param.h>
@@ -1095,7 +1096,8 @@ int sdlog2_thread_main(int argc, char *argv[])
 		struct time_offset_s time_offset;
 		struct mc_att_ctrl_status_s mc_att_ctrl_status;
 		struct l1_adaptive_debug_s l1_adaptive_debug;
-		struct control_state_s ctrl_state;
+		struct odom_mocap_s odom_mocap;
+    struct control_state_s ctrl_state;
 	} buf;
 
 	memset(&buf, 0, sizeof(buf));
@@ -1146,6 +1148,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 			struct log_TSYN_s log_TSYN;
 			struct log_MACS_s log_MACS;
 			struct log_L1AC_s log_L1AC;
+			struct log_OMCP_s log_OMCP;
 			struct log_CTS_s log_CTS;
 		} body;
 	} log_msg = {
@@ -1191,7 +1194,8 @@ int sdlog2_thread_main(int argc, char *argv[])
 		int tsync_sub;
 		int mc_att_ctrl_status_sub;
 		int l1_adaptive_debug_sub;
-		int ctrl_state_sub;
+		int odom_mocap_sub;
+    int ctrl_state_sub;
 	} subs;
 
 	subs.cmd_sub = -1;
@@ -1227,6 +1231,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 	subs.tsync_sub = -1;
 	subs.mc_att_ctrl_status_sub = -1;
 	subs.l1_adaptive_debug_sub = -1;
+	subs.odom_mocap_sub = -1;
 	subs.ctrl_state_sub = -1;
 	subs.encoders_sub = -1;
 
@@ -1236,7 +1241,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 	for (unsigned i = 0; i < ORB_MULTI_MAX_INSTANCES; i++) {
 		subs.telemetry_subs[i] = -1;
 	}
-	
+
 	subs.sat_info_sub = -1;
 
 #ifdef __PX4_NUTTX
@@ -1406,7 +1411,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 
 		/* --- SENSOR COMBINED --- */
 		if (copy_if_updated(ORB_ID(sensor_combined), &subs.sensor_sub, &buf.sensor)) {
-			
+
 
 			for (unsigned i = 0; i < 3; i++) {
 				bool write_IMU = false;
@@ -1649,6 +1654,22 @@ int sdlog2_thread_main(int argc, char *argv[])
 			LOGBUFFER_WRITE_AND_COUNT(MOCP);
 		}
 
+    /* --- MOCAP ATTITUDE, POSITION AND VELOCITY --- */
+		if (copy_if_updated(ORB_ID(odom_mocap), &subs.odom_mocap_sub, &buf.odom_mocap)) {
+			log_msg.msg_type = LOG_OMCP_MSG;
+			log_msg.body.log_OMCP.qw = buf.odom_mocap.q[0];
+			log_msg.body.log_OMCP.qx = buf.odom_mocap.q[1];
+			log_msg.body.log_OMCP.qy = buf.odom_mocap.q[2];
+			log_msg.body.log_OMCP.qz = buf.odom_mocap.q[3];
+			log_msg.body.log_OMCP.x = buf.odom_mocap.x;
+			log_msg.body.log_OMCP.y = buf.odom_mocap.y;
+			log_msg.body.log_OMCP.z = buf.odom_mocap.z;
+			log_msg.body.log_OMCP.vx = buf.odom_mocap.vx;
+			log_msg.body.log_OMCP.vy = buf.odom_mocap.vy;
+			log_msg.body.log_OMCP.vz = buf.odom_mocap.vz;
+			LOGBUFFER_WRITE_AND_COUNT(OMCP);
+		}
+
 		/* --- VISION POSITION --- */
 		if (copy_if_updated(ORB_ID(vision_position_estimate), &subs.vision_pos_sub, &buf.vision_pos)) {
 			log_msg.msg_type = LOG_VISN_MSG;
@@ -1680,7 +1701,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 			log_msg.body.log_FLOW.sensor_id = buf.flow.sensor_id;
 			LOGBUFFER_WRITE_AND_COUNT(FLOW);
 		}
-		
+
 		/* --- FILTERED FLOW --- */
 		if (copy_if_updated(ORB_ID(filtered_bottom_flow), &subs.filtered_flow_sub, &buf.filtered_flow)) {
 			log_msg.msg_type = LOG_FFLW_MSG;
