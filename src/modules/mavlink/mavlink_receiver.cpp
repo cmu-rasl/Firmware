@@ -117,6 +117,7 @@ MavlinkReceiver::MavlinkReceiver(Mavlink *parent) :
 	_force_sp_pub(nullptr),
 	_pos_sp_triplet_pub(nullptr),
 	_att_pos_mocap_pub(nullptr),
+	_odom_mocap_pub(nullptr),
 	_vision_position_pub(nullptr),
 	_telemetry_status_pub(nullptr),
 	_rc_pub(nullptr),
@@ -174,6 +175,10 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
 
 	case MAVLINK_MSG_ID_ATT_POS_MOCAP:
 		handle_message_att_pos_mocap(msg);
+		break;
+
+  case MAVLINK_MSG_ID_ODOM_MOCAP:
+		handle_message_odom_mocap(msg);
 		break;
 
 	case MAVLINK_MSG_ID_SET_POSITION_TARGET_LOCAL_NED:

@@ -61,6 +61,7 @@
 #include "topics/vehicle_control_mode.h"
 #include "topics/actuator_armed.h"
 #include "topics/att_pos_mocap.h"
+#include "topics/odom_mocap.h"
 #include "topics/vision_position_estimate.h"
 
 #include <px4_defines.h>
@@ -161,6 +162,7 @@ template class __EXPORT Subscription<home_position_s>;
 template class __EXPORT Subscription<optical_flow_s>;
 template class __EXPORT Subscription<distance_sensor_s>;
 template class __EXPORT Subscription<att_pos_mocap_s>;
+template class __EXPORT Subscription<odom_mocap_s>;
 template class __EXPORT Subscription<vision_position_estimate_s>;
 
 } // namespace uORB

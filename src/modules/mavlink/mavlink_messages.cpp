@@ -57,6 +57,7 @@
 #include <uORB/topics/vehicle_command.h>
 #include <uORB/topics/vehicle_local_position_setpoint.h>
 #include <uORB/topics/att_pos_mocap.h>
+#include <uORB/topics/odom_mocap.h>
 #include <uORB/topics/vehicle_attitude_setpoint.h>
 #include <uORB/topics/vehicle_rates_setpoint.h>
 #include <uORB/topics/position_setpoint_triplet.h>
