@@ -58,7 +58,7 @@
 #include <uORB/topics/vehicle_control_mode.h>
 #include <uORB/topics/vehicle_global_position.h>
 #include <uORB/topics/vision_position_estimate.h>
-#include <uORB/topics/att_pos_mocap.h>
+#include <uORB/topics/odom_mocap.h>
 #include <uORB/topics/parameter_update.h>
 #include <drivers/drv_hrt.h>
 
@@ -158,7 +158,7 @@ private:
 	vision_position_estimate_s _vision = {};
 	Vector<3>	_vision_hdg;
 
-	att_pos_mocap_s _mocap = {};
+	odom_mocap_s _mocap = {};
 	Vector<3>	_mocap_hdg;
 
 	Quaternion	_q;
@@ -290,7 +290,7 @@ void AttitudeEstimatorQ::task_main()
 	_sensors_sub = orb_subscribe(ORB_ID(sensor_combined));
 
 	_vision_sub = orb_subscribe(ORB_ID(vision_position_estimate));
-	_mocap_sub = orb_subscribe(ORB_ID(att_pos_mocap));
+	_mocap_sub = orb_subscribe(ORB_ID(odom_mocap));
 
 	_params_sub = orb_subscribe(ORB_ID(parameter_update));
 	_global_pos_sub = orb_subscribe(ORB_ID(vehicle_global_position));
@@ -461,7 +461,7 @@ void AttitudeEstimatorQ::task_main()
 		}
 
 		if (mocap_updated) {
-			orb_copy(ORB_ID(att_pos_mocap), _mocap_sub, &_mocap);
+			orb_copy(ORB_ID(odom_mocap), _mocap_sub, &_mocap);
 			math::Quaternion q(_mocap.q);
 			math::Matrix<3, 3> Rmoc = q.to_dcm();
 
@@ -660,7 +660,7 @@ bool AttitudeEstimatorQ::init()
   else if (_ext_hdg_mode == 2 && _ext_hdg_good)
   {
     // If using mocap, set initial quaternion directly
-    orb_copy(ORB_ID(att_pos_mocap), _mocap_sub, &_mocap);
+    orb_copy(ORB_ID(odom_mocap), _mocap_sub, &_mocap);
 	  _q = _mocap.q;
   }
   else // If using mocap and the observation is bad, do not initialize
