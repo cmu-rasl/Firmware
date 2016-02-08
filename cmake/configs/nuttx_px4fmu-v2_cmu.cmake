@@ -2,6 +2,8 @@ include(nuttx/px4_impl_nuttx)
 
 set(CMAKE_TOOLCHAIN_FILE ${CMAKE_SOURCE_DIR}/cmake/toolchains/Toolchain-arm-none-eabi.cmake)
 
+set(config_uavcan_num_ifaces 2)
+
 set(config_module_list
 	#
 	# Board support modules
@@ -21,16 +23,16 @@ set(config_module_list
 	drivers/l3gd20
 	drivers/hmc5883
 	drivers/ms5611
-	drivers/mb12xx
+	#drivers/mb12xx
 	drivers/srf02
 	drivers/sf0x
 	drivers/ll40ls
 	drivers/trone
 	drivers/gps
 	drivers/pwm_out_sim
-	drivers/hott
-	drivers/hott/hott_telemetry
-	drivers/hott/hott_sensors
+	#drivers/hott
+	#drivers/hott/hott_telemetry
+	#drivers/hott/hott_sensors
 	drivers/blinkm
 	drivers/airspeed
 	drivers/ets_airspeed
@@ -43,6 +45,7 @@ set(config_module_list
 	drivers/gimbal
 	drivers/pwm_input
 	drivers/camera_trigger
+	drivers/bst
 
 	#
 	# System commands
@@ -54,7 +57,7 @@ set(config_module_list
 	systemcmds/pwm
 	systemcmds/esc_calib
 	systemcmds/reboot
-	systemcmds/topic_listener
+	#systemcmds/topic_listener
 	systemcmds/top
 	systemcmds/config
 	systemcmds/nshterm
@@ -65,12 +68,12 @@ set(config_module_list
 	#
 	# General system control
 	#
-  modules/commander
-  modules/navigator
+	modules/commander
+	modules/navigator
 	modules/mavlink
 	modules/gpio_led
 	modules/uavcan
-  modules/land_detector
+	modules/land_detector
 
 	#
 	# Estimation modules (EKF/ SO3 / other filters)
@@ -114,7 +117,7 @@ set(config_module_list
 	#lib/mathlib/CMSIS
 	lib/mathlib
 	lib/mathlib/math/filter
-	lib/ecl
+  lib/ecl
 	lib/external_lgpl
 	lib/geo
 	lib/geo_lookup
@@ -122,6 +125,7 @@ set(config_module_list
 	lib/launchdetection
 	lib/terrain_estimation
 	lib/runway_takeoff
+	lib/tailsitter_recovery
 	platforms/nuttx
 
 	# had to add for cmake, not sure why wasn't in original config
