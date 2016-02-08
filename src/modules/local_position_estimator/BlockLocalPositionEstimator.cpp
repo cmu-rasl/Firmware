@@ -279,7 +279,7 @@ void BlockLocalPositionEstimator::update()
 	}
 
 	// determine if we should start estimating
-	_canEstimateZ = _baroInitialized && !_baroFault;
+    _canEstimateZ = (_baroInitialized && !_baroFault) || (_mocapInitialized && !_mocapTimeout && !_mocapFault);
 	_canEstimateXY =
 		(_gpsInitialized && !_gpsFault) ||
 		(_flowInitialized && !_flowFault) ||
@@ -1359,9 +1359,9 @@ void BlockLocalPositionEstimator::correctmocap()
 
 	Vector<float, n_y_mocap> y;
 	y.setZero();
-	y(Y_mocap_x) = _sub_mocap.get().x - _mocapHome(0);
-	y(Y_mocap_y) = _sub_mocap.get().y - _mocapHome(1);
-	y(Y_mocap_z) = _sub_mocap.get().z - _mocapHome(2);
+	y(Y_mocap_x) = _sub_mocap.get().x;
+	y(Y_mocap_y) = _sub_mocap.get().y;
+	y(Y_mocap_z) = _sub_mocap.get().z;
 
 	// mocap measurement matrix, measures position
 	Matrix<float, n_y_mocap, n_x> C;
