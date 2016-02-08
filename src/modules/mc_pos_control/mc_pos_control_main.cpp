@@ -91,7 +91,6 @@
 #define SIGMA			0.000001f
 #define MIN_DIST		0.01f
 #define MANUAL_THROTTLE_MAX_MULTICOPTER	0.9f
-#define ONE_G	9.8066f
 
 /**
  * Multicopter position control app start / stop handling function
@@ -686,7 +685,7 @@ MulticopterPositionControl::reset_pos_sp()
 		_pos_sp(1) = _pos(1) + (_vel(1) - PX4_R(_att_sp.R_body, 1, 2) * _att_sp.thrust / _params.vel_p(1)
 					- _params.vel_ff(1) * _vel_sp(1)) / _params.pos_p(1);
 
-		//mavlink_log_info(_mavlink_fd, "[mpc] reset pos sp: %d, %d", (int)_pos_sp(0), (int)_pos_sp(1));
+		mavlink_log_info(_mavlink_fd, "[mpc] reset pos sp: %d, %d", (int)_pos_sp(0), (int)_pos_sp(1));
 	}
 }
 
@@ -696,7 +695,7 @@ MulticopterPositionControl::reset_alt_sp()
 	if (_reset_alt_sp) {
 		_reset_alt_sp = false;
 		_pos_sp(2) = _pos(2) + (_vel(2) - _params.vel_ff(2) * _vel_sp(2)) / _params.pos_p(2);
-		//mavlink_log_info(_mavlink_fd, "[mpc] reset alt sp: %d", -(int)_pos_sp(2));
+		mavlink_log_info(_mavlink_fd, "[mpc] reset alt sp: %d", -(int)_pos_sp(2));
 	}
 }
 
@@ -1067,7 +1066,7 @@ void MulticopterPositionControl::control_auto(float dt)
 			_att_sp.yaw_body = _pos_sp_triplet.current.yaw;
 		}
 
-		/* 
+		/*
 		 * if we're already near the current takeoff setpoint don't reset in case we switch back to posctl.
 		 * this makes the takeoff finish smoothly.
 		 */
@@ -1724,9 +1723,9 @@ MulticopterPositionControl::task_main()
 					_att_sp.thrust = thrust_abs;
 
 					/* save thrust setpoint for logging */
-					_local_pos_sp.acc_x = thrust_sp(0) * ONE_G;
-					_local_pos_sp.acc_y = thrust_sp(1) * ONE_G;
-					_local_pos_sp.acc_z = thrust_sp(2) * ONE_G;
+					_local_pos_sp.acc_x = thrust_sp(0);
+					_local_pos_sp.acc_y = thrust_sp(1);
+					_local_pos_sp.acc_z = thrust_sp(2);
 
 					_att_sp.timestamp = hrt_absolute_time();
 
