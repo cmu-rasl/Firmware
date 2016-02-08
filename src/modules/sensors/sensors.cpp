@@ -1345,7 +1345,7 @@ Sensors::parameter_update_poll(bool forced)
 				continue;
 			}
 
-                        printf("GYRO%u Device: %s, ID = %u\n", s, str, ioctl(fd, DEVIOCGDEVICEID, 0));
+                        printf("GYRO%u Device: %s, ID = %u\n", s, str, h.ioctl(DEVIOCGDEVICEID, 0));
 
 			bool config_ok = false;
 
@@ -1420,7 +1420,7 @@ Sensors::parameter_update_poll(bool forced)
 
 						} else {
 							                                    /* apply temperature compensation */
-                                                  res = ioctl(fd, GYROIOCSPARAM, (long unsigned int)&gparam);
+                                                  res = h.ioctl(GYROIOCSPARAM, (long unsigned int)&gparam);
                                                   if (res) {
                                                     warn("WARNING: failed to set temperature compensation parameters for gyro");
                                                   } else {
@@ -1452,7 +1452,7 @@ Sensors::parameter_update_poll(bool forced)
 				continue;
 			}
 
-                        printf("ACC%u Device: %s, ID = %u\n", s, str, ioctl(fd, DEVIOCGDEVICEID, 0));
+                        printf("ACC%u Device: %s, ID = %u\n", s, str, h.ioctl(DEVIOCGDEVICEID, 0));
 
 			bool config_ok = false;
 
@@ -1527,7 +1527,7 @@ Sensors::parameter_update_poll(bool forced)
 
 						} else {
                                                   /* apply temperature compensation */
-                                                  res = ioctl(fd, ACCELIOCSPARAM, (long unsigned int)&aparam);
+                                                  res = h.ioctl(ACCELIOCSPARAM, (long unsigned int)&aparam);
                                                   if (res) {
                                                     warn("WARNING: failed to set temperature compensation parameters for accel");
                                                   } else {
@@ -1686,7 +1686,7 @@ Sensors::parameter_update_poll(bool forced)
 							warnx(CAL_ERROR_APPLY_CAL_MSG, "mag", i);
 
 						} else {
-                                                  res = ioctl(fd, MAGIOCSPARAM, (long unsigned int)&mparam);
+                                                  res = h.ioctl(MAGIOCSPARAM, (long unsigned int)&mparam);
                                                   if (res) {
                                                     warn("WARNING: failed to set magnetic correction matrix parameters");
                                                   } else {
