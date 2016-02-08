@@ -9,7 +9,9 @@ uint8 MAIN_STATE_ACRO = 6
 uint8 MAIN_STATE_OFFBOARD = 7
 uint8 MAIN_STATE_STAB = 8
 uint8 MAIN_STATE_RATTITUDE = 9
-uint8 MAIN_STATE_MAX = 10
+uint8 MAIN_STATE_AUTO_TAKEOFF = 10
+uint8 MAIN_STATE_AUTO_LAND = 11
+uint8 MAIN_STATE_MAX = 12
 
 # If you change the order, add or remove arming_state_t states make sure to update the arrays
 # in state_machine_helper.cpp as well.
@@ -43,7 +45,8 @@ uint8 NAVIGATION_STATE_TERMINATION = 13		# Termination mode
 uint8 NAVIGATION_STATE_OFFBOARD = 14
 uint8 NAVIGATION_STATE_STAB = 15		# Stabilized mode
 uint8 NAVIGATION_STATE_RATTITUDE = 16		# Rattitude (aka "flip") mode
-uint8 NAVIGATION_STATE_MAX = 17
+uint8 NAVIGATION_STATE_AUTO_TAKEOFF = 17	# Takeoff
+uint8 NAVIGATION_STATE_MAX = 18
 
 # VEHICLE_MODE_FLAG, same as MAV_MODE_FLAG of MAVLink 1.0 protocol
 uint8 VEHICLE_MODE_FLAG_SAFETY_ARMED = 128
@@ -102,6 +105,7 @@ uint16 counter   # incremented by the writing thread everytime new data is store
 uint64 timestamp # in microseconds since system start, is set whenever the writing thread stores new data
 
 uint8 main_state		    	# main state machine
+uint8 main_state_prev       # previous main state
 uint8 nav_state				# set navigation state machine to specified value
 uint8 arming_state			# current arming state
 uint8 hil_state				# current hil state
@@ -113,6 +117,7 @@ uint32 system_id			# system id, inspired by MAVLink's system ID field
 uint32 component_id			# subsystem / component id, inspired by MAVLink's component ID field
 
 bool is_rotary_wing			# True if system is in rotary wing configuration, so for a VTOL this is only true while flying as a multicopter
+bool vtol_in_transition		# True if VTOL is doing a transition
 bool is_vtol				# True if the system is VTOL capable
 bool vtol_fw_permanent_stab		# True if vtol should stabilize attitude for fw in manual mode
 bool in_transition_mode

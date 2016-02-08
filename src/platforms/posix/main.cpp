@@ -35,7 +35,7 @@
  * Basic shell to execute builtin "apps"
  *
  * @author Mark Charlebois <charlebm@gmail.com>
- * @auther Roman Bapst <bapstroman@gmail.com>
+ * @author Roman Bapst <bapstroman@gmail.com>
  */
 
 #include <iostream>
@@ -44,6 +44,11 @@
 #include <sstream>
 #include <vector>
 #include <signal.h>
+#include <unistd.h>
+#include <stdio.h>
+#include "apps.h"
+#include "px4_middleware.h"
+#include "DriverFramework.hpp"
 #include <termios.h>
 
 namespace px4
@@ -54,9 +59,6 @@ void init_once(void);
 using namespace std;
 
 typedef int (*px4_main_t)(int argc, char *argv[]);
-
-#include "apps.h"
-#include "px4_middleware.h"
 
 #define CMD_BUFF_SIZE	100
 
@@ -75,6 +77,7 @@ extern "C" {
 	{
 		cout.flush();
 		cout << endl << "floating point exception" << endl;
+		PX4_BACKTRACE();
 		cout.flush();
 	}
 }
@@ -102,13 +105,22 @@ static void run_cmd(const vector<string> &appargs, bool exit_on_fail)
 		}
 
 		arg[i] = (char *)0;
-		int retval = apps[command](i, (char **)arg);
 
-		if (exit_on_fail && retval) {
-			exit(retval);
+		if (exit_on_fail) {
+			cout << endl;
 		}
 
-		usleep(65000);
+		int retval = apps[command](i, (char **)arg);
+
+		if (retval) {
+			cout << "Command failed, returned " << retval << endl;
+
+			if (exit_on_fail && retval) {
+				exit(retval);
+			}
+		}
+
+
 
 	} else if (command.compare("help") == 0) {
 		list_builtins();
@@ -117,18 +129,16 @@ static void run_cmd(const vector<string> &appargs, bool exit_on_fail)
 		// Do nothing
 
 	} else {
-		cout << "Invalid command: " << command << "\ntype 'help' for a list of commands" << endl;
+		cout << endl << "Invalid command: " << command << "\ntype 'help' for a list of commands" << endl;
 
 	}
-
-	print_prompt();
 }
 
 static void usage()
 {
 
 	cout << "./mainapp [-d] [startup_config] -h" << std::endl;
-	cout << "   -d            - Optional flag to run the app in daemon mode and does not take listen for user input." <<
+	cout << "   -d            - Optional flag to run the app in daemon mode and does not listen for user input." <<
 	     std::endl;
 	cout << "                   This is needed if mainapp is intended to be run as a upstart job on linux" << std::endl;
 	cout << "<startup_config> - config file for starting/stopping px4 modules" << std::endl;
@@ -141,16 +151,17 @@ static void process_line(string &line, bool exit_on_fail)
 		printf("\n");
 	}
 
-	vector<string> appargs(8);
+	vector<string> appargs(10);
 
 	stringstream(line) >> appargs[0] >> appargs[1] >> appargs[2] >> appargs[3] >> appargs[4] >> appargs[5] >> appargs[6] >>
-			   appargs[7];
+			   appargs[7] >> appargs[8] >> appargs[9];
 	run_cmd(appargs, exit_on_fail);
 }
 
 int main(int argc, char **argv)
 {
 	bool daemon_mode = false;
+	bool chroot_on = false;
 	signal(SIGINT, _SigIntHandler);
 	signal(SIGFPE, _SigFpeHandler);
 
@@ -167,6 +178,9 @@ int main(int argc, char **argv)
 			} else if (strcmp(argv[index], "-h") == 0) {
 				usage();
 				return 0;
+
+			} else if (strcmp(argv[index], "-c") == 0) {
+				chroot_on = true;
 
 			} else {
 				PX4_WARN("Unknown/unhandled parameter: %s", argv[index]);
@@ -192,21 +206,58 @@ int main(int argc, char **argv)
 	}
 
 	if (!error_detected) {
+		DriverFramework::Framework::initialize();
 		px4::init_once();
 
 		px4::init(argc, argv, "mainapp");
 
-		//if commandfile is present, process the commands from the file
+		// if commandfile is present, process the commands from the file
 		if (commands_file != nullptr) {
 			ifstream infile(commands_file);
 
 			if (infile.is_open()) {
 				for (string line; getline(infile, line, '\n');) {
+					// TODO: this should be true but for that we have to check all startup files
 					process_line(line, false);
 				}
 
 			} else {
 				PX4_WARN("Error opening file: %s", commands_file);
+			}
+		}
+
+		if (chroot_on) {
+			// Lock this application in the current working dir
+			// this is not an attempt to secure the environment,
+			// rather, to replicate a deployed file system.
+
+#ifdef PATH_MAX
+			const unsigned path_max_len = PATH_MAX;
+#else
+			const unsigned path_max_len = 1024;
+#endif
+
+			char pwd_path[path_max_len];
+			const char *folderpath = "/rootfs/";
+
+			if (nullptr == getcwd(pwd_path, sizeof(pwd_path))) {
+				PX4_ERR("Failed acquiring working dir, abort.");
+				exit(1);
+			}
+
+			if (nullptr == strcat(pwd_path, folderpath)) {
+				PX4_ERR("Failed completing path, abort.");
+				exit(1);
+			}
+
+			if (chroot(pwd_path)) {
+				PX4_ERR("Failed chrooting application, path: %s, error: %s.", pwd_path, strerror(errno));
+				exit(1);
+			}
+
+			if (chdir("/")) {
+				PX4_ERR("Failed changing to root dir, path: %s, error: %s.", pwd_path, strerror(errno));
+				exit(1);
 			}
 		}
 
@@ -260,9 +311,11 @@ int main(int argc, char **argv)
 						}
 					}
 
-					process_line(mystr, !daemon_mode);
+					process_line(mystr, false);
 					mystr = "";
 					buf_ptr_read = buf_ptr_write;
+
+					print_prompt();
 					break;
 
 				case '\033': {	// arrow keys
@@ -317,5 +370,6 @@ int main(int argc, char **argv)
 
 		vector<string> shutdown_cmd = { "shutdown" };
 		run_cmd(shutdown_cmd, true);
+		DriverFramework::Framework::shutdown();
 	}
 }

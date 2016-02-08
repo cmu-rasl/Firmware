@@ -536,7 +536,7 @@ void PWMIN::print_info(void)
 
 
 /*
- * Handle the interupt, gathering pulse data
+ * Handle the interrupt, gathering pulse data
  */
 static int pwmin_tim_isr(int irq, void *context)
 {
@@ -599,6 +599,10 @@ static void pwmin_test(void)
 			       (unsigned)buf.period,
 			       (unsigned)buf.pulse_width,
 			       (unsigned)buf.error_count);
+
+		} else {
+			/* no data, retry in 2 ms */
+			::usleep(2000);
 		}
 	}
 

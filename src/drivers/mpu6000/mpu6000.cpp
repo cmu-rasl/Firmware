@@ -153,6 +153,21 @@
 #define BIT_INT_STATUS_DATA		0x01
 
 #define MPU_WHOAMI_6000			0x68
+#define ICM_WHOAMI_20608		0xaf
+
+// ICM2608 specific registers
+
+/* this is an undocumented register which
+   if set incorrectly results in getting a 2.7m/s/s offset
+   on the Y axis of the accelerometer
+*/
+#define MPUREG_ICM_UNDOC1		0x11
+#define MPUREG_ICM_UNDOC1_VALUE		0xc9
+
+// Product ID Description for ICM2608
+// There is none
+
+#define ICM20608_REV_00		0
 
 // Product ID Description for MPU6000
 // high 4 bits 	low 4 bits
@@ -212,7 +227,8 @@ class MPU6000_gyro;
 class MPU6000 : public device::SPI
 {
 public:
-	MPU6000(int bus, const char *path_accel, const char *path_gyro, spi_dev_e device, enum Rotation rotation);
+	MPU6000(int bus, const char *path_accel, const char *path_gyro, spi_dev_e device, enum Rotation rotation,
+		int device_type);
 	virtual ~MPU6000();
 
 	virtual int		init();
@@ -246,6 +262,7 @@ protected:
 	virtual int		gyro_ioctl(struct file *filp, int cmd, unsigned long arg);
 
 private:
+	int 			_device_type;
 	MPU6000_gyro		*_gyro;
 	uint8_t			_product;	/** product code */
 
@@ -280,7 +297,6 @@ private:
 	perf_counter_t		_good_transfers;
 	perf_counter_t		_reset_retries;
 	perf_counter_t		_duplicates;
-	perf_counter_t		_system_latency_perf;
 	perf_counter_t		_controller_latency_perf;
 
 	uint8_t			_register_wait;
@@ -301,7 +317,7 @@ private:
 	// this is used to support runtime checking of key
 	// configuration registers to detect SPI bus errors and sensor
 	// reset
-#define MPU6000_NUM_CHECKED_REGISTERS 9
+#define MPU6000_NUM_CHECKED_REGISTERS 10
 	static const uint8_t	_checked_registers[MPU6000_NUM_CHECKED_REGISTERS];
 	uint8_t			_checked_values[MPU6000_NUM_CHECKED_REGISTERS];
 	uint8_t			_checked_next;
@@ -333,6 +349,15 @@ private:
 	 * Resets the chip and measurements ranges, but not scale and offset.
 	 */
 	int			reset();
+
+	/**
+	 * is_icm_device
+	 */
+	bool 		is_icm_device() { return _device_type == 20608;}
+	/**
+	 * is_mpu_device
+	 */
+	bool 		is_mpu_device() { return _device_type == 6000;}
 
 	/**
 	 * Static trampoline from the hrt_call context; because we don't have a
@@ -477,7 +502,8 @@ const uint8_t MPU6000::_checked_registers[MPU6000_NUM_CHECKED_REGISTERS] = { MPU
 									     MPUREG_GYRO_CONFIG,
 									     MPUREG_ACCEL_CONFIG,
 									     MPUREG_INT_ENABLE,
-									     MPUREG_INT_PIN_CFG
+									     MPUREG_INT_PIN_CFG,
+									     MPUREG_ICM_UNDOC1
 									   };
 
 
@@ -515,8 +541,10 @@ private:
 /** driver 'main' command */
 extern "C" { __EXPORT int mpu6000_main(int argc, char *argv[]); }
 
-MPU6000::MPU6000(int bus, const char *path_accel, const char *path_gyro, spi_dev_e device, enum Rotation rotation) :
+MPU6000::MPU6000(int bus, const char *path_accel, const char *path_gyro, spi_dev_e device, enum Rotation rotation,
+		 int device_type) :
 	SPI("MPU6000", path_accel, bus, device, SPIDEV_MODE3, MPU6000_LOW_BUS_SPEED),
+	_device_type(device_type),
 	_gyro(new MPU6000_gyro(this, path_gyro)),
 	_product(0),
 	_call{},
@@ -543,7 +571,6 @@ MPU6000::MPU6000(int bus, const char *path_accel, const char *path_gyro, spi_dev
 	_good_transfers(perf_alloc(PC_COUNT, "mpu6000_good_transfers")),
 	_reset_retries(perf_alloc(PC_COUNT, "mpu6000_reset_retries")),
 	_duplicates(perf_alloc(PC_COUNT, "mpu6000_duplicates")),
-	_system_latency_perf(perf_alloc_once(PC_ELAPSED, "sys_latency")),
 	_controller_latency_perf(perf_alloc_once(PC_ELAPSED, "ctrl_latency")),
 	_register_wait(0),
 	_reset_wait(0),
@@ -804,6 +831,10 @@ int MPU6000::reset()
 	write_checked_reg(MPUREG_INT_PIN_CFG, BIT_INT_ANYRD_2CLEAR); // INT: Clear on any read
 	usleep(1000);
 
+	if (is_icm_device()) {
+		write_checked_reg(MPUREG_ICM_UNDOC1, MPUREG_ICM_UNDOC1_VALUE);
+	}
+
 	// Oscillator set
 	// write_reg(MPUREG_PWR_MGMT_1,MPU_CLK_SEL_PLLGYROZ);
 	usleep(1000);
@@ -814,16 +845,15 @@ int MPU6000::reset()
 int
 MPU6000::probe()
 {
-	uint8_t whoami;
-	whoami = read_reg(MPUREG_WHOAMI);
+	uint8_t whoami = read_reg(MPUREG_WHOAMI);
+	uint8_t expected = is_mpu_device() ? MPU_WHOAMI_6000 : ICM_WHOAMI_20608;
 
-	if (whoami != MPU_WHOAMI_6000) {
+	if (whoami != expected) {
 		DEVICE_DEBUG("unexpected WHOAMI 0x%02x", whoami);
 		return -EIO;
-
 	}
 
-	/* look for a product ID we recognise */
+	/* look for a product ID we recognize */
 	_product = read_reg(MPUREG_PRODUCT_ID);
 
 	// verify product revision
@@ -840,6 +870,7 @@ MPU6000::probe()
 	case MPU6000_REV_D8:
 	case MPU6000_REV_D9:
 	case MPU6000_REV_D10:
+	case ICM20608_REV_00:
 		DEVICE_DEBUG("ID 0x%02x", _product);
 		_checked_values[0] = _product;
 		return OK;
@@ -1550,6 +1581,13 @@ MPU6000::read_reg(unsigned reg, uint32_t speed)
 {
 	uint8_t cmd[2] = { (uint8_t)(reg | DIR_READ), 0};
 
+	// There is no MPUREG_PRODUCT_ID on the icm device
+	// so lets make dummy it up and allow the rest of the
+	// code to run as is
+	if (reg == MPUREG_PRODUCT_ID && is_icm_device()) {
+		return ICM20608_REV_00;
+	}
+
 	// general register transfer at low clock speed
 	set_frequency(speed);
 
@@ -1707,6 +1745,11 @@ MPU6000::check_registers(void)
 	  the data registers.
 	*/
 	uint8_t v;
+
+	// the MPUREG_ICM_UNDOC1 is specific to the ICM20608 (and undocumented)
+	if (_checked_registers[_checked_next] == MPUREG_ICM_UNDOC1 && !is_icm_device()) {
+		_checked_next = (_checked_next + 1) % MPU6000_NUM_CHECKED_REGISTERS;
+	}
 
 	if ((v = read_reg(_checked_registers[_checked_next], MPU6000_HIGH_BUS_SPEED)) !=
 	    _checked_values[_checked_next]) {
@@ -1946,6 +1989,16 @@ MPU6000::measure()
 	arb.scaling = _accel_range_scale;
 	arb.range_m_s2 = _accel_range_m_s2;
 
+	if (is_icm_device()) { // if it is an ICM20608
+		_last_temperature = (report.temp) / 326.8f + 25.0f;
+
+	} else { // If it is an MPU6000
+		_last_temperature = (report.temp) / 361.0f + 35.0f;
+	}
+
+	arb.temperature_raw = report.temp;
+	arb.temperature = _last_temperature;
+
 	grb.x_raw = report.gyro_x;
 	grb.y_raw = report.gyro_y;
 	grb.z_raw = report.gyro_z;
@@ -1999,7 +2052,6 @@ MPU6000::measure()
 	if (accel_notify && !(_pub_blocked)) {
 		/* log the time of this report */
 		perf_begin(_controller_latency_perf);
-		perf_begin(_system_latency_perf);
 		/* publish it */
 		orb_publish(ORB_ID(sensor_accel), _accel_topic, &arb);
 	}
@@ -2133,7 +2185,7 @@ namespace mpu6000
 MPU6000	*g_dev_int; // on internal bus
 MPU6000	*g_dev_ext; // on external bus
 
-void	start(bool, enum Rotation, int range);
+void	start(bool, enum Rotation, int range, int device_type);
 void	stop(bool);
 void	test(bool);
 void	reset(bool);
@@ -2150,7 +2202,7 @@ void	usage();
  * or failed to detect the sensor.
  */
 void
-start(bool external_bus, enum Rotation rotation, int range)
+start(bool external_bus, enum Rotation rotation, int range, int device_type)
 {
 	int fd;
 	MPU6000 **g_dev_ptr = external_bus ? &g_dev_ext : &g_dev_int;
@@ -2166,13 +2218,23 @@ start(bool external_bus, enum Rotation rotation, int range)
 	/* create the driver */
 	if (external_bus) {
 #ifdef PX4_SPI_BUS_EXT
-		*g_dev_ptr = new MPU6000(PX4_SPI_BUS_EXT, path_accel, path_gyro, (spi_dev_e)PX4_SPIDEV_EXT_MPU, rotation);
+# if defined(PX4_SPIDEV_EXT_ICM)
+		spi_dev_e cs = (spi_dev_e)(device_type == 6000 ? PX4_SPIDEV_EXT_MPU : PX4_SPIDEV_EXT_ICM);
+# else
+		spi_dev_e cs = (spi_dev_e) PX4_SPIDEV_EXT_MPU;
+# endif
+		*g_dev_ptr = new MPU6000(PX4_SPI_BUS_EXT, path_accel, path_gyro, cs, rotation, device_type);
 #else
 		errx(0, "External SPI not available");
 #endif
 
 	} else {
-		*g_dev_ptr = new MPU6000(PX4_SPI_BUS_SENSORS, path_accel, path_gyro, (spi_dev_e)PX4_SPIDEV_MPU, rotation);
+#if defined(PX4_SPIDEV_ICM)
+		spi_dev_e cs = (spi_dev_e)(device_type == 6000 ? PX4_SPIDEV_MPU : PX4_SPIDEV_ICM);
+#else
+		spi_dev_e cs = (spi_dev_e) PX4_SPIDEV_MPU;
+#endif
+		*g_dev_ptr = new MPU6000(PX4_SPI_BUS_SENSORS, path_accel, path_gyro, cs, rotation, device_type);
 	}
 
 	if (*g_dev_ptr == nullptr) {
@@ -2416,6 +2478,7 @@ usage()
 	warnx("missing command: try 'start', 'info', 'test', 'stop',\n'reset', 'regdump', 'factorytest', 'testerror'");
 	warnx("options:");
 	warnx("    -X    (external bus)");
+	warnx("    -M 6000|20608 (default 6000)");
 	warnx("    -R rotation");
 	warnx("    -a accel range (in g)");
 }
@@ -2426,15 +2489,20 @@ int
 mpu6000_main(int argc, char *argv[])
 {
 	bool external_bus = false;
+	int device_type = 6000;
 	int ch;
 	enum Rotation rotation = ROTATION_NONE;
 	int accel_range = 8;
 
 	/* jump over start/off/etc and look at options first */
-	while ((ch = getopt(argc, argv, "XR:a:")) != EOF) {
+	while ((ch = getopt(argc, argv, "T:XR:a:")) != EOF) {
 		switch (ch) {
 		case 'X':
 			external_bus = true;
+			break;
+
+		case 'T':
+			device_type = atoi(optarg);
 			break;
 
 		case 'R':
@@ -2458,7 +2526,7 @@ mpu6000_main(int argc, char *argv[])
 
 	 */
 	if (!strcmp(verb, "start")) {
-		mpu6000::start(external_bus, rotation, accel_range);
+		mpu6000::start(external_bus, rotation, accel_range, device_type);
 	}
 
 	if (!strcmp(verb, "stop")) {

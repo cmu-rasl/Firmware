@@ -71,6 +71,11 @@
 #include <drivers/drv_mixer.h>
 #include <drivers/drv_rc_input.h>
 
+#include <lib/rc/sbus.h>
+#include <lib/rc/dsm.h>
+#include <lib/rc/st24.h>
+#include <lib/rc/sumd.h>
+
 #include <uORB/topics/actuator_controls.h>
 #include <uORB/topics/actuator_controls_0.h>
 #include <uORB/topics/actuator_controls_1.h>
@@ -85,12 +90,8 @@
 # include <systemlib/ppm_decode.h>
 #endif
 
-/*
- * This is the analog to FMU_INPUT_DROP_LIMIT_US on the IO side
- */
-
-#define CONTROL_INPUT_DROP_LIMIT_MS		20
-#define NAN_VALUE	(0.0f/0.0f)
+#define SCHEDULE_INTERVAL	2000	/**< The schedule interval in usec (500 Hz) */
+#define NAN_VALUE	(0.0f/0.0f)		/**< NaN value for throttle lock mode */
 
 class PX4FMU : public device::CDev
 {
@@ -118,15 +119,28 @@ public:
 	int		set_i2c_bus_clock(unsigned bus, unsigned clock_hz);
 
 private:
-#if defined(CONFIG_ARCH_BOARD_PX4FMU_V1)
-	static const unsigned _max_actuators = 4;
-#endif
-#if defined(CONFIG_ARCH_BOARD_PX4FMU_V2)
-	static const unsigned _max_actuators = 6;
-#endif
-#if defined(CONFIG_ARCH_BOARD_AEROCORE)
-	static const unsigned _max_actuators = 8;
-#endif
+	enum RC_SCAN {
+		RC_SCAN_PPM = 0,
+		RC_SCAN_SBUS,
+		RC_SCAN_DSM,
+		RC_SCAN_SUMD,
+		RC_SCAN_ST24
+	};
+	enum RC_SCAN _rc_scan_state = RC_SCAN_SBUS;
+
+	char const *RC_SCAN_STRING[5] = {
+		"PPM",
+		"SBUS",
+		"DSM",
+		"SUMD",
+		"ST24"
+	};
+
+	hrt_abstime _rc_scan_begin = 0;
+	bool _rc_scan_locked = false;
+	bool _report_lock = true;
+
+	static const unsigned _max_actuators = DIRECT_PWM_OUTPUT_CHANNELS;
 
 	Mode		_mode;
 	unsigned	_pwm_default_rate;
@@ -141,10 +155,14 @@ private:
 	orb_advert_t	_outputs_pub;
 	unsigned	_num_outputs;
 	int		_class_instance;
+	int		_rcs_fd;
+	uint8_t _rcs_buf[SBUS_FRAME_SIZE];
 
 	volatile bool	_initialized;
-	bool		_servo_armed;
+	bool		_throttle_armed;
 	bool		_pwm_on;
+	bool		_pwm_init;
+	uint8_t		_pwm_channel_mask;
 
 	MixerGroup	*_mixers;
 
@@ -182,7 +200,7 @@ private:
 	int		set_pwm_rate(unsigned rate_map, unsigned default_rate, unsigned alt_rate);
 	int		pwm_ioctl(file *filp, int cmd, unsigned long arg);
 	void		update_pwm_rev_mask();
-	void	publish_pwm_outputs(uint16_t *values, size_t numvalues);
+	void		publish_pwm_outputs(uint16_t *values, size_t numvalues);
 
 	struct GPIOConfig {
 		uint32_t	input;
@@ -204,6 +222,14 @@ private:
 	/* do not allow to copy due to ptr data members */
 	PX4FMU(const PX4FMU &);
 	PX4FMU operator=(const PX4FMU &);
+	void fill_rc_in(uint16_t raw_rc_count,
+			uint16_t raw_rc_values[input_rc_s::RC_INPUT_MAX_CHANNELS],
+			hrt_abstime now, bool frame_drop, bool failsafe,
+			unsigned frame_drops, int rssi);
+	void dsm_bind_ioctl(int dsmMode);
+	void set_rc_scan_state(RC_SCAN _rc_scan_state);
+	void rc_io_invert();
+	void rc_io_invert(bool invert);
 };
 
 const PX4FMU::GPIOConfig PX4FMU::_gpio_tab[] = {
@@ -231,6 +257,17 @@ const PX4FMU::GPIOConfig PX4FMU::_gpio_tab[] = {
 	{GPIO_VDD_SERVO_VALID,   0,                       0},
 	{GPIO_VDD_5V_HIPOWER_OC, 0,                       0},
 	{GPIO_VDD_5V_PERIPH_OC,  0,                       0},
+#endif
+#if defined(CONFIG_ARCH_BOARD_PX4FMU_V4)
+	{GPIO_GPIO0_INPUT,       GPIO_GPIO0_OUTPUT,       0},
+	{GPIO_GPIO1_INPUT,       GPIO_GPIO1_OUTPUT,       0},
+	{GPIO_GPIO2_INPUT,       GPIO_GPIO2_OUTPUT,       0},
+	{GPIO_GPIO3_INPUT,       GPIO_GPIO3_OUTPUT,       0},
+	{GPIO_GPIO4_INPUT,       GPIO_GPIO4_OUTPUT,       0},
+	{GPIO_GPIO5_INPUT,       GPIO_GPIO5_OUTPUT,       0},
+
+	{0,                      GPIO_VDD_3V3_SENSORS_EN, 0},
+	{GPIO_VDD_BRICK_VALID,   0,                       0},
 #endif
 #if defined(CONFIG_ARCH_BOARD_AEROCORE)
 	/* AeroCore breaks out User GPIOs on J11 */
@@ -274,9 +311,12 @@ PX4FMU::PX4FMU() :
 	_outputs_pub(nullptr),
 	_num_outputs(0),
 	_class_instance(0),
+	_rcs_fd(-1),
 	_initialized(false),
-	_servo_armed(false),
+	_throttle_armed(false),
 	_pwm_on(false),
+	_pwm_init(false),
+	_pwm_channel_mask(0),
 	_mixers(nullptr),
 	_groups_required(0),
 	_groups_subscribed(0),
@@ -301,10 +341,13 @@ PX4FMU::PX4FMU() :
 	memset(_controls, 0, sizeof(_controls));
 	memset(_poll_fds, 0, sizeof(_poll_fds));
 
-#ifdef HRT_PPM_CHANNEL
 	// rc input, published to ORB
 	memset(&_rc_in, 0, sizeof(_rc_in));
 	_rc_in.input_source = input_rc_s::RC_INPUT_SOURCE_PX4FMU_PPM;
+
+#ifdef GPIO_SBUS_INV
+	// this board has a GPIO to control SBUS inversion
+	stm32_configgpio(GPIO_SBUS_INV);
 #endif
 
 	/* only enable this during development */
@@ -379,10 +422,7 @@ PX4FMU::set_mode(Mode mode)
 		_pwm_default_rate = 50;
 		_pwm_alt_rate = 50;
 		_pwm_alt_rate_channels = 0;
-
-		/* XXX magic numbers */
-		up_pwm_servo_init(0x3);
-		set_pwm_rate(_pwm_alt_rate_channels, _pwm_default_rate, _pwm_alt_rate);
+		_pwm_channel_mask = 0x3;
 
 		break;
 
@@ -393,10 +433,7 @@ PX4FMU::set_mode(Mode mode)
 		_pwm_default_rate = 50;
 		_pwm_alt_rate = 50;
 		_pwm_alt_rate_channels = 0;
-
-		/* XXX magic numbers */
-		up_pwm_servo_init(0xf);
-		set_pwm_rate(_pwm_alt_rate_channels, _pwm_default_rate, _pwm_alt_rate);
+		_pwm_channel_mask = 0xf;
 
 		break;
 
@@ -407,10 +444,7 @@ PX4FMU::set_mode(Mode mode)
 		_pwm_default_rate = 50;
 		_pwm_alt_rate = 50;
 		_pwm_alt_rate_channels = 0;
-
-		/* XXX magic numbers */
-		up_pwm_servo_init(0x3f);
-		set_pwm_rate(_pwm_alt_rate_channels, _pwm_default_rate, _pwm_alt_rate);
+		_pwm_channel_mask = 0x3f;
 
 		break;
 
@@ -422,10 +456,7 @@ PX4FMU::set_mode(Mode mode)
 		_pwm_default_rate = 50;
 		_pwm_alt_rate = 50;
 		_pwm_alt_rate_channels = 0;
-
-		/* XXX magic numbers */
-		up_pwm_servo_init(0xff);
-		set_pwm_rate(_pwm_alt_rate_channels, _pwm_default_rate, _pwm_alt_rate);
+		_pwm_channel_mask = 0xff;
 		break;
 #endif
 
@@ -438,6 +469,7 @@ PX4FMU::set_mode(Mode mode)
 
 		/* disable servo outputs - no need to set rates */
 		up_pwm_servo_deinit();
+		_pwm_init = false;
 
 		break;
 
@@ -569,7 +601,7 @@ PX4FMU::update_pwm_rev_mask()
 void
 PX4FMU::publish_pwm_outputs(uint16_t *values, size_t numvalues)
 {
-	actuator_outputs_s outputs;
+	actuator_outputs_s outputs = {};
 	outputs.noutputs = numvalues;
 	outputs.timestamp = hrt_absolute_time();
 
@@ -602,6 +634,56 @@ PX4FMU::cycle_trampoline(void *arg)
 	dev->cycle();
 }
 
+void PX4FMU::fill_rc_in(uint16_t raw_rc_count,
+			uint16_t raw_rc_values[input_rc_s::RC_INPUT_MAX_CHANNELS],
+			hrt_abstime now, bool frame_drop, bool failsafe,
+			unsigned frame_drops, int rssi = -1)
+{
+	// fill rc_in struct for publishing
+	_rc_in.channel_count = raw_rc_count;
+
+	if (_rc_in.channel_count > input_rc_s::RC_INPUT_MAX_CHANNELS) {
+		_rc_in.channel_count = input_rc_s::RC_INPUT_MAX_CHANNELS;
+	}
+
+	for (uint8_t i = 0; i < _rc_in.channel_count; i++) {
+		_rc_in.values[i] = raw_rc_values[i];
+	}
+
+	_rc_in.timestamp_publication = now;
+	_rc_in.timestamp_last_signal = _rc_in.timestamp_publication;
+	_rc_in.rc_ppm_frame_length = 0;
+
+	if (rssi == -1) {
+		_rc_in.rssi =
+			(!frame_drop) ? RC_INPUT_RSSI_MAX : (RC_INPUT_RSSI_MAX / 2);
+	}
+
+	_rc_in.rc_failsafe = failsafe;
+	_rc_in.rc_lost = false;
+	_rc_in.rc_lost_frame_count = frame_drops;
+	_rc_in.rc_total_frame_count = 0;
+}
+
+#ifdef RC_SERIAL_PORT
+void PX4FMU::set_rc_scan_state(RC_SCAN newState)
+{
+//    warnx("RCscan: %s failed, trying %s", PX4FMU::RC_SCAN_STRING[_rc_scan_state], PX4FMU::RC_SCAN_STRING[newState]);
+	_rc_scan_begin = 0;
+	_rc_scan_state = newState;
+}
+
+void PX4FMU::rc_io_invert(bool invert)
+{
+	INVERT_RC_INPUT(invert);
+
+	if (!invert) {
+		// set FMU_RC_OUTPUT high to pull RC_INPUT up
+		stm32_gpiowrite(GPIO_RC_OUT, 1);
+	}
+}
+#endif
+
 void
 PX4FMU::cycle()
 {
@@ -620,9 +702,17 @@ PX4FMU::cycle()
 
 		update_pwm_rev_mask();
 
+#ifdef RC_SERIAL_PORT
+		// dsm_init sets some file static variables and returns a file descriptor
+		_rcs_fd = dsm_init(RC_SERIAL_PORT);
+		// assume SBUS input
+		sbus_config(_rcs_fd, false);
+		// disable CPPM input by mapping it away from the timer capture input
+		stm32_configgpio(GPIO_PPM_IN & ~(GPIO_AF_MASK | GPIO_PUPD_MASK));
+#endif
+
 		_initialized = true;
 	}
-
 
 	if (_groups_subscribed != _groups_required) {
 		subscribe();
@@ -668,6 +758,9 @@ PX4FMU::cycle()
 	/* check if anything updated */
 	int ret = ::poll(_poll_fds, _poll_fds_num, 0);
 
+	/* log if main actuator updated and sync */
+	int main_out_latency = 0;
+
 	/* this would be bad... */
 	if (ret < 0) {
 		DEVICE_LOG("poll error %d", errno);
@@ -685,6 +778,20 @@ PX4FMU::cycle()
 			if (_control_subs[i] > 0) {
 				if (_poll_fds[poll_id].revents & POLLIN) {
 					orb_copy(_control_topics[i], _control_subs[i], &_controls[i]);
+
+					/* main outputs */
+					if (i == 0) {
+						//main_out_latency = hrt_absolute_time() - _controls[i].timestamp - 250;
+
+						/* do only correct within the current phase */
+						if (abs(main_out_latency) > SCHEDULE_INTERVAL) {
+							main_out_latency = SCHEDULE_INTERVAL;
+						}
+
+						if (main_out_latency < 250) {
+							main_out_latency = 0;
+						}
+					}
 				}
 
 				poll_id++;
@@ -732,7 +839,7 @@ PX4FMU::cycle()
 			uint16_t pwm_limited[_max_actuators];
 
 			/* the PWM limit call takes care of out of band errors, NaN and constrains */
-			pwm_limit_calc(_servo_armed, arm_nothrottle(), num_outputs, _reverse_pwm_mask, _disarmed_pwm, _min_pwm, _max_pwm,
+			pwm_limit_calc(_throttle_armed, arm_nothrottle(), num_outputs, _reverse_pwm_mask, _disarmed_pwm, _min_pwm, _max_pwm,
 				       outputs, pwm_limited, &_pwm_limit);
 
 			/* output to the servos */
@@ -752,17 +859,20 @@ PX4FMU::cycle()
 		orb_copy(ORB_ID(actuator_armed), _armed_sub, &_armed);
 
 		/* update the armed status and check that we're not locked down */
-		bool set_armed = (_armed.armed || _armed.prearmed) && !_armed.lockdown;
-
-		if (_servo_armed != set_armed) {
-			_servo_armed = set_armed;
-		}
+		_throttle_armed = _armed.armed && !_armed.lockdown;
 
 		/* update PWM status if armed or if disarmed PWM values are set */
-		bool pwm_on = (set_armed || _num_disarmed_set > 0);
+		bool pwm_on = (_armed.armed || _num_disarmed_set > 0);
 
 		if (_pwm_on != pwm_on) {
 			_pwm_on = pwm_on;
+
+			if (!_pwm_init && _pwm_on) {
+				up_pwm_servo_init(_pwm_channel_mask);
+				set_pwm_rate(_pwm_alt_rate_channels, _pwm_default_rate, _pwm_alt_rate);
+				_pwm_init = true;
+			}
+
 			up_pwm_servo_arm(pwm_on);
 		}
 	}
@@ -774,33 +884,239 @@ PX4FMU::cycle()
 		orb_copy(ORB_ID(parameter_update), _param_sub, &pupdate);
 
 		update_pwm_rev_mask();
+
+		int32_t dsm_bind_val;
+		param_t dsm_bind_param;
+
+		/* see if bind parameter has been set, and reset it to -1 */
+		param_get(dsm_bind_param = param_find("RC_DSM_BIND"), &dsm_bind_val);
+
+		if (dsm_bind_val > -1) {
+			dsm_bind_ioctl(dsm_bind_val);
+			dsm_bind_val = -1;
+			param_set(dsm_bind_param, &dsm_bind_val);
+		}
 	}
 
+	bool rc_updated = false;
+
+#ifdef RC_SERIAL_PORT
+	// This block scans for a supported serial RC input and locks onto the first one found
+	// Scan for 100 msec, then switch protocol
+	constexpr hrt_abstime rc_scan_max = 100 * 1000;
+
+	bool sbus_failsafe, sbus_frame_drop;
+	uint16_t raw_rc_values[input_rc_s::RC_INPUT_MAX_CHANNELS];
+	uint16_t raw_rc_count;
+	unsigned frame_drops;
+	bool dsm_11_bit;
+
+
+	if (_report_lock && _rc_scan_locked) {
+		_report_lock = false;
+		warnx("RCscan: %s RC input locked", RC_SCAN_STRING[_rc_scan_state]);
+	}
+
+	// read all available data from the serial RC input UART
+	hrt_abstime now = hrt_absolute_time();
+	int newBytes = ::read(_rcs_fd, &_rcs_buf[0], SBUS_FRAME_SIZE);
+
+	switch (_rc_scan_state) {
+	case RC_SCAN_SBUS:
+		if (_rc_scan_begin == 0) {
+			_rc_scan_begin = now;
+			// Configure serial port for SBUS
+			sbus_config(_rcs_fd, false);
+			rc_io_invert(true);
+
+		} else if (_rc_scan_locked
+			   || now - _rc_scan_begin < rc_scan_max) {
+
+			// parse new data
+			if (newBytes > 0) {
+				rc_updated = sbus_parse(now, &_rcs_buf[0], newBytes, &raw_rc_values[0], &raw_rc_count, &sbus_failsafe,
+							&sbus_frame_drop, &frame_drops, input_rc_s::RC_INPUT_MAX_CHANNELS);
+
+				if (rc_updated) {
+					// we have a new SBUS frame. Publish it.
+					_rc_in.input_source = input_rc_s::RC_INPUT_SOURCE_PX4FMU_SBUS;
+					fill_rc_in(raw_rc_count, raw_rc_values, now,
+						   sbus_frame_drop, sbus_failsafe, frame_drops);
+					_rc_scan_locked = true;
+				}
+			}
+
+		} else {
+			// Scan the next protocol
+			set_rc_scan_state(RC_SCAN_DSM);
+		}
+
+		break;
+
+	case RC_SCAN_DSM:
+		if (_rc_scan_begin == 0) {
+			_rc_scan_begin = now;
+//			// Configure serial port for DSM
+			dsm_config(_rcs_fd);
+			rc_io_invert(false);
+
+		} else if (_rc_scan_locked
+			   || now - _rc_scan_begin < rc_scan_max) {
+
+			if (newBytes > 0) {
+				// parse new data
+				rc_updated = dsm_parse(now, &_rcs_buf[0], newBytes, &raw_rc_values[0], &raw_rc_count,
+						       &dsm_11_bit, &frame_drops, input_rc_s::RC_INPUT_MAX_CHANNELS);
+
+				if (rc_updated) {
+					// we have a new DSM frame. Publish it.
+					_rc_in.input_source = input_rc_s::RC_INPUT_SOURCE_PX4FMU_DSM;
+					fill_rc_in(raw_rc_count, raw_rc_values, now,
+						   false, false, frame_drops);
+					_rc_scan_locked = true;
+				}
+			}
+
+		} else {
+			// Scan the next protocol
+			set_rc_scan_state(RC_SCAN_ST24);
+		}
+
+		break;
+
+	case RC_SCAN_ST24:
+		if (_rc_scan_begin == 0) {
+			_rc_scan_begin = now;
+//			// Configure serial port for DSM
+			dsm_config(_rcs_fd);
+			rc_io_invert(false);
+
+		} else if (_rc_scan_locked
+			   || now - _rc_scan_begin < rc_scan_max) {
+
+			if (newBytes > 0) {
+				// parse new data
+				uint8_t st24_rssi, rx_count;
+
+				rc_updated = false;
+
+				for (unsigned i = 0; i < newBytes; i++) {
+					/* set updated flag if one complete packet was parsed */
+					st24_rssi = RC_INPUT_RSSI_MAX;
+					rc_updated = (OK == st24_decode(_rcs_buf[i], &st24_rssi, &rx_count,
+									&raw_rc_count, raw_rc_values, input_rc_s::RC_INPUT_MAX_CHANNELS));
+				}
+
+				if (rc_updated) {
+					// we have a new ST24 frame. Publish it.
+					_rc_in.input_source = input_rc_s::RC_INPUT_SOURCE_PX4FMU_ST24;
+					fill_rc_in(raw_rc_count, raw_rc_values, now,
+						   false, false, frame_drops, st24_rssi);
+					_rc_scan_locked = true;
+				}
+			}
+
+		} else {
+			// Scan the next protocol
+			set_rc_scan_state(RC_SCAN_SUMD);
+		}
+
+		break;
+
+	case RC_SCAN_SUMD:
+		if (_rc_scan_begin == 0) {
+			_rc_scan_begin = now;
+//			// Configure serial port for DSM
+			dsm_config(_rcs_fd);
+			rc_io_invert(false);
+
+		} else if (_rc_scan_locked
+			   || now - _rc_scan_begin < rc_scan_max) {
+
+			if (newBytes > 0) {
+				// parse new data
+				uint8_t sumd_rssi, rx_count;
+
+				rc_updated = false;
+
+				for (unsigned i = 0; i < newBytes; i++) {
+					/* set updated flag if one complete packet was parsed */
+					sumd_rssi = RC_INPUT_RSSI_MAX;
+					rc_updated = (OK == sumd_decode(_rcs_buf[i], &sumd_rssi, &rx_count,
+									&raw_rc_count, raw_rc_values, input_rc_s::RC_INPUT_MAX_CHANNELS));
+				}
+
+				if (rc_updated) {
+					// we have a new SUMD frame. Publish it.
+					_rc_in.input_source = input_rc_s::RC_INPUT_SOURCE_PX4FMU_SUMD;
+					fill_rc_in(raw_rc_count, raw_rc_values, now,
+						   false, false, frame_drops, sumd_rssi);
+					_rc_scan_locked = true;
+				}
+			}
+
+		} else {
+			// Scan the next protocol
+			set_rc_scan_state(RC_SCAN_SUMD);
+		}
+
+		set_rc_scan_state(RC_SCAN_PPM);
+		break;
+
+	case RC_SCAN_PPM:
+		// skip PPM if it's not supported
+#ifdef HRT_PPM_CHANNEL
+		if (_rc_scan_begin == 0) {
+			_rc_scan_begin = now;
+			// Configure timer input pin for CPPM
+			stm32_configgpio(GPIO_PPM_IN);
+			rc_io_invert(false);
+
+		} else if (_rc_scan_locked
+			   || now - _rc_scan_begin < rc_scan_max) {
+
+			// see if we have new PPM input data
+			if ((ppm_last_valid_decode != _rc_in.timestamp_last_signal)
+			    && ppm_decoded_channels > 3) {
+				// we have a new PPM frame. Publish it.
+				rc_updated = true;
+				_rc_in.input_source = input_rc_s::RC_INPUT_SOURCE_PX4FMU_PPM;
+				fill_rc_in(ppm_decoded_channels, ppm_buffer, now,
+					   false, false, 0);
+				_rc_scan_locked = true;
+			}
+
+		} else {
+			// disable CPPM input by mapping it away from the timer capture input
+			stm32_configgpio(GPIO_PPM_IN & ~(GPIO_AF_MASK | GPIO_PUPD_MASK));
+			// Scan the next protocol
+			set_rc_scan_state(RC_SCAN_SBUS);
+		}
+
+#else   // skip PPM if it's not supported
+		set_rc_scan_state(RC_SCAN_SBUS);
+
+#endif  // HRT_PPM_CHANNEL
+
+		break;
+	}
+
+#else  // RC_SERIAL_PORT not defined
 #ifdef HRT_PPM_CHANNEL
 
 	// see if we have new PPM input data
-	if (ppm_last_valid_decode != _rc_in.timestamp_last_signal) {
+	if ((ppm_last_valid_decode != _rc_in.timestamp_last_signal)
+	    && ppm_decoded_channels > 3) {
 		// we have a new PPM frame. Publish it.
-		_rc_in.channel_count = ppm_decoded_channels;
+		rc_updated = true;
+		fill_rc_in(ppm_decoded_channels, ppm_buffer, hrt_absolute_time(),
+			   false, false, 0);
+	}
 
-		if (_rc_in.channel_count > input_rc_s::RC_INPUT_MAX_CHANNELS) {
-			_rc_in.channel_count = input_rc_s::RC_INPUT_MAX_CHANNELS;
-		}
+#endif  // HRT_PPM_CHANNEL
+#endif  // RC_SERIAL_PORT
 
-		for (uint8_t i = 0; i < _rc_in.channel_count; i++) {
-			_rc_in.values[i] = ppm_buffer[i];
-		}
-
-		_rc_in.timestamp_publication = ppm_last_valid_decode;
-		_rc_in.timestamp_last_signal = ppm_last_valid_decode;
-
-		_rc_in.rc_ppm_frame_length = ppm_frame_length;
-		_rc_in.rssi = RC_INPUT_RSSI_MAX;
-		_rc_in.rc_failsafe = false;
-		_rc_in.rc_lost = false;
-		_rc_in.rc_lost_frame_count = 0;
-		_rc_in.rc_total_frame_count = 0;
-
+	if (rc_updated) {
 		/* lazily advertise on first publication */
 		if (_to_input_rc == nullptr) {
 			_to_input_rc = orb_advertise(ORB_ID(input_rc), &_rc_in);
@@ -810,8 +1126,8 @@ PX4FMU::cycle()
 		}
 	}
 
-#endif
-	work_queue(HPWORK, &_work, (worker_t)&PX4FMU::cycle_trampoline, this, USEC2TICK(CONTROL_INPUT_DROP_LIMIT_MS * 1000));
+	work_queue(HPWORK, &_work, (worker_t)&PX4FMU::cycle_trampoline, this,
+		   USEC2TICK(SCHEDULE_INTERVAL - main_out_latency));
 }
 
 void PX4FMU::work_stop()
@@ -1266,7 +1582,7 @@ PX4FMU::pwm_ioctl(file *filp, int cmd, unsigned long arg)
 				set_mode(MODE_4PWM);
 				break;
 
-#if defined(CONFIG_ARCH_BOARD_PX4FMU_V2)
+#if defined(CONFIG_ARCH_BOARD_PX4FMU_V2) ||  defined(CONFIG_ARCH_BOARD_PX4FMU_V4)
 
 			case 6:
 				set_mode(MODE_6PWM);
@@ -1286,6 +1602,38 @@ PX4FMU::pwm_ioctl(file *filp, int cmd, unsigned long arg)
 
 			break;
 		}
+
+#ifdef RC_SERIAL_PORT
+
+	case DSM_BIND_START:
+		/* only allow DSM2, DSM-X and DSM-X with more than 7 channels */
+		warnx("fmu pwm_ioctl: DSM_BIND_START, arg: %lu", arg);
+
+		if (arg == DSM2_BIND_PULSES ||
+		    arg == DSMX_BIND_PULSES ||
+		    arg == DSMX8_BIND_PULSES) {
+
+			dsm_bind(DSM_CMD_BIND_POWER_DOWN, 0);
+			usleep(500000);
+
+			dsm_bind(DSM_CMD_BIND_SET_RX_OUT, 0);
+
+			dsm_bind(DSM_CMD_BIND_POWER_UP, 0);
+			usleep(72000);
+
+			dsm_bind(DSM_CMD_BIND_SEND_PULSES, arg);
+			usleep(50000);
+
+			dsm_bind(DSM_CMD_BIND_REINIT_UART, 0);
+
+			ret = OK;
+
+		} else {
+			ret = -EINVAL;
+		}
+
+		break;
+#endif
 
 	case MIXERIOCRESET:
 		if (_mixers != nullptr) {
@@ -1369,7 +1717,7 @@ ssize_t
 PX4FMU::write(file *filp, const char *buffer, size_t len)
 {
 	unsigned count = len / 2;
-	uint16_t values[6];
+	uint16_t values[8];
 
 #ifdef CONFIG_ARCH_BOARD_AEROCORE
 
@@ -1481,6 +1829,79 @@ PX4FMU::sensor_reset(int ms)
 
 #endif
 #endif
+#if defined(CONFIG_ARCH_BOARD_PX4FMU_V4)
+
+	if (ms < 1) {
+		ms = 1;
+	}
+
+	/* disable SPI bus */
+	stm32_configgpio(GPIO_SPI_CS_OFF_MPU9250);
+	stm32_configgpio(GPIO_SPI_CS_OFF_HMC5983);
+	stm32_configgpio(GPIO_SPI_CS_OFF_MS5611);
+	stm32_configgpio(GPIO_SPI_CS_OFF_ICM_20608_G);
+
+	stm32_gpiowrite(GPIO_SPI_CS_OFF_MPU9250, 0);
+	stm32_gpiowrite(GPIO_SPI_CS_OFF_HMC5983, 0);
+	stm32_gpiowrite(GPIO_SPI_CS_OFF_MS5611, 0);
+	stm32_gpiowrite(GPIO_SPI_CS_OFF_ICM_20608_G, 0);
+
+	stm32_configgpio(GPIO_SPI1_SCK_OFF);
+	stm32_configgpio(GPIO_SPI1_MISO_OFF);
+	stm32_configgpio(GPIO_SPI1_MOSI_OFF);
+
+	stm32_gpiowrite(GPIO_SPI1_SCK_OFF, 0);
+	stm32_gpiowrite(GPIO_SPI1_MISO_OFF, 0);
+	stm32_gpiowrite(GPIO_SPI1_MOSI_OFF, 0);
+
+	stm32_configgpio(GPIO_DRDY_OFF_MPU9250);
+	stm32_configgpio(GPIO_DRDY_OFF_HMC5983);
+	stm32_configgpio(GPIO_DRDY_OFF_ICM_20608_G);
+
+	stm32_gpiowrite(GPIO_DRDY_OFF_MPU9250, 0);
+	stm32_gpiowrite(GPIO_DRDY_OFF_HMC5983, 0);
+	stm32_gpiowrite(GPIO_DRDY_OFF_ICM_20608_G, 0);
+
+	/* set the sensor rail off */
+	stm32_configgpio(GPIO_VDD_3V3_SENSORS_EN);
+	stm32_gpiowrite(GPIO_VDD_3V3_SENSORS_EN, 0);
+
+	/* wait for the sensor rail to reach GND */
+	usleep(ms * 1000);
+	warnx("reset done, %d ms", ms);
+
+	/* re-enable power */
+
+	/* switch the sensor rail back on */
+	stm32_gpiowrite(GPIO_VDD_3V3_SENSORS_EN, 1);
+
+	/* wait a bit before starting SPI, different times didn't influence results */
+	usleep(100);
+
+	/* reconfigure the SPI pins */
+#ifdef CONFIG_STM32_SPI1
+	stm32_configgpio(GPIO_SPI_CS_MPU9250);
+	stm32_configgpio(GPIO_SPI_CS_HMC5983);
+	stm32_configgpio(GPIO_SPI_CS_MS5611);
+	stm32_configgpio(GPIO_SPI_CS_ICM_20608_G);
+
+	/* De-activate all peripherals,
+	 * required for some peripheral
+	 * state machines
+	 */
+	stm32_gpiowrite(GPIO_SPI_CS_OFF_MPU9250, 1);
+	stm32_gpiowrite(GPIO_SPI_CS_OFF_HMC5983, 1);
+	stm32_gpiowrite(GPIO_SPI_CS_OFF_MS5611, 1);
+	stm32_gpiowrite(GPIO_SPI_CS_OFF_ICM_20608_G, 1);
+
+	// // XXX bring up the EXTI pins again
+	// stm32_configgpio(GPIO_GYRO_DRDY);
+	// stm32_configgpio(GPIO_MAG_DRDY);
+	// stm32_configgpio(GPIO_ACCEL_DRDY);
+	// stm32_configgpio(GPIO_EXTI_MPU_DRDY);
+
+#endif
+#endif
 }
 
 void
@@ -1504,6 +1925,31 @@ PX4FMU::peripheral_reset(int ms)
 
 	/* switch the peripheral rail back on */
 	stm32_gpiowrite(GPIO_VDD_5V_PERIPH_EN, 0);
+#endif
+#if defined(CONFIG_ARCH_BOARD_PX4FMU_V4)
+
+	if (ms < 1) {
+		ms = 10;
+	}
+
+	/* set the peripheral rails off */
+	stm32_configgpio(GPIO_PERIPH_3V3_EN);
+
+	stm32_gpiowrite(GPIO_PERIPH_3V3_EN, 0);
+
+	bool last = stm32_gpioread(GPIO_SPEKTRUM_PWR_EN);
+	/* Keep Spektum on to discharge rail*/
+	stm32_gpiowrite(GPIO_SPEKTRUM_PWR_EN, 1);
+
+	/* wait for the peripheral rail to reach GND */
+	usleep(ms * 1000);
+	warnx("reset done, %d ms", ms);
+
+	/* re-enable power */
+
+	/* switch the peripheral rail back on */
+	stm32_gpiowrite(GPIO_SPEKTRUM_PWR_EN, last);
+	stm32_gpiowrite(GPIO_PERIPH_3V3_EN, 1);
 #endif
 }
 
@@ -1657,6 +2103,26 @@ PX4FMU::gpio_ioctl(struct file *filp, int cmd, unsigned long arg)
 	return ret;
 }
 
+void
+PX4FMU::dsm_bind_ioctl(int dsmMode)
+{
+	if (!_armed.armed) {
+//      mavlink_log_info(_mavlink_fd, "[FMU] binding DSM%s RX", (dsmMode == 0) ? "2" : ((dsmMode == 1) ? "-X" : "-X8"));
+		warnx("[FMU] binding DSM%s RX", (dsmMode == 0) ? "2" : ((dsmMode == 1) ? "-X" : "-X8"));
+		int ret = ioctl(nullptr, DSM_BIND_START,
+				(dsmMode == 0) ? DSM2_BIND_PULSES : ((dsmMode == 1) ? DSMX_BIND_PULSES : DSMX8_BIND_PULSES));
+
+		if (ret) {
+//            mavlink_log_critical(_mavlink_fd, "binding failed.");
+			warnx("binding failed.");
+		}
+
+	} else {
+//        mavlink_log_info(_mavlink_fd, "[FMU] system armed, bind request rejected");
+		warnx("[FMU] system armed, bind request rejected");
+	}
+}
+
 namespace
 {
 
@@ -1696,7 +2162,7 @@ fmu_new_mode(PortMode new_mode)
 		/* select 4-pin PWM mode */
 		servo_mode = PX4FMU::MODE_4PWM;
 #endif
-#if defined(CONFIG_ARCH_BOARD_PX4FMU_V2)
+#if defined(CONFIG_ARCH_BOARD_PX4FMU_V2) ||  defined(CONFIG_ARCH_BOARD_PX4FMU_V4)
 		servo_mode = PX4FMU::MODE_6PWM;
 #endif
 #if defined(CONFIG_ARCH_BOARD_AEROCORE)
@@ -1704,7 +2170,7 @@ fmu_new_mode(PortMode new_mode)
 #endif
 		break;
 
-#if defined(CONFIG_ARCH_BOARD_PX4FMU_V2)
+#if defined(CONFIG_ARCH_BOARD_PX4FMU_V2) ||  defined(CONFIG_ARCH_BOARD_PX4FMU_V4)
 
 	case PORT_PWM4:
 		/* select 4-pin PWM mode */
@@ -1998,7 +2464,6 @@ fmu_main(int argc, char *argv[])
 		     (unsigned)id[6], (unsigned)id[7], (unsigned)id[8], (unsigned)id[9], (unsigned)id[10], (unsigned)id[11]);
 	}
 
-
 	if (fmu_start() != OK) {
 		errx(1, "failed to start the FMU driver");
 	}
@@ -2012,7 +2477,7 @@ fmu_main(int argc, char *argv[])
 	} else if (!strcmp(verb, "mode_pwm")) {
 		new_mode = PORT_FULL_PWM;
 
-#if defined(CONFIG_ARCH_BOARD_PX4FMU_V2)
+#if defined(CONFIG_ARCH_BOARD_PX4FMU_V2) ||  defined(CONFIG_ARCH_BOARD_PX4FMU_V4)
 
 	} else if (!strcmp(verb, "mode_pwm4")) {
 		new_mode = PORT_PWM4;
@@ -2048,6 +2513,13 @@ fmu_main(int argc, char *argv[])
 
 	if (!strcmp(verb, "test")) {
 		test();
+	}
+
+	if (!strcmp(verb, "info")) {
+#ifdef RC_SERIAL_PORT
+		warnx("frame drops: %u", sbus_dropped_frames());
+#endif
+		return 0;
 	}
 
 	if (!strcmp(verb, "fake")) {
@@ -2101,7 +2573,7 @@ fmu_main(int argc, char *argv[])
 #if defined(CONFIG_ARCH_BOARD_PX4FMU_V1)
 	fprintf(stderr,
 		"  mode_gpio, mode_serial, mode_pwm, mode_gpio_serial, mode_pwm_serial, mode_pwm_gpio, test, fake, sensor_reset, id\n");
-#elif defined(CONFIG_ARCH_BOARD_PX4FMU_V2) || defined(CONFIG_ARCH_BOARD_AEROCORE)
+#elif defined(CONFIG_ARCH_BOARD_PX4FMU_V2) || defined(CONFIG_ARCH_BOARD_PX4FMU_V4) || defined(CONFIG_ARCH_BOARD_AEROCORE)
 	fprintf(stderr, "  mode_gpio, mode_pwm, mode_pwm4, test, sensor_reset [milliseconds], i2c <bus> <hz>\n");
 #endif
 	exit(1);

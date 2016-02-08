@@ -43,6 +43,8 @@
 /* XXX trim includes */
 #include <px4_config.h>
 #include <px4_time.h>
+#include <px4_tasks.h>
+#include <px4_defines.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -538,7 +540,7 @@ MavlinkReceiver::handle_message_set_mode(mavlink_message_t *msg)
 	/* copy the content of mavlink_command_long_t cmd_mavlink into command_t cmd */
 	vcmd.param1 = new_mode.base_mode;
 	vcmd.param2 = custom_mode.main_mode;
-	vcmd.param3 = 0;
+	vcmd.param3 = custom_mode.sub_mode;
 	vcmd.param4 = 0;
 	vcmd.param5 = 0;
 	vcmd.param6 = 0;
@@ -720,7 +722,7 @@ MavlinkReceiver::handle_message_set_position_target_local_ned(mavlink_message_t 
 					}
 
 					/* set the yaw sp value */
-					if (!offboard_control_mode.ignore_attitude && !isnan(set_position_target_local_ned.yaw)) {
+					if (!offboard_control_mode.ignore_attitude && PX4_ISFINITE(set_position_target_local_ned.yaw)) {
 						pos_sp_triplet.current.yaw_valid = true;
 						pos_sp_triplet.current.yaw = set_position_target_local_ned.yaw;
 
@@ -729,7 +731,7 @@ MavlinkReceiver::handle_message_set_position_target_local_ned(mavlink_message_t 
 					}
 
 					/* set the yawrate sp value */
-					if (!offboard_control_mode.ignore_bodyrate && !isnan(set_position_target_local_ned.yaw)) {
+					if (!offboard_control_mode.ignore_bodyrate && PX4_ISFINITE(set_position_target_local_ned.yaw)) {
 						pos_sp_triplet.current.yawspeed_valid = true;
 						pos_sp_triplet.current.yawspeed = set_position_target_local_ned.yaw_rate;
 
@@ -1148,13 +1150,6 @@ MavlinkReceiver::handle_message_manual_control(mavlink_message_t *msg)
 		manual.r = man.r / 1000.0f;
 		manual.z = man.z / 1000.0f;
 
-		manual.mode_switch = decode_switch_pos(man.buttons, 0);
-		manual.return_switch = decode_switch_pos(man.buttons, 1);
-		manual.posctl_switch = decode_switch_pos(man.buttons, 2);
-		manual.loiter_switch = decode_switch_pos(man.buttons, 3);
-		manual.acro_switch = decode_switch_pos(man.buttons, 4);
-		manual.offboard_switch = decode_switch_pos(man.buttons, 5);
-
 		if (_manual_pub == nullptr) {
 			_manual_pub = orb_advertise(ORB_ID(manual_control_setpoint), &manual);
 
@@ -1326,8 +1321,7 @@ MavlinkReceiver::handle_message_hil_sensor(mavlink_message_t *msg)
 		struct airspeed_s airspeed = {};
 
 		float ias = calc_indicated_airspeed(imu.diff_pressure * 1e2f);
-		// XXX need to fix this
-		float tas = ias;
+		float tas = calc_true_airspeed_from_indicated(ias, imu.abs_pressure * 100, imu.temperature);
 
 		airspeed.timestamp = timestamp;
 		airspeed.indicated_airspeed_m_s = ias;
@@ -1752,10 +1746,15 @@ void *
 MavlinkReceiver::receive_thread(void *arg)
 {
 
+	/* set thread name */
+	char thread_name[24];
+	sprintf(thread_name, "mavlink_rcv_if%d", _mavlink->get_instance_id());
+	px4_prctl(PR_SET_NAME, thread_name, getpid());
+
 	const int timeout = 500;
 #ifdef __PX4_POSIX
 	/* 1500 is the Wifi MTU, so we make sure to fit a full packet */
-	uint8_t buf[1600];
+	uint8_t buf[1600 * 5];
 #else
 	/* the serial port buffers internally as well, we just need to fit a small chunk */
 	uint8_t buf[64];
@@ -1768,18 +1767,12 @@ MavlinkReceiver::receive_thread(void *arg)
 
 	if (_mavlink->get_protocol() == SERIAL) {
 		uart_fd = _mavlink->get_uart_fd();
-#ifndef __PX4_POSIX
-		/* set thread name */
-		char thread_name[24];
-		sprintf(thread_name, "mavlink_rcv_if%d", _mavlink->get_instance_id());
-		prctl(PR_SET_NAME, thread_name, getpid());
-#endif
 
 		fds[0].fd = uart_fd;
 		fds[0].events = POLLIN;
 	}
 #ifdef __PX4_POSIX
-	struct sockaddr_in srcaddr;
+	struct sockaddr_in srcaddr = {};
 	socklen_t addrlen = sizeof(srcaddr);
 
 	if (_mavlink->get_protocol() == UDP || _mavlink->get_protocol() == TCP) {
@@ -1822,9 +1815,16 @@ MavlinkReceiver::receive_thread(void *arg)
 
 			struct sockaddr_in * srcaddr_last = _mavlink->get_client_source_address();
 			int localhost = (127 << 24) + 1;
-			if (srcaddr_last->sin_addr.s_addr == htonl(localhost) && srcaddr.sin_addr.s_addr != htonl(localhost)) {
+			if ((srcaddr_last->sin_addr.s_addr == htonl(localhost) && srcaddr.sin_addr.s_addr != htonl(localhost))
+					|| (_mavlink->get_mode() == Mavlink::MAVLINK_MODE_ONBOARD && !_mavlink->get_client_source_initialized())) {
 				// if we were sending to localhost before but have a new host then accept him
-				memcpy(srcaddr_last, &srcaddr, sizeof(srcaddr));
+// This is causing issues on Linux, so use default port for now
+// this will kill tablet testing on Linux and VMs
+#ifndef __PX4_LINUX
+				srcaddr_last->sin_addr.s_addr = srcaddr.sin_addr.s_addr;
+				srcaddr_last->sin_port = srcaddr.sin_port;
+#endif
+				_mavlink->set_client_source_initialized();
 			}
 #endif
 			/* if read failed, this loop won't execute */
@@ -1838,8 +1838,10 @@ MavlinkReceiver::receive_thread(void *arg)
 				}
 			}
 
-			/* count received bytes */
-			_mavlink->count_rxbytes(nread);
+			/* count received bytes (nread will be -1 on read error) */
+			if (nread > 0) {
+				_mavlink->count_rxbytes(nread);
+			}
 		}
 	}
 
@@ -1873,6 +1875,7 @@ void MavlinkReceiver::smooth_time_offset(uint64_t offset_ns)
 
 void *MavlinkReceiver::start_helper(void *context)
 {
+
 	MavlinkReceiver *rcv = new MavlinkReceiver((Mavlink *)context);
 
 	rcv->receive_thread(NULL);

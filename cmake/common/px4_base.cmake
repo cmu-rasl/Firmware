@@ -266,6 +266,10 @@ function(px4_add_module)
 
 	add_library(${MODULE} STATIC EXCLUDE_FROM_ALL ${SRCS})
 
+	if(${OS} STREQUAL "qurt" )
+		set_property(TARGET ${MODULE} PROPERTY POSITION_INDEPENDENT_CODE TRUE)
+	endif()
+
 	if(MAIN)
 		set_target_properties(${MODULE} PROPERTIES
 			COMPILE_DEFINITIONS PX4_MAIN=${MAIN}_app_main)
@@ -619,6 +623,7 @@ function(px4_add_common_flags)
 		${CMAKE_BINARY_DIR}/src/modules/px4_messages
 		${CMAKE_BINARY_DIR}/src/modules
 		${CMAKE_SOURCE_DIR}/mavlink/include/mavlink
+		${CMAKE_SOURCE_DIR}/src/lib/DriverFramework/framework/include
 		)
 
 	list(APPEND added_include_dirs
