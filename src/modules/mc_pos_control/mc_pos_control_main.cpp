@@ -191,6 +191,11 @@ private:
 		param_t hold_max_xy;
 		param_t hold_max_z;
 		param_t acc_hor_max;
+    param_t use_gravity_offset;
+    param_t mass;
+    param_t gravity_magnitude;
+    param_t max_thrust_newtons;
+    param_t takeoff_vzsp_thresh;
 	}		_params_handles;		/**< handles for interesting parameters */
 
 	struct {
@@ -210,6 +215,9 @@ private:
 		float hold_max_xy;
 		float hold_max_z;
 		float acc_hor_max;
+    float takeoff_vzsp_thresh;
+
+    bool use_gravity_offset;
 
 		math::Vector<3> pos_p;
 		math::Vector<3> vel_p;
@@ -218,6 +226,7 @@ private:
 		math::Vector<3> vel_ff;
 		math::Vector<3> vel_max;
 		math::Vector<3> sp_offs_max;
+		math::Vector<3> normalized_gravity;
 	}		_params;
 
 	struct map_projection_reference_s _ref_pos;
@@ -231,6 +240,7 @@ private:
 	bool _alt_hold_engaged;
 	bool _run_pos_control;
 	bool _run_alt_control;
+  bool _in_air;
 
 	math::Vector<3> _pos;
 	math::Vector<3> _pos_sp;
@@ -245,10 +255,8 @@ private:
 	math::Matrix<3, 3> _R;			/**< rotation matrix from attitude quaternions */
 	float _yaw;				/**< yaw angle (euler) */
 	bool _in_landing;
-	bool _takeoff_jumped;
 	float _vel_z_lp;
 	float _acc_z_lp;
-	float _takeoff_thrust_sp;
 
 	/**
 	 * Update our local parameter cache.
@@ -372,12 +380,11 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	_alt_hold_engaged(false),
 	_run_pos_control(true),
 	_run_alt_control(true),
+  _in_air(false),
 	_yaw(0.0f),
 	_in_landing(false),
-	_takeoff_jumped(false),
 	_vel_z_lp(0),
-	_acc_z_lp(0),
-	_takeoff_thrust_sp(0.0f)
+	_acc_z_lp(0)
 {
 	memset(&_vehicle_status, 0, sizeof(_vehicle_status));
 	memset(&_ctrl_state, 0, sizeof(_ctrl_state));
@@ -393,6 +400,8 @@ MulticopterPositionControl::MulticopterPositionControl() :
 
 	memset(&_ref_pos, 0, sizeof(_ref_pos));
 
+  _params.use_gravity_offset = false;
+
 	_params.pos_p.zero();
 	_params.vel_p.zero();
 	_params.vel_i.zero();
@@ -400,6 +409,8 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	_params.vel_max.zero();
 	_params.vel_ff.zero();
 	_params.sp_offs_max.zero();
+  _params.normalized_gravity.zero();
+  _params.normalized_gravity(2) = 1.0f;
 
 	_pos.zero();
 	_pos_sp.zero();
@@ -440,7 +451,11 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	_params_handles.hold_max_xy = param_find("MPC_HOLD_MAX_XY");
 	_params_handles.hold_max_z = param_find("MPC_HOLD_MAX_Z");
 	_params_handles.acc_hor_max = param_find("MPC_ACC_HOR_MAX");
-
+  _params_handles.use_gravity_offset = param_find("MPC_USE_GRAV_FF");
+  _params_handles.mass = param_find("MPC_TOTAL_MASS");
+  _params_handles.gravity_magnitude = param_find("MPC_GRAVITY");
+  _params_handles.max_thrust_newtons = param_find("MPC_MAX_THR_N");
+  _params_handles.takeoff_vzsp_thresh = param_find("MPC_TKOFF_VZSP");
 
 	/* fetch initial parameter values */
 	parameters_update(true);
@@ -496,6 +511,10 @@ MulticopterPositionControl::parameters_update(bool force)
 		param_get(_params_handles.tilt_max_land, &_params.tilt_max_land);
 		_params.tilt_max_land = math::radians(_params.tilt_max_land);
 
+    bool u;
+    param_get(_params_handles.use_gravity_offset, &u);
+    _params.use_gravity_offset = u;
+
 		float v;
 		param_get(_params_handles.xy_p, &v);
 		_params.pos_p(0) = v;
@@ -541,6 +560,18 @@ MulticopterPositionControl::parameters_update(bool force)
 		_params.hold_max_z = (v < 0.0f ? 0.0f : v);
 		param_get(_params_handles.acc_hor_max, &v);
 		_params.acc_hor_max = v;
+
+    // normalized_gravity = [0,0,mass*gravity_magnitude/(max thrust from all rotors)]
+    _params.normalized_gravity(2) = 1.0f;
+    param_get(_params_handles.mass, &v);
+    _params.normalized_gravity(2) *= v;
+    param_get(_params_handles.gravity_magnitude, &v);
+    _params.normalized_gravity(2) *= v;
+    param_get(_params_handles.max_thrust_newtons, &v);
+    _params.normalized_gravity(2) /= v;
+
+    param_get(_params_handles.takeoff_vzsp_thresh, &v);
+    _params.takeoff_vzsp_thresh = v;
 
 		_params.sp_offs_max = _params.vel_max.edivide(_params.pos_p) * 2.0f;
 
@@ -1355,42 +1386,6 @@ MulticopterPositionControl::task_main()
 					_vel_sp(2) = _params.land_speed;
 				}
 
-				/* velocity handling during takeoff */
-				if (!_control_mode.flag_control_manual_enabled && _pos_sp_triplet.current.valid
-				    && _pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_TAKEOFF) {
-
-					// check if we are not already in air.
-					// if yes then we don't need a jumped takeoff anymore
-					if (!_takeoff_jumped && !_vehicle_status.condition_landed && fabsf(_takeoff_thrust_sp) < FLT_EPSILON ) {
-						_takeoff_jumped = true;
-					}
-
-					if (!_takeoff_jumped) {
-						// ramp thrust setpoint up
-						if (_vel(2) > -(_params.tko_speed / 2.0f)) {
-							_takeoff_thrust_sp += 0.5f * dt;
-							_vel_sp.zero();
-							_vel_prev.zero();
-						} else {
-							// copter has reached our takeoff speed. split the thrust setpoint up
-							// into an integral part and into a P part
-							thrust_int(2) = _takeoff_thrust_sp - _params.vel_p(2) * fabsf(_vel(2));
-							thrust_int(2) = -math::constrain(thrust_int(2), _params.thr_min, _params.thr_max);
-							_vel_sp_prev(2) = -_params.tko_speed;
-							_takeoff_jumped = true;
-							reset_int_z = false;
-						}
-					}
-
-					if (_takeoff_jumped) {
-						_vel_sp(2) = -_params.tko_speed;
-					}
-
-				} else {
-					_takeoff_jumped = false;
-					_takeoff_thrust_sp = 0.0f;
-				}
-
 				// limit total horizontal acceleration
 				math::Vector<2> acc_hor;
 				acc_hor(0) = (_vel_sp(0) - _vel_sp_prev(0)) / dt;
@@ -1467,15 +1462,20 @@ MulticopterPositionControl::task_main()
 					math::Vector<3> vel_err = _vel_sp - _vel;
 
 					/* thrust vector in NED frame */
-					// TODO?: + _vel_sp.emult(_params.vel_ff)
 					math::Vector<3> thrust_sp = vel_err.emult(_params.vel_p) + _vel_err_d.emult(_params.vel_d) + thrust_int;
 
-					if (_pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_TAKEOFF
-							&& !_takeoff_jumped && !_control_mode.flag_control_manual_enabled) {
-						// for jumped takeoffs use special thrust setpoint calculated above
-						thrust_sp.zero();
-						thrust_sp(2) = -_takeoff_thrust_sp;
-					}
+          if (_vehicle_status.condition_landed) {
+             _in_air = false;
+          }
+
+          if (_vel_sp(2) < -_params.takeoff_vzsp_thresh) {
+             _in_air = true;
+          }
+
+          if (_params.use_gravity_offset && _in_air) {
+             thrust_sp(2) += _params.thr_min;
+             thrust_sp -= _params.normalized_gravity;
+          }
 
 					if (!_control_mode.flag_control_velocity_enabled) {
 						thrust_sp(0) = 0.0f;
@@ -1529,16 +1529,6 @@ MulticopterPositionControl::task_main()
 								&& _vel_z_lp < 0.1f
 								) {
 							thr_max = 0.0f;
-						}
-
-						/* if we suddenly fall, reset landing logic and remove thrust limit */
-						if (_in_landing
-								/* XXX: magic value, assuming free fall above 4m/s2 acceleration */
-								&& (_acc_z_lp > 4.0f
-									|| _vel_z_lp > 2.0f * _params.land_speed)
-								) {
-							thr_max = _params.thr_max;
-							_in_landing = false;
 						}
 
 					} else {

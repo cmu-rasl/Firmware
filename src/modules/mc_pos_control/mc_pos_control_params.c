@@ -328,3 +328,49 @@ PARAM_DEFINE_FLOAT(MPC_VELD_LP, 5.0f);
  * @group Multicopter Position Control
  */
 PARAM_DEFINE_FLOAT(MPC_ACC_HOR_MAX, 4.0f);
+
+/**
+ * Add a gravity offset feedforward term to z-component of velocity control
+ *
+ * @min 0
+ * @max 1
+ * @group Multicopter Position Control
+ */
+PARAM_DEFINE_INT32(MPC_USE_GRAV_FF, 0);
+
+/**
+ * Vehicle takeoff mass (including battery and payload)
+ *
+ * @unit kg
+ * @min 0.0
+ * @group Multicopter Position Control
+ */
+PARAM_DEFINE_FLOAT(MPC_TOTAL_MASS, 0.0f);
+
+/**
+ * Magnitude of gravitational acceleration
+ *
+ * @unit m/s^2
+ * @min 0.0
+ * @group Multicopter Position Control
+ */
+PARAM_DEFINE_FLOAT(MPC_GRAVITY, 9.80665f);
+
+/**
+ * Magnitude of maximum thrust from all rotors
+ *
+ * @unit N
+ * @min 0.00001
+ * @group Multicopter Position Control
+ */
+PARAM_DEFINE_FLOAT(MPC_MAX_THR_N, 99999.9f);
+
+/**
+ * Magnitude of minimum setpoint z velocity at which the vehicle is
+ * considered to be in takeoff.
+ *
+ * @unit m/s
+ * @min 0.0
+ * @group Multicopter Position Control
+ */
+PARAM_DEFINE_FLOAT(MPC_TKOFF_VZSP, 0.05f);
