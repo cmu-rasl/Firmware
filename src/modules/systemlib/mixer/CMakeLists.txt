@@ -31,7 +31,8 @@
 #
 ############################################################################
 
-include_directories(${CMAKE_CURRENT_BINARY_DIR})
+include_directories(${CMAKE_CURRENT_BINARY_DIR}
+	                  ${CMAKE_BINARY_DIR}/src/systemlib/param)
 
 add_custom_command(OUTPUT mixer_multirotor.generated.h
 	COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/multi_tables.py
@@ -49,8 +50,11 @@ px4_add_module(
 		mixer_simple.cpp
 		mixer_load.c
 		mixer_multirotor.generated.h
+		mixer_multirotor_params.c
+		../param/param.h
 	DEPENDS
 		platforms__common
+		modules__param
 		mixer_gen
 	)
-# vim: set noet ft=cmake fenc=utf-8 ff=unix : 
+# vim: set noet ft=cmake fenc=utf-8 ff=unix :

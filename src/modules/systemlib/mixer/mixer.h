@@ -524,11 +524,26 @@ private:
 	float				_yaw_scale;
 	float				_idle_speed;
 
+  struct {
+    param_t use_physics;
+    param_t cT;
+    param_t rpm_max;
+  } _params_handles;
+
+  struct {
+    bool use_physics;
+    float cT;
+    float rpm_max;
+    float f_max;
+  } _params;
+
 	orb_advert_t			_limits_pub;
 	multirotor_motor_limits_s 	_limits;
 
 	unsigned			_rotor_count;
 	const Rotor			*_rotors;
+
+  int parameters_update();
 
 	/* do not allow to copy due to ptr data members */
 	MultirotorMixer(const MultirotorMixer &);
