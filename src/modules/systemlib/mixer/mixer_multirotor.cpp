@@ -83,25 +83,28 @@ MultirotorMixer::MultirotorMixer(ControlCallback control_cb,
 				 float roll_scale,
 				 float pitch_scale,
 				 float yaw_scale,
-				 float idle_speed) :
+				 float idle_speed,
+         float pwm_min,
+         float pwm_max,
+         float rpm_min,
+         float rpm_max,
+         float cT) :
 	Mixer(control_cb, cb_handle),
 	_roll_scale(roll_scale),
 	_pitch_scale(pitch_scale),
 	_yaw_scale(yaw_scale),
 	_idle_speed(-1.0f + idle_speed * 2.0f),	/* shift to output range here to avoid runtime calculation */
+  _pwm_min(pwm_min),
+  _pwm_max(pwm_max),
+  _rpm_min(rpm_min),
+  _rpm_max(rpm_max),
+  _cT(cT),
 	_limits_pub(),
 	_rotor_count(_config_rotor_count[(MultirotorGeometryUnderlyingType)geometry]),
 	_rotors(_config_index[(MultirotorGeometryUnderlyingType)geometry])
 {
-  /* TODO: turn these into parameters instead of hardcoding them here */
-  _params.use_physics = true;
-  _params.cT = 8.65e-9f;
-  _params.rpm_min = 3000.0f;
-  _params.rpm_max = 20000.0f;
-  _params.pwm_min = 1060.0f;
-  _params.pwm_max = 1860.0f;
-  _params.f_max = _params.cT * _params.rpm_max * _params.rpm_max;
-  _params.pwm_over_rpm = (_params.pwm_max - _params.pwm_min) / (_params.rpm_max - _params.rpm_min);
+  _pwm_over_rpm = (_pwm_max - _pwm_min) / (_rpm_max - _rpm_min);
+  _f_max = _cT * _rpm_max * _rpm_max;
 }
 
 MultirotorMixer::~MultirotorMixer()
@@ -113,8 +116,8 @@ MultirotorMixer::from_text(Mixer::ControlCallback control_cb, uintptr_t cb_handl
 {
 	MultirotorGeometry geometry;
 	char geomname[8];
-	int s[4];
-	int used;
+	int s[10];
+  int used;
 
 	/* enforce that the mixer ends with space or a new line */
 	for (int i = buflen - 1; i >= 0; i--) {
@@ -134,7 +137,7 @@ MultirotorMixer::from_text(Mixer::ControlCallback control_cb, uintptr_t cb_handl
 
 	}
 
-	if (sscanf(buf, "R: %s %d %d %d %d%n", geomname, &s[0], &s[1], &s[2], &s[3], &used) != 5) {
+	if (sscanf(buf, "R: %s %d %d %d %d %d %d %d %d %d %d%n", geomname, &s[0], &s[1], &s[2], &s[3], &s[4], &s[5], &s[6], &s[7], &s[8], &s[9], &used) != 11) {
 		debug("multirotor parse failed on '%s'", buf);
 		return nullptr;
 	}
@@ -212,7 +215,12 @@ MultirotorMixer::from_text(Mixer::ControlCallback control_cb, uintptr_t cb_handl
 		       s[0] / 10000.0f,
 		       s[1] / 10000.0f,
 		       s[2] / 10000.0f,
-		       s[3] / 10000.0f);
+		       s[3] / 10000.0f,
+           s[4] / 1.0f,
+           s[5] / 1.0f,
+           s[6] / 1.0f,
+           s[7] / 1.0f,
+           s[8] / 1000.0f * powf(10.0f, s[9] / 1.0f));
 }
 
 unsigned
@@ -368,27 +376,21 @@ MultirotorMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 			     yaw * _rotors[i].yaw_scale +
 			     thrust + boost;
 
-    if (_params.use_physics) {
-      /* Convert output force to newtons */
-      float fnewtons = _params.f_max * outputs[i];
-      fnewtons = (fnewtons > 0.0f) ? fnewtons : 0.0f;
+    /* Convert output force to newtons */
+    float fnewtons = _f_max * outputs[i];
+    fnewtons = (fnewtons > 0.0f) ? fnewtons : 0.0f;
 
-      /* compute RPMs */
-      float rpm = sqrtf(fnewtons / _params.cT);
+    /* compute RPMs */
+    float rpm = sqrtf(fnewtons / _cT);
 
-      /* convert to PWMs */
-      float pwm = _params.pwm_over_rpm * (rpm - _params.rpm_min) + _params.pwm_min;
+    /* convert to PWMs */
+    float pwm = _pwm_over_rpm * (rpm - _rpm_min) + _pwm_min;
 
-      /* normalize to [-1,1] range */
-      float pwmout = 2.0f * (pwm - _params.pwm_min)/(_params.pwm_max - _params.pwm_min) - 1.0f;
+    /* normalize to [-1,1] range */
+    float pwmout = 2.0f * (pwm - _pwm_min)/(_pwm_max - _pwm_min) - 1.0f;
 
-      /* Constrain to interval */
-      outputs[i] = constrain(pwmout, -1.0f, 1.0f);
-
-    } else {
-      /* This rescales and constrains outputs[i] to [-1 + 2*_idle_speed, 1] */
-		  outputs[i] = constrain(_idle_speed + (outputs[i] * (1.0f - _idle_speed)), _idle_speed, 1.0f);
-    }
+    /* Constrain to interval */
+    outputs[i] = constrain(pwmout, -1.0f, 1.0f);
 	}
 
 	return _rotor_count;

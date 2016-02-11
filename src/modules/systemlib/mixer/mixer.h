@@ -484,15 +484,26 @@ public:
 	 * @param idle_speed		Minimum rotor control output value; usually
 	 *				tuned to ensure that rotors never stall at the
 	 * 				low end of their control range.
-	 */
+	 * @param pwm_min      Minimum PWM signal in microseconds
+   * @param pwm_max      Maximum PWM signal in microseconds
+   * @param rpm_min      Minimum RPM
+   * @param rpm_max      Maximum RPM
+   * @param cT           Thrust coefficient (force = cT*RPM^2)
+   */
 	MultirotorMixer(ControlCallback control_cb,
-			uintptr_t cb_handle,
-			MultirotorGeometry geometry,
-			float roll_scale,
-			float pitch_scale,
-			float yaw_scale,
-			float idle_speed);
-	~MultirotorMixer();
+		uintptr_t cb_handle,
+		MultirotorGeometry geometry,
+		float roll_scale,
+		float pitch_scale,
+		float yaw_scale,
+		float idle_speed,
+    float pwm_min,
+    float pwm_max,
+    float rpm_min,
+    float rpm_max,
+    float cT);
+
+  ~MultirotorMixer();
 
 	/**
 	 * Factory method.
@@ -524,16 +535,13 @@ private:
 	float				_yaw_scale;
 	float				_idle_speed;
 
-  struct {
-    bool use_physics;
-    float cT;
-    float pwm_min;
-    float pwm_max;
-    float rpm_max;
-    float rpm_min;
-    float pwm_over_rpm;
-    float f_max;
-  } _params;
+  float       _pwm_min;
+  float       _pwm_max;
+  float       _rpm_min;
+  float       _rpm_max;
+  float       _cT;
+  float       _pwm_over_rpm;
+  float       _f_max;
 
 	orb_advert_t			_limits_pub;
 	multirotor_motor_limits_s 	_limits;
