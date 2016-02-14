@@ -274,6 +274,9 @@ ORB_DEFINE(camera_trigger, struct camera_trigger_s);
 #include "topics/l1_angvel_debug.h"
 ORB_DEFINE(l1_angvel_debug, struct l1_angvel_debug_s);
 
+#include "topics/l1_linvel_debug.h"
+ORB_DEFINE(l1_linvel_debug, struct l1_linvel_debug_s);
+
 #include "topics/vehicle_command_ack.h"
 ORB_DEFINE(vehicle_command_ack, struct vehicle_command_ack_s);
 

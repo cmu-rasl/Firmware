@@ -491,7 +491,7 @@ struct log_MACS_s {
 	float yaw_rate_integ;
 };
 
-/* --- L1A - Attitude L1 ADAPTIVE CONTROLLER DEBUG --- */
+/* --- L1A - ANGULAR VELOCITY L1 ADAPTIVE CONTROL DEBUG --- */
 #define LOG_L1A_MSG 49
 struct log_L1A_s {
 	float avl[3];
@@ -530,6 +530,15 @@ struct log_FFLW_s {
 };
 
 #define LOG_OUT1_MSG 50
+
+/* --- L1V - LINEAR VELOCITY L1 ADAPTIVE CONTROL DEBUG --- */
+#define LOG_L1V_MSG 51
+struct log_L1V_s {
+	float vel[3];
+	float rpm[4];
+	float dst[3];
+	float lpd[3];
+};
 
 /********** SYSTEM MESSAGES, ID > 0x80 **********/
 
@@ -608,6 +617,7 @@ static const struct log_format_s log_formats[] = {
 	LOG_FORMAT(MACS, "fff", "RRint,PRint,YRint"),
 	LOG_FORMAT(FFLW, "ffffffffff", "XIntg,YIntg,VelX,VelY,RateX,RateY,RateZ,BiasX,BiasY,BiasZ"),
 	LOG_FORMAT(L1A, "fffffffffffff", "avlx,avly,avlz,rpm1,rpm2,rpm3,rpm4,dstx,dsty,dstz,lpdx,lpdy,lpdz"),
+	LOG_FORMAT(L1V, "fffffffffffff", "velx,vely,velz,rpm1,rpm2,rpm3,rpm4,dstx,dsty,dstz,lpdx,lpdy,lpdz"),
 
 	/* system-level messages, ID >= 0x80 */
 	/* FMT: don't write format of format message, it's useless */

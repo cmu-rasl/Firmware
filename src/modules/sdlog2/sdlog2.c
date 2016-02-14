@@ -111,6 +111,7 @@
 #include <uORB/topics/time_offset.h>
 #include <uORB/topics/mc_att_ctrl_status.h>
 #include <uORB/topics/l1_angvel_debug.h>
+#include <uORB/topics/l1_linvel_debug.h>
 #include <uORB/topics/ekf2_innovations.h>
 
 #include <systemlib/systemlib.h>
@@ -1099,6 +1100,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 		struct time_offset_s time_offset;
 		struct mc_att_ctrl_status_s mc_att_ctrl_status;
 		struct l1_angvel_debug_s l1_angvel_debug;
+		struct l1_linvel_debug_s l1_linvel_debug;
 		struct control_state_s ctrl_state;
 		struct ekf2_innovations_s innovations;
 	} buf;
@@ -1151,6 +1153,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 			struct log_TSYN_s log_TSYN;
 			struct log_MACS_s log_MACS;
 			struct log_L1A_s log_L1A;
+			struct log_L1V_s log_L1V;
 			struct log_CTS_s log_CTS;
 			struct log_EST4_s log_INO1;
 			struct log_EST5_s log_INO2;
@@ -1199,6 +1202,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 		int tsync_sub;
 		int mc_att_ctrl_status_sub;
 		int l1_angvel_debug_sub;
+		int l1_linvel_debug_sub;
 		int ctrl_state_sub;
 		int innov_sub;
 	} subs;
@@ -1237,6 +1241,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 	subs.tsync_sub = -1;
 	subs.mc_att_ctrl_status_sub = -1;
 	subs.l1_angvel_debug_sub = -1;
+	subs.l1_linvel_debug_sub = -1;
 	subs.ctrl_state_sub = -1;
 	subs.encoders_sub = -1;
 	subs.innov_sub = -1;
@@ -1930,7 +1935,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 			LOGBUFFER_WRITE_AND_COUNT(MACS);
 		}
 
-		/* --- L1 ADAPTIVE DEBUG INFO --- */
+		/* --- ANGULAR VELOCITY L1 ADAPTIVE CONTROL DEBUG INFO --- */
 		if (copy_if_updated(ORB_ID(l1_angvel_debug), &subs.l1_angvel_debug_sub, &buf.l1_angvel_debug)) {
 			log_msg.msg_type = LOG_L1A_MSG;
 			unsigned maxcopy0 = (sizeof(buf.l1_angvel_debug.avl) < sizeof(log_msg.body.log_L1A.avl)) ? sizeof(
@@ -1954,6 +1959,32 @@ int sdlog2_thread_main(int argc, char *argv[])
 			memcpy(&(log_msg.body.log_L1A.lpd), buf.l1_angvel_debug.lpd, maxcopy3);
 
 			LOGBUFFER_WRITE_AND_COUNT(L1A);
+		}
+
+    /* --- LINEAR VELOCITY L1 ADAPTIVE CONTROL DEBUG INFO --- */
+		if (copy_if_updated(ORB_ID(l1_linvel_debug), &subs.l1_linvel_debug_sub, &buf.l1_linvel_debug)) {
+			log_msg.msg_type = LOG_L1V_MSG;
+			unsigned maxcopy0 = (sizeof(buf.l1_linvel_debug.vel) < sizeof(log_msg.body.log_L1V.vel)) ? sizeof(
+						    buf.l1_linvel_debug.vel) : sizeof(log_msg.body.log_L1V.vel);
+			memset(&(log_msg.body.log_L1V.vel), 0, sizeof(log_msg.body.log_L1V.vel));
+			memcpy(&(log_msg.body.log_L1V.vel), buf.l1_linvel_debug.vel, maxcopy0);
+
+			unsigned maxcopy1 = (sizeof(buf.l1_linvel_debug.dst) < sizeof(log_msg.body.log_L1V.dst)) ? sizeof(
+						    buf.l1_linvel_debug.dst) : sizeof(log_msg.body.log_L1V.dst);
+			memset(&(log_msg.body.log_L1V.dst), 0, sizeof(log_msg.body.log_L1V.dst));
+			memcpy(&(log_msg.body.log_L1V.dst), buf.l1_linvel_debug.dst, maxcopy1);
+
+			unsigned maxcopy2 = (sizeof(buf.l1_linvel_debug.rpm) < sizeof(log_msg.body.log_L1V.rpm)) ? sizeof(
+						    buf.l1_linvel_debug.rpm) : sizeof(log_msg.body.log_L1V.rpm);
+			memset(&(log_msg.body.log_L1V.rpm), 0, sizeof(log_msg.body.log_L1V.rpm));
+			memcpy(&(log_msg.body.log_L1V.rpm), buf.l1_linvel_debug.rpm, maxcopy2);
+
+			unsigned maxcopy3 = (sizeof(buf.l1_linvel_debug.lpd) < sizeof(log_msg.body.log_L1V.lpd)) ? sizeof(
+						    buf.l1_linvel_debug.lpd) : sizeof(log_msg.body.log_L1V.lpd);
+			memset(&(log_msg.body.log_L1V.lpd), 0, sizeof(log_msg.body.log_L1V.lpd));
+			memcpy(&(log_msg.body.log_L1V.lpd), buf.l1_linvel_debug.lpd, maxcopy3);
+
+			LOGBUFFER_WRITE_AND_COUNT(L1V);
 		}
 
 		/* --- CONTROL STATE --- */
