@@ -71,6 +71,7 @@
 #include <uORB/topics/actuator_controls.h>
 #include <uORB/topics/actuator_controls_virtual_fw.h>
 #include <uORB/topics/actuator_controls_virtual_mc.h>
+#include <uORB/topics/actuator_outputs.h>
 #include <uORB/topics/vehicle_rates_setpoint.h>
 #include <uORB/topics/fw_virtual_rates_setpoint.h>
 #include <uORB/topics/mc_virtual_rates_setpoint.h>
@@ -138,6 +139,7 @@ private:
 	int		_armed_sub;				/**< arming status subscription */
 	int		_vehicle_status_sub;	/**< vehicle status subscription */
 	int 	_motor_limits_sub;		/**< motor limits subscription */
+  int   _actuator_outputs_sub; /** < PWM subscription */
 
 	orb_advert_t	_v_rates_sp_pub;		/**< rate setpoint publication */
 	orb_advert_t	_actuators_0_pub;		/**< attitude actuator controls publication */
@@ -148,6 +150,7 @@ private:
 	orb_id_t _actuators_id;	/**< pointer to correct actuator controls0 uORB metadata structure */
 
 	bool		_actuators_0_circuit_breaker_enabled;	/**< circuit breaker to suppress output */
+  bool    _in_nominal_flight; /**< whether the vehicle is in nominal flight or not */
 
 	struct control_state_s				_ctrl_state;		/**< control state */
 	struct vehicle_attitude_setpoint_s	_v_att_sp;			/**< vehicle attitude setpoint */
@@ -160,6 +163,7 @@ private:
 	struct multirotor_motor_limits_s	_motor_limits;		/**< motor limits */
 	struct mc_att_ctrl_status_s 		_controller_status; /**< controller status */
 	struct l1_adaptive_debug_s          _l1_adaptive_debug; /**< l1 adaptive debug info */
+  struct actuator_outputs_s      _actuator_outputs; /**< actuator outputs */
 
 	perf_counter_t	_loop_perf;			/**< loop performance counter */
 	perf_counter_t	_controller_latency_perf;
@@ -175,9 +179,10 @@ private:
 	math::Matrix<3, 3>  _I;				/**< identity matrix */
 	math::Matrix<3, 3>  _R_prev;        /**< previous rotation matrix to determine angular velocity */
 
-	math::Vector<3>     _dsthat;        /**< disturbance estimate for l1 adaptive controller */
 	math::Vector<3>     _avlhat;        /**< angular velocity estimate for l1 adaptive controller */
-	math::Vector<3>     _lpd;           /**< l1 adaptive correction */
+  math::Vector<4>     _rpmhat;        /**< RPM estimate */
+  math::Vector<3>     _dsthat;        /**< metric torque disturbance estimate for l1 adaptive controller */
+	math::Vector<3>     _lpd;           /**< low pass filtered metric torque distrubance estimate */
 
 
 
@@ -208,25 +213,36 @@ private:
 		param_t acro_yaw_max;
 		param_t rattitude_thres;
 
-		param_t enable_l1;
+		param_t enable_l1ac;
+		param_t use_active_l1ac;
 		param_t enable_debug;
-		param_t l1_inertia_xx;
-		param_t l1_inertia_xy;
-		param_t l1_inertia_xz;
-		param_t l1_inertia_yy;
-		param_t l1_inertia_yz;
-		param_t l1_inertia_zz;
-		param_t l1_bandwidth_x;
+    param_t inertia_xx;
+		param_t inertia_xy;
+		param_t inertia_xz;
+		param_t inertia_yy;
+		param_t inertia_yz;
+		param_t inertia_zz;
+    param_t cT;
+    param_t motor_constant;
+    param_t arm_length;
+    param_t moment_scale;
+    param_t motor_spread_angle;
+		param_t pwm_min;
+    param_t pwm_max;
+    param_t rpm_min;
+    param_t rpm_max;
+    param_t l1_bandwidth_x;
 		param_t l1_bandwidth_y;
 		param_t l1_bandwidth_z;
-		param_t l1_ksp_x;
-		param_t l1_ksp_y;
-		param_t l1_ksp_z;
-		param_t l1_gamma;
+		param_t l1_observer_gain_x;
+		param_t l1_observer_gain_y;
+		param_t l1_observer_gain_z;
+		param_t l1_adaptation_gain;
 		param_t l1_init_dist_x;
 		param_t l1_init_dist_y;
 		param_t l1_init_dist_z;
 		param_t l1_engage_level;
+
 		param_t vtol_type;
 		param_t roll_tc;
 		param_t pitch_tc;
@@ -250,15 +266,26 @@ private:
 		math::Vector<3> acro_rate_max;		/**< max attitude rates in acro mode */
 		float rattitude_thres;
 
-		bool                enable_l1;     /**< bool to enable l1 adaptive control */
-		bool                enable_debug;   /**< bool to enable publishing debug information */
+		bool                enable_l1ac;     /**< bool to run l1 adaptive control either passively or actively */
+		bool                use_active_l1ac; /**< bool to run l1 adaptive control actively */
+    bool                enable_debug;   /**< bool to enable publishing debug information */
 		math::Matrix<3, 3>  inertia;       /**< inertia matrix */
 		math::Matrix<3, 3>  inertia_inv;   /**< inverse of the inertia matrix */
 		math::Vector<3>     init_dist;     /**< l1 initial disturbance */
 		math::Vector<3>     bandwidth;     /**< l1 control bandwidth in x,y,z */
-		math::Vector<3>     Ksp;           /**< l1 state predictor gains in x,y,z */
-		float               gamma;         /**< l1 adaptation gain */
+		math::Vector<3>     observer_gain;           /**< l1 state predictor gains in x,y,z */
+		float               adaptation_gain;         /**< l1 adaptation gain */
 		float               engage_level;  /**< weight threshold to determine activation of l1 */
+    float               cT;            /**< thrust coefficient of motors, force [N] = cT * RPM^2 */
+    float               motor_constant; /**< describes the motor RPM response */
+    math::Matrix<3,4>   mixer;         /**< matrix that relates individual rotor forces to generated torque */
+    float               pwm_min;
+    float               pwm_max;
+    float               rpm_min;
+    float               rpm_max;
+    float               rpm_over_pwm;
+    math::Vector<3>     max_torques;  /**< maximum torque about the 3 body axes */
+
 		int vtol_type;						/**< 0 = Tailsitter, 1 = Tiltrotor, 2 = Standard airframe */
 		bool vtol_opt_recovery_enabled;
 	}		_params;
@@ -320,6 +347,11 @@ private:
 	 */
 	void		vehicle_motor_limits_poll();
 
+  /**
+	 * Check for actuator output updates.
+	 */
+	void		actuator_outputs_poll();
+
 	/**
 	 * Shim for calling task_main from task_create.
 	 */
@@ -350,6 +382,7 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_manual_control_sp_sub(-1),
 	_armed_sub(-1),
 	_vehicle_status_sub(-1),
+  _actuator_outputs_sub(-1),
 
 	/* publications */
 	_v_rates_sp_pub(nullptr),
@@ -360,6 +393,7 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_actuators_id(0),
 
 	_actuators_0_circuit_breaker_enabled(false),
+  _in_nominal_flight(false),
 
 	/* performance counters */
 	_loop_perf(perf_alloc(PC_ELAPSED, "mc_att_control")),
@@ -378,7 +412,8 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	memset(&_motor_limits, 0, sizeof(_motor_limits));
 	memset(&_controller_status, 0, sizeof(_controller_status));
 	memset(&_l1_adaptive_debug, 0, sizeof(_l1_adaptive_debug));
-	_vehicle_status.is_rotary_wing = true;
+	memset(&_actuator_outputs, 0, sizeof(_actuator_outputs));
+  _vehicle_status.is_rotary_wing = true;
 
 	_params.att_p.zero();
 	_params.rate_p.zero();
@@ -405,19 +440,29 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_I.identity();
 	_R_prev.identity();
 
+  _avlhat.zero();
+	_rpmhat.zero();
 	_dsthat.zero();
-	_avlhat.zero();
 	_lpd.zero();
 
-	_params.enable_l1 = false;
+	_params.enable_l1ac = false;
+	_params.use_active_l1ac = false;
 	_params.enable_debug = false;
 	_params.init_dist.zero();
 	_params.bandwidth.zero();
 	_params.inertia.identity();
 	_params.inertia_inv.identity();
-	_params.Ksp.zero();
-	_params.gamma = 0.0f;
+	_params.observer_gain.zero();
+	_params.adaptation_gain = 0.0f;
 	_params.engage_level = 0.0f;
+  _params.mixer.zero();
+  _params.motor_constant = 0.0f;
+  _params.cT = 0.0f;
+  _params.pwm_min = 1000.0f;
+  _params.pwm_max = 2000.0f;
+  _params.rpm_min = 1000.0f;
+  _params.rpm_max = 10000.0f;
+  _params.rpm_over_pwm = 9.0f;
 
 	_params_handles.roll_p			= 	param_find("MC_ROLL_P");
 	_params_handles.roll_rate_p		= 	param_find("MC_ROLLRATE_P");
@@ -447,25 +492,35 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_params_handles.pitch_tc		= 	param_find("MC_PITCH_TC");
 	_params_handles.vtol_opt_recovery_enabled = param_find("VT_OPT_RECOV_EN");
 
-	_params_handles.enable_l1       =   param_find("MC_ENABLE_L1");
-	_params_handles.enable_debug    =   param_find("L1_ENABLE_DEBUG");
-	_params_handles.l1_inertia_xx   =   param_find("L1_INERTIA_XX");
-	_params_handles.l1_inertia_xy   =   param_find("L1_INERTIA_XY");
-	_params_handles.l1_inertia_xz   =   param_find("L1_INERTIA_XZ");
-	_params_handles.l1_inertia_yy   =   param_find("L1_INERTIA_YY");
-	_params_handles.l1_inertia_yz   =   param_find("L1_INERTIA_YZ");
-	_params_handles.l1_inertia_zz   =   param_find("L1_INERTIA_ZZ");
-	_params_handles.l1_bandwidth_x  =   param_find("L1_BANDWIDTH_X");
-	_params_handles.l1_bandwidth_y  =   param_find("L1_BANDWIDTH_Y");
-	_params_handles.l1_bandwidth_z  =   param_find("L1_BANDWIDTH_Z");
-	_params_handles.l1_ksp_x        =   param_find("L1_KSP_X");
-	_params_handles.l1_ksp_y        =   param_find("L1_KSP_Y");
-	_params_handles.l1_ksp_z        =   param_find("L1_KSP_Z");
-	_params_handles.l1_gamma        =   param_find("L1_GAMMA");
-	_params_handles.l1_init_dist_x  =   param_find("L1_INIT_DISTX");
-	_params_handles.l1_init_dist_y  =   param_find("L1_INIT_DISTY");
-	_params_handles.l1_init_dist_z  =   param_find("L1_INIT_DISTZ");
-	_params_handles.l1_engage_level =   param_find("L1_ENGAGE_LEVEL");
+	_params_handles.enable_l1ac       =   param_find("MC_ENABLE_L1AC");
+	_params_handles.use_active_l1ac   =   param_find("L1ATT_ACTIVE");
+	_params_handles.enable_debug    =   param_find("L1ATT_ENABLE_DEBUG");
+	_params_handles.inertia_xx   =   param_find("L1ATT_INERTIA_XX");
+	_params_handles.inertia_xy   =   param_find("L1ATT_INERTIA_XY");
+	_params_handles.inertia_xz   =   param_find("L1ATT_INERTIA_XZ");
+	_params_handles.inertia_yy   =   param_find("L1ATT_INERTIA_YY");
+	_params_handles.inertia_yz   =   param_find("L1ATT_INERTIA_YZ");
+	_params_handles.inertia_zz   =   param_find("L1ATT_INERTIA_ZZ");
+  _params_handles.cT           =   param_find("L1ATT_CT");
+  _params_handles.motor_constant =  param_find("L1ATT_MOTOR_CONSTANT");
+  _params_handles.arm_length   =   param_find("L1ATT_ARM_LENGTH");
+  _params_handles.moment_scale  =  param_find("L1ATT_MOMENT_SCALE");
+  _params_handles.motor_spread_angle =  param_find("L1ATT_MOTOR_SPREAD_ANGLE");
+  _params_handles.pwm_min      =   param_find("L1ATT_PWM_MIN");
+  _params_handles.pwm_max      =   param_find("L1ATT_PWM_MAX");
+  _params_handles.rpm_min      =   param_find("L1ATT_RPM_MIN");
+  _params_handles.rpm_max      =   param_find("L1ATT_RPM_MAX");
+	_params_handles.l1_bandwidth_x  =   param_find("L1ATT_BANDWIDTH_X");
+	_params_handles.l1_bandwidth_y  =   param_find("L1ATT_BANDWIDTH_Y");
+	_params_handles.l1_bandwidth_z  =   param_find("L1ATT_BANDWIDTH_Z");
+	_params_handles.l1_observer_gain_x =   param_find("L1ATT_OBSERVER_GAIN_X");
+	_params_handles.l1_observer_gain_y =   param_find("L1ATT_OBSERVER_GAIN_Y");
+	_params_handles.l1_observer_gain_z =   param_find("L1ATT_OBSERVER_GAIN_Z");
+	_params_handles.l1_adaptation_gain =   param_find("L1ATT_ADAPTATION_GAIN");
+	_params_handles.l1_init_dist_x  =   param_find("L1ATT_INIT_DISTX");
+	_params_handles.l1_init_dist_y  =   param_find("L1ATT_INIT_DISTY");
+	_params_handles.l1_init_dist_z  =   param_find("L1ATT_INIT_DISTZ");
+	_params_handles.l1_engage_level =   param_find("L1ATT_ENGAGE_LEVEL");
 
 	/* fetch initial parameter values */
 	parameters_update();
@@ -581,31 +636,32 @@ MulticopterAttitudeControl::parameters_update()
 	_actuators_0_circuit_breaker_enabled = circuit_breaker_enabled("CBRK_RATE_CTRL", CBRK_RATE_CTRL_KEY);
 
 	/* L1 adaptive parameters */
-	param_get(_params_handles.enable_l1, &_params.enable_l1);
-	param_get(_params_handles.enable_debug, &_params.enable_debug);
+	param_get(_params_handles.enable_l1ac, &_params.enable_l1ac);
+  param_get(_params_handles.use_active_l1ac, &_params.use_active_l1ac);
+  param_get(_params_handles.enable_debug, &_params.enable_debug);
 
 	/* Fill out the Inertia Matrix */
 	float Ivalues[9];
 	memset(Ivalues, 0, sizeof(Ivalues));
-	param_get(_params_handles.l1_inertia_xx, &v);
+	param_get(_params_handles.inertia_xx, &v);
 	Ivalues[0] = v;
 
-	param_get(_params_handles.l1_inertia_xy, &v);
-	Ivalues[1] = -v;
-	Ivalues[3] = -v;
+	param_get(_params_handles.inertia_xy, &v);
+	Ivalues[1] = v;
+	Ivalues[3] = v;
 
-	param_get(_params_handles.l1_inertia_xz, &v);
-	Ivalues[2] = -v;
-	Ivalues[6] = -v;
+	param_get(_params_handles.inertia_xz, &v);
+	Ivalues[2] = v;
+	Ivalues[6] = v;
 
-	param_get(_params_handles.l1_inertia_yy, &v);
+	param_get(_params_handles.inertia_yy, &v);
 	Ivalues[4] = v;
 
-	param_get(_params_handles.l1_inertia_yz, &v);
-	Ivalues[5] = -v;
-	Ivalues[7] = -v;
+	param_get(_params_handles.inertia_yz, &v);
+	Ivalues[5] = v;
+	Ivalues[7] = v;
 
-	param_get(_params_handles.l1_inertia_zz, &v);
+	param_get(_params_handles.inertia_zz, &v);
 	Ivalues[8] = v;
 
 	_params.inertia.set(Ivalues);
@@ -621,15 +677,15 @@ MulticopterAttitudeControl::parameters_update()
 	param_get(_params_handles.l1_bandwidth_z, &v);
 	_params.bandwidth(2) = v;
 
-	param_get(_params_handles.l1_ksp_x, &v);
-	_params.Ksp(0) = v;
-	param_get(_params_handles.l1_ksp_y, &v);
-	_params.Ksp(1) = v;
-	param_get(_params_handles.l1_ksp_z, &v);
-	_params.Ksp(2) = v;
+	param_get(_params_handles.l1_observer_gain_x, &v);
+	_params.observer_gain(0) = v;
+	param_get(_params_handles.l1_observer_gain_y, &v);
+	_params.observer_gain(1) = v;
+	param_get(_params_handles.l1_observer_gain_z, &v);
+	_params.observer_gain(2) = v;
 
-	param_get(_params_handles.l1_gamma, &v);
-	_params.gamma = v;
+	param_get(_params_handles.l1_adaptation_gain, &v);
+	_params.adaptation_gain = v;
 
 	param_get(_params_handles.l1_init_dist_x, &v);
 	_params.init_dist(0) = v;
@@ -640,6 +696,51 @@ MulticopterAttitudeControl::parameters_update()
 
 	param_get(_params_handles.l1_engage_level, &v);
 	_params.engage_level = v;
+
+  param_get(_params_handles.cT, &v);
+  _params.cT = v;
+  param_get(_params_handles.motor_constant, &v);
+  _params.motor_constant = v;
+
+  param_get(_params_handles.arm_length, &v);
+  float d = v;
+  param_get(_params_handles.moment_scale, &v);
+  float kQ = v;
+  param_get(_params_handles.motor_spread_angle, &v);
+  float alpha = v;
+
+  float sa = sinf(alpha);
+  float ca = cosf(alpha);
+
+  _params.mixer(0,0) = -d*sa;
+  _params.mixer(0,1) = d*sa;
+  _params.mixer(0,2) = d*sa;
+  _params.mixer(0,3) = -d*sa;
+  _params.mixer(1,0) = d*ca;
+  _params.mixer(1,1) = -d*ca;
+  _params.mixer(1,2) = d*ca;
+  _params.mixer(1,3) = -d*ca;
+  _params.mixer(2,0) = kQ;
+  _params.mixer(2,1) = kQ;
+  _params.mixer(2,2) = -kQ;
+  _params.mixer(2,3) = -kQ;
+
+  param_get(_params_handles.pwm_min, &v);
+  _params.pwm_min = v;
+  param_get(_params_handles.pwm_max, &v);
+  _params.pwm_max = v;
+  param_get(_params_handles.rpm_min, &v);
+  _params.rpm_min = v;
+  param_get(_params_handles.rpm_max, &v);
+  _params.rpm_max = v;
+  _params.rpm_over_pwm = (_params.rpm_max - _params.rpm_min)/(_params.pwm_max - _params.pwm_min);
+
+  float fmax = _params.cT * _params.rpm_max * _params.rpm_max;
+  float fmin = _params.cT * _params.rpm_min * _params.rpm_min;
+
+  _params.max_torques(0) = 2*d*sa*(fmax - fmin);
+  _params.max_torques(1) = 2*d*ca*(fmax - fmin);
+  _params.max_torques(2) = 2*kQ*(fmax - fmin);
 
 	return OK;
 }
@@ -757,6 +858,18 @@ MulticopterAttitudeControl::vehicle_motor_limits_poll()
 	}
 }
 
+void
+MulticopterAttitudeControl::actuator_outputs_poll()
+{
+  /* check if there is a new message */
+  bool updated;
+	orb_check(_actuator_outputs_sub, &updated);
+
+	if (updated) {
+		orb_copy(ORB_ID(actuator_outputs), _actuator_outputs_sub, &_actuator_outputs);
+	}
+}
+
 /**
  * Attitude controller.
  * Input: 'vehicle_attitude_setpoint' topics (depending on mode)
@@ -860,66 +973,81 @@ MulticopterAttitudeControl::control_attitude(float dt)
 void
 MulticopterAttitudeControl::control_attitude_rates(float dt)
 {
-	/* reset state estimator if disarmed */
-	if (!_armed.armed || !_vehicle_status.is_rotary_wing) {
-		if (!_params.enable_l1) {
-			_rates_int.zero();
+  math::Vector<4> rpm_cmd;
 
-		} else {
-			_dsthat = _params.init_dist;
-			_lpd = _dsthat;
-			_avlhat.zero();
-			_prev_att_control.zero();
-		}
-	}
+  if (_params.enable_l1ac) {
+    /* get latest PWM commands */
+    actuator_outputs_poll();
 
-	/* current body angular rates */
+    /* this assumes PWM signals live in channels 5 to 8 (indices 4,5,6,7) */
+    for (int i = 0; i < 4; i++) {
+      float pwm_cmd = _actuator_outputs.output[i+4];
+      rpm_cmd(i) = _params.rpm_over_pwm * (pwm_cmd - _params.pwm_min) + _params.rpm_min;
+    }
+  }
+
+  /* current body angular rates */
 	math::Vector<3> rates;
 	rates(0) = _ctrl_state.roll_rate;
 	rates(1) = _ctrl_state.pitch_rate;
 	rates(2) = _ctrl_state.yaw_rate;
 
+	/* reset state estimator if disarmed */
+	if (!_armed.armed || !_vehicle_status.is_rotary_wing) {
+    _in_nominal_flight = false;
+		if (_params.enable_l1ac) {
+      _dsthat = _params.init_dist;
+			_lpd = _dsthat;
+			_avlhat = rates;
+      _rpmhat = rpm_cmd;
+			_prev_att_control.zero();
+		} else {
+			_rates_int.zero();
+		}
+	}
+
+  if (_thrust_sp > _params.engage_level) {
+    _in_nominal_flight = true;
+  }
+
 	/* angular rates error */
 	math::Vector<3> rates_err = _rates_sp - rates;
 
-	/* Set control output */
-	if (_params.enable_l1) {
-		/* current body angular velocity */
-		math::Vector<3> angvel;
-		angvel.zero();
-		angvel = rates;
+	/* Run Luenberger observer */
+	if (_params.enable_l1ac && _in_nominal_flight) {
 
-		/* Leunberger state predictor */
-		math::Vector<3> werr, avlhatdot, dsthatdot;
-		werr = _avlhat - angvel;
+    /* Angular Velocity Error */
+    math::Vector<3> werr = _avlhat - rates;
+
+    math::Vector<3> tauhat = _params.mixer * (_rpmhat.emult(_rpmhat) * _params.cT);
 
 		// % is the cross operator
-		avlhatdot = _params.inertia_inv * (_dsthat - (_avlhat % (_params.inertia * _avlhat))) -
-			    _params.Ksp.emult(werr) + (_att_control - _prev_att_control) / dt;
-		dsthatdot = (_params.inertia * werr) * (-_params.gamma);
+		math::Vector<3> avlhatdot = _params.inertia_inv * (tauhat + _dsthat - rates % (_params.inertia * rates)) -
+			    _params.observer_gain.emult(werr);
+    math::Vector<4> rpmhatdot = (rpm_cmd - _rpmhat) * _params.motor_constant;
+    math::Vector<3> dsthatdot = -(_params.inertia * _params.adaptation_gain) * werr;
 
 		_avlhat += avlhatdot * dt;
+    _rpmhat += rpmhatdot * dt;
 		_dsthat += dsthatdot * dt;
 		_lpd += _params.bandwidth.emult(_dsthat - _lpd) * dt;
 
 		if (_params.enable_debug) {
 			/* publish debug data*/
 			_l1_adaptive_debug.timestamp = hrt_absolute_time();
-			_l1_adaptive_debug.avl_hat[0]  = _avlhat(0);
-			_l1_adaptive_debug.avl_hat[1]  = _avlhat(1);
-			_l1_adaptive_debug.avl_hat[2]  = _avlhat(2);
-			_l1_adaptive_debug.dst_hat[0]  = _dsthat(0);
-			_l1_adaptive_debug.dst_hat[1]  = _dsthat(1);
-			_l1_adaptive_debug.dst_hat[2]  = _dsthat(2);
-			_l1_adaptive_debug.ang_vel[0]  = angvel(0);
-			_l1_adaptive_debug.ang_vel[1]  = angvel(1);
-			_l1_adaptive_debug.ang_vel[2]  = angvel(2);
-			_l1_adaptive_debug.lpd[0]      = _lpd(0);
-			_l1_adaptive_debug.lpd[1]      = _lpd(1);
-			_l1_adaptive_debug.lpd[2]      = _lpd(2);
-			_l1_adaptive_debug.rates[0]    = avlhatdot(0);
-			_l1_adaptive_debug.rates[1]    = avlhatdot(1);
-			_l1_adaptive_debug.rates[2]    = avlhatdot(2);
+			_l1_adaptive_debug.avl[0]  = _avlhat(0);
+			_l1_adaptive_debug.avl[1]  = _avlhat(1);
+			_l1_adaptive_debug.avl[2]  = _avlhat(2);
+			_l1_adaptive_debug.rpm[0]  = _rpmhat(0);
+			_l1_adaptive_debug.rpm[1]  = _rpmhat(1);
+			_l1_adaptive_debug.rpm[2]  = _rpmhat(2);
+			_l1_adaptive_debug.rpm[3]  = _rpmhat(3);
+			_l1_adaptive_debug.dst[0]  = _dsthat(0);
+			_l1_adaptive_debug.dst[1]  = _dsthat(1);
+			_l1_adaptive_debug.dst[2]  = _dsthat(2);
+			_l1_adaptive_debug.lpd[0]  = _lpd(0);
+			_l1_adaptive_debug.lpd[1]  = _lpd(1);
+			_l1_adaptive_debug.lpd[2]  = _lpd(2);
 
 			if (_l1_adaptive_debug_pub != nullptr) {
 				orb_publish(ORB_ID(l1_adaptive_debug), _l1_adaptive_debug_pub, &_l1_adaptive_debug);
@@ -931,13 +1059,11 @@ MulticopterAttitudeControl::control_attitude_rates(float dt)
 		}
 	}
 
-	if (_params.enable_l1 && _thrust_sp > _params.engage_level) {
-		_att_control = _params.rate_p.emult(rates_err) + _params.rate_d.emult(_rates_prev - rates) / dt - _lpd +
+	_att_control = _params.rate_p.emult(rates_err) + _params.rate_d.emult(_rates_prev - rates) / dt + _rates_int +
 			       _params.rate_ff.emult(_rates_sp - _rates_sp_prev) / dt;
 
-	} else {
-		_att_control = _params.rate_p.emult(rates_err) + _params.rate_d.emult(_rates_prev - rates) / dt + _rates_int +
-			       _params.rate_ff.emult(_rates_sp - _rates_sp_prev) / dt;
+	if (_params.enable_l1ac && _params.use_active_l1ac && _in_nominal_flight) {
+    _att_control -= _lpd.edivide(_params.max_torques);
 	}
 
 	_rates_sp_prev = _rates_sp;
@@ -946,7 +1072,7 @@ MulticopterAttitudeControl::control_attitude_rates(float dt)
 
 
 	/* update integral only if not saturated on low limit and if motor commands are not saturated */
-	if (!_params.enable_l1 && _thrust_sp > MIN_TAKEOFF_THRUST && !_motor_limits.lower_limit && !_motor_limits.upper_limit) {
+	if (!_params.enable_l1ac && _thrust_sp > MIN_TAKEOFF_THRUST && !_motor_limits.lower_limit && !_motor_limits.upper_limit) {
 		for (int i = 0; i < 3; i++) {
 			if (fabsf(_att_control(i)) < _thrust_sp) {
 				float rate_i = _rates_int(i) + _params.rate_i(i) * rates_err(i) * dt;
@@ -983,6 +1109,7 @@ MulticopterAttitudeControl::task_main()
 	_armed_sub = orb_subscribe(ORB_ID(actuator_armed));
 	_vehicle_status_sub = orb_subscribe(ORB_ID(vehicle_status));
 	_motor_limits_sub = orb_subscribe(ORB_ID(multirotor_motor_limits));
+  _actuator_outputs_sub = orb_subscribe(ORB_ID(actuator_outputs));
 
 	/* initialize parameters cache */
 	parameters_update();

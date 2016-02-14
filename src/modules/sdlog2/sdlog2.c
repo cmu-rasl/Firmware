@@ -1150,7 +1150,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 			struct log_ENCD_s log_ENCD;
 			struct log_TSYN_s log_TSYN;
 			struct log_MACS_s log_MACS;
-			struct log_L1AC_s log_L1AC;
+			struct log_L1AT_s log_L1AT;
 			struct log_CTS_s log_CTS;
 			struct log_EST4_s log_INO1;
 			struct log_EST5_s log_INO2;
@@ -1932,33 +1932,28 @@ int sdlog2_thread_main(int argc, char *argv[])
 
 		/* --- L1 ADAPTIVE DEBUG INFO --- */
 		if (copy_if_updated(ORB_ID(l1_adaptive_debug), &subs.l1_adaptive_debug_sub, &buf.l1_adaptive_debug)) {
-			log_msg.msg_type = LOG_L1AC_MSG;
-			unsigned maxcopy0 = (sizeof(buf.l1_adaptive_debug.avl_hat) < sizeof(log_msg.body.log_L1AC.avl_hat)) ? sizeof(
-						    buf.l1_adaptive_debug.avl_hat) : sizeof(log_msg.body.log_L1AC.avl_hat);
-			memset(&(log_msg.body.log_L1AC.avl_hat), 0, sizeof(log_msg.body.log_L1AC.avl_hat));
-			memcpy(&(log_msg.body.log_L1AC.avl_hat), buf.l1_adaptive_debug.avl_hat, maxcopy0);
+			log_msg.msg_type = LOG_L1AT_MSG;
+			unsigned maxcopy0 = (sizeof(buf.l1_adaptive_debug.avl) < sizeof(log_msg.body.log_L1AT.avl)) ? sizeof(
+						    buf.l1_adaptive_debug.avl) : sizeof(log_msg.body.log_L1AT.avl);
+			memset(&(log_msg.body.log_L1AT.avl), 0, sizeof(log_msg.body.log_L1AT.avl));
+			memcpy(&(log_msg.body.log_L1AT.avl), buf.l1_adaptive_debug.avl, maxcopy0);
 
-			unsigned maxcopy1 = (sizeof(buf.l1_adaptive_debug.dst_hat) < sizeof(log_msg.body.log_L1AC.dst_hat)) ? sizeof(
-						    buf.l1_adaptive_debug.dst_hat) : sizeof(log_msg.body.log_L1AC.dst_hat);
-			memset(&(log_msg.body.log_L1AC.dst_hat), 0, sizeof(log_msg.body.log_L1AC.dst_hat));
-			memcpy(&(log_msg.body.log_L1AC.dst_hat), buf.l1_adaptive_debug.dst_hat, maxcopy1);
+			unsigned maxcopy1 = (sizeof(buf.l1_adaptive_debug.dst) < sizeof(log_msg.body.log_L1AT.dst)) ? sizeof(
+						    buf.l1_adaptive_debug.dst) : sizeof(log_msg.body.log_L1AT.dst);
+			memset(&(log_msg.body.log_L1AT.dst), 0, sizeof(log_msg.body.log_L1AT.dst));
+			memcpy(&(log_msg.body.log_L1AT.dst), buf.l1_adaptive_debug.dst, maxcopy1);
 
-			unsigned maxcopy2 = (sizeof(buf.l1_adaptive_debug.ang_vel) < sizeof(log_msg.body.log_L1AC.ang_vel)) ? sizeof(
-						    buf.l1_adaptive_debug.ang_vel) : sizeof(log_msg.body.log_L1AC.ang_vel);
-			memset(&(log_msg.body.log_L1AC.ang_vel), 0, sizeof(log_msg.body.log_L1AC.ang_vel));
-			memcpy(&(log_msg.body.log_L1AC.ang_vel), buf.l1_adaptive_debug.ang_vel, maxcopy2);
+			unsigned maxcopy2 = (sizeof(buf.l1_adaptive_debug.rpm) < sizeof(log_msg.body.log_L1AT.rpm)) ? sizeof(
+						    buf.l1_adaptive_debug.rpm) : sizeof(log_msg.body.log_L1AT.rpm);
+			memset(&(log_msg.body.log_L1AT.rpm), 0, sizeof(log_msg.body.log_L1AT.rpm));
+			memcpy(&(log_msg.body.log_L1AT.rpm), buf.l1_adaptive_debug.rpm, maxcopy2);
 
-			unsigned maxcopy3 = (sizeof(buf.l1_adaptive_debug.lpd) < sizeof(log_msg.body.log_L1AC.lpd)) ? sizeof(
-						    buf.l1_adaptive_debug.lpd) : sizeof(log_msg.body.log_L1AC.lpd);
-			memset(&(log_msg.body.log_L1AC.lpd), 0, sizeof(log_msg.body.log_L1AC.lpd));
-			memcpy(&(log_msg.body.log_L1AC.lpd), buf.l1_adaptive_debug.lpd, maxcopy3);
+			unsigned maxcopy3 = (sizeof(buf.l1_adaptive_debug.lpd) < sizeof(log_msg.body.log_L1AT.lpd)) ? sizeof(
+						    buf.l1_adaptive_debug.lpd) : sizeof(log_msg.body.log_L1AT.lpd);
+			memset(&(log_msg.body.log_L1AT.lpd), 0, sizeof(log_msg.body.log_L1AT.lpd));
+			memcpy(&(log_msg.body.log_L1AT.lpd), buf.l1_adaptive_debug.lpd, maxcopy3);
 
-			unsigned maxcopy4 = (sizeof(buf.l1_adaptive_debug.rates) < sizeof(log_msg.body.log_L1AC.lpd)) ? sizeof(
-						    buf.l1_adaptive_debug.rates) : sizeof(log_msg.body.log_L1AC.rates);
-			memset(&(log_msg.body.log_L1AC.rates), 0, sizeof(log_msg.body.log_L1AC.rates));
-			memcpy(&(log_msg.body.log_L1AC.rates), buf.l1_adaptive_debug.rates, maxcopy4);
-
-			LOGBUFFER_WRITE_AND_COUNT(L1AC);
+			LOGBUFFER_WRITE_AND_COUNT(L1AT);
 		}
 
 		/* --- CONTROL STATE --- */

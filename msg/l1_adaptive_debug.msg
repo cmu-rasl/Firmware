@@ -1,7 +1,6 @@
 uint64 timestamp
 uint16 seq_id
-float32[3] avl_hat  # angular velocity estimate
-float32[3] dst_hat  # disturbance estimate
-float32[3] ang_vel  # angular velocity obtained from R
-float32[3] lpd      # disturbance rate correction
-float32[3] rates    # body rates obtained from gyro
+float32[3] avl  # angular velocity estimate
+float32[4] rpm  # RPM estimate
+float32[3] dst  # disturbance estimate
+float32[3] lpd  # low pass filtered torque disturbance estimate
