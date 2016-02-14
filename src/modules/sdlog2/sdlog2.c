@@ -110,7 +110,7 @@
 #include <uORB/topics/vtol_vehicle_status.h>
 #include <uORB/topics/time_offset.h>
 #include <uORB/topics/mc_att_ctrl_status.h>
-#include <uORB/topics/l1_adaptive_debug.h>
+#include <uORB/topics/l1_angvel_debug.h>
 #include <uORB/topics/ekf2_innovations.h>
 
 #include <systemlib/systemlib.h>
@@ -1098,7 +1098,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 		struct vtol_vehicle_status_s vtol_status;
 		struct time_offset_s time_offset;
 		struct mc_att_ctrl_status_s mc_att_ctrl_status;
-		struct l1_adaptive_debug_s l1_adaptive_debug;
+		struct l1_angvel_debug_s l1_angvel_debug;
 		struct control_state_s ctrl_state;
 		struct ekf2_innovations_s innovations;
 	} buf;
@@ -1150,7 +1150,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 			struct log_ENCD_s log_ENCD;
 			struct log_TSYN_s log_TSYN;
 			struct log_MACS_s log_MACS;
-			struct log_L1AT_s log_L1AT;
+			struct log_L1A_s log_L1A;
 			struct log_CTS_s log_CTS;
 			struct log_EST4_s log_INO1;
 			struct log_EST5_s log_INO2;
@@ -1198,7 +1198,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 		int encoders_sub;
 		int tsync_sub;
 		int mc_att_ctrl_status_sub;
-		int l1_adaptive_debug_sub;
+		int l1_angvel_debug_sub;
 		int ctrl_state_sub;
 		int innov_sub;
 	} subs;
@@ -1236,7 +1236,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 	subs.wind_sub = -1;
 	subs.tsync_sub = -1;
 	subs.mc_att_ctrl_status_sub = -1;
-	subs.l1_adaptive_debug_sub = -1;
+	subs.l1_angvel_debug_sub = -1;
 	subs.ctrl_state_sub = -1;
 	subs.encoders_sub = -1;
 	subs.innov_sub = -1;
@@ -1931,29 +1931,29 @@ int sdlog2_thread_main(int argc, char *argv[])
 		}
 
 		/* --- L1 ADAPTIVE DEBUG INFO --- */
-		if (copy_if_updated(ORB_ID(l1_adaptive_debug), &subs.l1_adaptive_debug_sub, &buf.l1_adaptive_debug)) {
-			log_msg.msg_type = LOG_L1AT_MSG;
-			unsigned maxcopy0 = (sizeof(buf.l1_adaptive_debug.avl) < sizeof(log_msg.body.log_L1AT.avl)) ? sizeof(
-						    buf.l1_adaptive_debug.avl) : sizeof(log_msg.body.log_L1AT.avl);
-			memset(&(log_msg.body.log_L1AT.avl), 0, sizeof(log_msg.body.log_L1AT.avl));
-			memcpy(&(log_msg.body.log_L1AT.avl), buf.l1_adaptive_debug.avl, maxcopy0);
+		if (copy_if_updated(ORB_ID(l1_angvel_debug), &subs.l1_angvel_debug_sub, &buf.l1_angvel_debug)) {
+			log_msg.msg_type = LOG_L1A_MSG;
+			unsigned maxcopy0 = (sizeof(buf.l1_angvel_debug.avl) < sizeof(log_msg.body.log_L1A.avl)) ? sizeof(
+						    buf.l1_angvel_debug.avl) : sizeof(log_msg.body.log_L1A.avl);
+			memset(&(log_msg.body.log_L1A.avl), 0, sizeof(log_msg.body.log_L1A.avl));
+			memcpy(&(log_msg.body.log_L1A.avl), buf.l1_angvel_debug.avl, maxcopy0);
 
-			unsigned maxcopy1 = (sizeof(buf.l1_adaptive_debug.dst) < sizeof(log_msg.body.log_L1AT.dst)) ? sizeof(
-						    buf.l1_adaptive_debug.dst) : sizeof(log_msg.body.log_L1AT.dst);
-			memset(&(log_msg.body.log_L1AT.dst), 0, sizeof(log_msg.body.log_L1AT.dst));
-			memcpy(&(log_msg.body.log_L1AT.dst), buf.l1_adaptive_debug.dst, maxcopy1);
+			unsigned maxcopy1 = (sizeof(buf.l1_angvel_debug.dst) < sizeof(log_msg.body.log_L1A.dst)) ? sizeof(
+						    buf.l1_angvel_debug.dst) : sizeof(log_msg.body.log_L1A.dst);
+			memset(&(log_msg.body.log_L1A.dst), 0, sizeof(log_msg.body.log_L1A.dst));
+			memcpy(&(log_msg.body.log_L1A.dst), buf.l1_angvel_debug.dst, maxcopy1);
 
-			unsigned maxcopy2 = (sizeof(buf.l1_adaptive_debug.rpm) < sizeof(log_msg.body.log_L1AT.rpm)) ? sizeof(
-						    buf.l1_adaptive_debug.rpm) : sizeof(log_msg.body.log_L1AT.rpm);
-			memset(&(log_msg.body.log_L1AT.rpm), 0, sizeof(log_msg.body.log_L1AT.rpm));
-			memcpy(&(log_msg.body.log_L1AT.rpm), buf.l1_adaptive_debug.rpm, maxcopy2);
+			unsigned maxcopy2 = (sizeof(buf.l1_angvel_debug.rpm) < sizeof(log_msg.body.log_L1A.rpm)) ? sizeof(
+						    buf.l1_angvel_debug.rpm) : sizeof(log_msg.body.log_L1A.rpm);
+			memset(&(log_msg.body.log_L1A.rpm), 0, sizeof(log_msg.body.log_L1A.rpm));
+			memcpy(&(log_msg.body.log_L1A.rpm), buf.l1_angvel_debug.rpm, maxcopy2);
 
-			unsigned maxcopy3 = (sizeof(buf.l1_adaptive_debug.lpd) < sizeof(log_msg.body.log_L1AT.lpd)) ? sizeof(
-						    buf.l1_adaptive_debug.lpd) : sizeof(log_msg.body.log_L1AT.lpd);
-			memset(&(log_msg.body.log_L1AT.lpd), 0, sizeof(log_msg.body.log_L1AT.lpd));
-			memcpy(&(log_msg.body.log_L1AT.lpd), buf.l1_adaptive_debug.lpd, maxcopy3);
+			unsigned maxcopy3 = (sizeof(buf.l1_angvel_debug.lpd) < sizeof(log_msg.body.log_L1A.lpd)) ? sizeof(
+						    buf.l1_angvel_debug.lpd) : sizeof(log_msg.body.log_L1A.lpd);
+			memset(&(log_msg.body.log_L1A.lpd), 0, sizeof(log_msg.body.log_L1A.lpd));
+			memcpy(&(log_msg.body.log_L1A.lpd), buf.l1_angvel_debug.lpd, maxcopy3);
 
-			LOGBUFFER_WRITE_AND_COUNT(L1AT);
+			LOGBUFFER_WRITE_AND_COUNT(L1A);
 		}
 
 		/* --- CONTROL STATE --- */

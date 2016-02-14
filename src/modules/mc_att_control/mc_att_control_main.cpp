@@ -82,7 +82,7 @@
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/multirotor_motor_limits.h>
 #include <uORB/topics/mc_att_ctrl_status.h>
-#include <uORB/topics/l1_adaptive_debug.h>
+#include <uORB/topics/l1_angvel_debug.h>
 #include <systemlib/param/param.h>
 #include <systemlib/err.h>
 #include <systemlib/perf_counter.h>
@@ -144,7 +144,7 @@ private:
 	orb_advert_t	_v_rates_sp_pub;		/**< rate setpoint publication */
 	orb_advert_t	_actuators_0_pub;		/**< attitude actuator controls publication */
 	orb_advert_t	_controller_status_pub;	/**< controller status publication */
-	orb_advert_t    _l1_adaptive_debug_pub; /**< l1 adaptive debug publication */
+	orb_advert_t    _l1_angvel_debug_pub; /**< angular velocity l1 adaptive control debug publication */
 
 	orb_id_t _rates_sp_id;	/**< pointer to correct rates setpoint uORB metadata structure */
 	orb_id_t _actuators_id;	/**< pointer to correct actuator controls0 uORB metadata structure */
@@ -162,7 +162,7 @@ private:
 	struct vehicle_status_s				_vehicle_status;	/**< vehicle status */
 	struct multirotor_motor_limits_s	_motor_limits;		/**< motor limits */
 	struct mc_att_ctrl_status_s 		_controller_status; /**< controller status */
-	struct l1_adaptive_debug_s          _l1_adaptive_debug; /**< l1 adaptive debug info */
+	struct l1_angvel_debug_s          _l1_angvel_debug; /**< angular velocity l1 adaptive control debug info */
   struct actuator_outputs_s      _actuator_outputs; /**< actuator outputs */
 
 	perf_counter_t	_loop_perf;			/**< loop performance counter */
@@ -388,7 +388,7 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_v_rates_sp_pub(nullptr),
 	_actuators_0_pub(nullptr),
 	_controller_status_pub(nullptr),
-	_l1_adaptive_debug_pub(nullptr),
+	_l1_angvel_debug_pub(nullptr),
 	_rates_sp_id(0),
 	_actuators_id(0),
 
@@ -411,7 +411,7 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	memset(&_vehicle_status, 0, sizeof(_vehicle_status));
 	memset(&_motor_limits, 0, sizeof(_motor_limits));
 	memset(&_controller_status, 0, sizeof(_controller_status));
-	memset(&_l1_adaptive_debug, 0, sizeof(_l1_adaptive_debug));
+	memset(&_l1_angvel_debug, 0, sizeof(_l1_angvel_debug));
 	memset(&_actuator_outputs, 0, sizeof(_actuator_outputs));
   _vehicle_status.is_rotary_wing = true;
 
@@ -492,35 +492,35 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_params_handles.pitch_tc		= 	param_find("MC_PITCH_TC");
 	_params_handles.vtol_opt_recovery_enabled = param_find("VT_OPT_RECOV_EN");
 
-	_params_handles.enable_l1ac       =   param_find("MC_ENABLE_L1AC");
-	_params_handles.use_active_l1ac   =   param_find("L1ATT_ACTIVE");
-	_params_handles.enable_debug    =   param_find("L1ATT_ENABLE_DEBUG");
-	_params_handles.inertia_xx   =   param_find("L1ATT_INERTIA_XX");
-	_params_handles.inertia_xy   =   param_find("L1ATT_INERTIA_XY");
-	_params_handles.inertia_xz   =   param_find("L1ATT_INERTIA_XZ");
-	_params_handles.inertia_yy   =   param_find("L1ATT_INERTIA_YY");
-	_params_handles.inertia_yz   =   param_find("L1ATT_INERTIA_YZ");
-	_params_handles.inertia_zz   =   param_find("L1ATT_INERTIA_ZZ");
-  _params_handles.cT           =   param_find("L1ATT_CT");
-  _params_handles.motor_constant =  param_find("L1ATT_MOTOR_CONSTANT");
-  _params_handles.arm_length   =   param_find("L1ATT_ARM_LENGTH");
-  _params_handles.moment_scale  =  param_find("L1ATT_MOMENT_SCALE");
-  _params_handles.motor_spread_angle =  param_find("L1ATT_MOTOR_SPREAD_ANGLE");
-  _params_handles.pwm_min      =   param_find("L1ATT_PWM_MIN");
-  _params_handles.pwm_max      =   param_find("L1ATT_PWM_MAX");
-  _params_handles.rpm_min      =   param_find("L1ATT_RPM_MIN");
-  _params_handles.rpm_max      =   param_find("L1ATT_RPM_MAX");
-	_params_handles.l1_bandwidth_x  =   param_find("L1ATT_BANDWIDTH_X");
-	_params_handles.l1_bandwidth_y  =   param_find("L1ATT_BANDWIDTH_Y");
-	_params_handles.l1_bandwidth_z  =   param_find("L1ATT_BANDWIDTH_Z");
-	_params_handles.l1_observer_gain_x =   param_find("L1ATT_OBSERVER_GAIN_X");
-	_params_handles.l1_observer_gain_y =   param_find("L1ATT_OBSERVER_GAIN_Y");
-	_params_handles.l1_observer_gain_z =   param_find("L1ATT_OBSERVER_GAIN_Z");
-	_params_handles.l1_adaptation_gain =   param_find("L1ATT_ADAPTATION_GAIN");
-	_params_handles.l1_init_dist_x  =   param_find("L1ATT_INIT_DISTX");
-	_params_handles.l1_init_dist_y  =   param_find("L1ATT_INIT_DISTY");
-	_params_handles.l1_init_dist_z  =   param_find("L1ATT_INIT_DISTZ");
-	_params_handles.l1_engage_level =   param_find("L1ATT_ENGAGE_LEVEL");
+	_params_handles.enable_l1ac       =   param_find("MC_ENABLE_L1A");
+	_params_handles.use_active_l1ac   =   param_find("L1A_ACTIVE");
+	_params_handles.enable_debug    =   param_find("L1A_ENABLE_DEBUG");
+	_params_handles.inertia_xx   =   param_find("L1A_INERTIA_XX");
+	_params_handles.inertia_xy   =   param_find("L1A_INERTIA_XY");
+	_params_handles.inertia_xz   =   param_find("L1A_INERTIA_XZ");
+	_params_handles.inertia_yy   =   param_find("L1A_INERTIA_YY");
+	_params_handles.inertia_yz   =   param_find("L1A_INERTIA_YZ");
+	_params_handles.inertia_zz   =   param_find("L1A_INERTIA_ZZ");
+  _params_handles.cT           =   param_find("L1A_CT");
+  _params_handles.motor_constant =  param_find("L1A_MOTOR_CONSTANT");
+  _params_handles.arm_length   =   param_find("L1A_ARM_LENGTH");
+  _params_handles.moment_scale  =  param_find("L1A_MOMENT_SCALE");
+  _params_handles.motor_spread_angle =  param_find("L1A_MOTOR_SPREAD_ANGLE");
+  _params_handles.pwm_min      =   param_find("L1A_PWM_MIN");
+  _params_handles.pwm_max      =   param_find("L1A_PWM_MAX");
+  _params_handles.rpm_min      =   param_find("L1A_RPM_MIN");
+  _params_handles.rpm_max      =   param_find("L1A_RPM_MAX");
+	_params_handles.l1_bandwidth_x  =   param_find("L1A_BANDWIDTH_X");
+	_params_handles.l1_bandwidth_y  =   param_find("L1A_BANDWIDTH_Y");
+	_params_handles.l1_bandwidth_z  =   param_find("L1A_BANDWIDTH_Z");
+	_params_handles.l1_observer_gain_x =   param_find("L1A_OBSERVER_GAIN_X");
+	_params_handles.l1_observer_gain_y =   param_find("L1A_OBSERVER_GAIN_Y");
+	_params_handles.l1_observer_gain_z =   param_find("L1A_OBSERVER_GAIN_Z");
+	_params_handles.l1_adaptation_gain =   param_find("L1A_ADAPTATION_GAIN");
+	_params_handles.l1_init_dist_x  =   param_find("L1A_INIT_DISTX");
+	_params_handles.l1_init_dist_y  =   param_find("L1A_INIT_DISTY");
+	_params_handles.l1_init_dist_z  =   param_find("L1A_INIT_DISTZ");
+	_params_handles.l1_engage_level =   param_find("L1A_ENGAGE_LEVEL");
 
 	/* fetch initial parameter values */
 	parameters_update();
@@ -1034,26 +1034,26 @@ MulticopterAttitudeControl::control_attitude_rates(float dt)
 
 		if (_params.enable_debug) {
 			/* publish debug data*/
-			_l1_adaptive_debug.timestamp = hrt_absolute_time();
-			_l1_adaptive_debug.avl[0]  = _avlhat(0);
-			_l1_adaptive_debug.avl[1]  = _avlhat(1);
-			_l1_adaptive_debug.avl[2]  = _avlhat(2);
-			_l1_adaptive_debug.rpm[0]  = _rpmhat(0);
-			_l1_adaptive_debug.rpm[1]  = _rpmhat(1);
-			_l1_adaptive_debug.rpm[2]  = _rpmhat(2);
-			_l1_adaptive_debug.rpm[3]  = _rpmhat(3);
-			_l1_adaptive_debug.dst[0]  = _dsthat(0);
-			_l1_adaptive_debug.dst[1]  = _dsthat(1);
-			_l1_adaptive_debug.dst[2]  = _dsthat(2);
-			_l1_adaptive_debug.lpd[0]  = _lpd(0);
-			_l1_adaptive_debug.lpd[1]  = _lpd(1);
-			_l1_adaptive_debug.lpd[2]  = _lpd(2);
+			_l1_angvel_debug.timestamp = hrt_absolute_time();
+			_l1_angvel_debug.avl[0]  = _avlhat(0);
+			_l1_angvel_debug.avl[1]  = _avlhat(1);
+			_l1_angvel_debug.avl[2]  = _avlhat(2);
+			_l1_angvel_debug.rpm[0]  = _rpmhat(0);
+			_l1_angvel_debug.rpm[1]  = _rpmhat(1);
+			_l1_angvel_debug.rpm[2]  = _rpmhat(2);
+			_l1_angvel_debug.rpm[3]  = _rpmhat(3);
+			_l1_angvel_debug.dst[0]  = _dsthat(0);
+			_l1_angvel_debug.dst[1]  = _dsthat(1);
+			_l1_angvel_debug.dst[2]  = _dsthat(2);
+			_l1_angvel_debug.lpd[0]  = _lpd(0);
+			_l1_angvel_debug.lpd[1]  = _lpd(1);
+			_l1_angvel_debug.lpd[2]  = _lpd(2);
 
-			if (_l1_adaptive_debug_pub != nullptr) {
-				orb_publish(ORB_ID(l1_adaptive_debug), _l1_adaptive_debug_pub, &_l1_adaptive_debug);
+			if (_l1_angvel_debug_pub != nullptr) {
+				orb_publish(ORB_ID(l1_angvel_debug), _l1_angvel_debug_pub, &_l1_angvel_debug);
 
 			} else {
-				_l1_adaptive_debug_pub = orb_advertise(ORB_ID(l1_adaptive_debug), &_l1_adaptive_debug);
+				_l1_angvel_debug_pub = orb_advertise(ORB_ID(l1_angvel_debug), &_l1_angvel_debug);
 			}
 
 		}

@@ -491,9 +491,9 @@ struct log_MACS_s {
 	float yaw_rate_integ;
 };
 
-/* --- L1AT - Attitude L1 ADAPTIVE CONTROLLER DEBUG --- */
-#define LOG_L1AT_MSG 49
-struct log_L1AT_s {
+/* --- L1A - Attitude L1 ADAPTIVE CONTROLLER DEBUG --- */
+#define LOG_L1A_MSG 49
+struct log_L1A_s {
 	float avl[3];
 	float rpm[4];
 	float dst[3];
@@ -607,7 +607,7 @@ static const struct log_format_s log_formats[] = {
 	LOG_FORMAT(TSYN, "Q", 		"TimeOffset"),
 	LOG_FORMAT(MACS, "fff", "RRint,PRint,YRint"),
 	LOG_FORMAT(FFLW, "ffffffffff", "XIntg,YIntg,VelX,VelY,RateX,RateY,RateZ,BiasX,BiasY,BiasZ"),
-	LOG_FORMAT(L1AT, "fffffffffffff", "avlx,avly,avlz,rpm1,rpm2,rpm3,rpm4,dstx,dsty,dstz,lpdx,lpdy,lpdz"),
+	LOG_FORMAT(L1A, "fffffffffffff", "avlx,avly,avlz,rpm1,rpm2,rpm3,rpm4,dstx,dsty,dstz,lpdx,lpdy,lpdz"),
 
 	/* system-level messages, ID >= 0x80 */
 	/* FMT: don't write format of format message, it's useless */
