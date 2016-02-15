@@ -454,7 +454,7 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_params.inertia_inv.identity();
 	_params.observer_gain.zero();
 	_params.adaptation_gain = 0.0f;
-	_params.engage_level = 0.0f;
+	_params.engage_level = 1.0f;
   _params.mixer.zero();
   _params.motor_constant = 0.0f;
   _params.cT = 0.0f;
@@ -635,7 +635,7 @@ MulticopterAttitudeControl::parameters_update()
 
 	_actuators_0_circuit_breaker_enabled = circuit_breaker_enabled("CBRK_RATE_CTRL", CBRK_RATE_CTRL_KEY);
 
-	/* L1 adaptive parameters */
+	/* Parameters for L1 adaptive control */
 	param_get(_params_handles.enable_l1ac, &_params.enable_l1ac);
   param_get(_params_handles.use_active_l1ac, &_params.use_active_l1ac);
   param_get(_params_handles.enable_debug, &_params.enable_debug);
@@ -669,7 +669,6 @@ MulticopterAttitudeControl::parameters_update()
 	_params.inertia_inv = _params.inertia.inversed();
 	_params.inertia.set(Ivalues);
 
-	/* Parameters for the L1 adaptive control */
 	param_get(_params_handles.l1_bandwidth_x, &v);
 	_params.bandwidth(0) = v;
 	param_get(_params_handles.l1_bandwidth_y, &v);
@@ -992,7 +991,7 @@ MulticopterAttitudeControl::control_attitude_rates(float dt)
 	rates(1) = _ctrl_state.pitch_rate;
 	rates(2) = _ctrl_state.yaw_rate;
 
-	/* reset state estimator if disarmed */
+	/* reset state observer if vehicle is disarmed */
 	if (!_armed.armed || !_vehicle_status.is_rotary_wing) {
     _in_nominal_flight = false;
 		if (_params.enable_l1ac) {
@@ -1051,7 +1050,6 @@ MulticopterAttitudeControl::control_attitude_rates(float dt)
 
 			if (_l1_angvel_debug_pub != nullptr) {
 				orb_publish(ORB_ID(l1_angvel_debug), _l1_angvel_debug_pub, &_l1_angvel_debug);
-
 			} else {
 				_l1_angvel_debug_pub = orb_advertise(ORB_ID(l1_angvel_debug), &_l1_angvel_debug);
 			}

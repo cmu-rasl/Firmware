@@ -67,6 +67,7 @@
 
 #include <uORB/topics/manual_control_setpoint.h>
 #include <uORB/topics/actuator_controls.h>
+#include <uORB/topics/actuator_outputs.h>
 #include <uORB/topics/vehicle_rates_setpoint.h>
 #include <uORB/topics/control_state.h>
 #include <uORB/topics/mc_virtual_attitude_setpoint.h>
@@ -77,6 +78,7 @@
 #include <uORB/topics/position_setpoint_triplet.h>
 #include <uORB/topics/vehicle_global_velocity_setpoint.h>
 #include <uORB/topics/vehicle_local_position_setpoint.h>
+#include <uORB/topics/l1_linvel_debug.h>
 
 #include <systemlib/systemlib.h>
 #include <mathlib/mathlib.h>
@@ -137,10 +139,12 @@ private:
 	int		_pos_sp_triplet_sub;		/**< position setpoint triplet */
 	int		_local_pos_sp_sub;		/**< offboard local position setpoint */
 	int		_global_vel_sp_sub;		/**< offboard global velocity setpoint */
+  int   _actuator_outputs_sub; /** < PWM subscription */
 
 	orb_advert_t	_att_sp_pub;			/**< attitude setpoint publication */
 	orb_advert_t	_local_pos_sp_pub;		/**< vehicle local position setpoint publication */
 	orb_advert_t	_global_vel_sp_pub;		/**< vehicle global velocity setpoint publication */
+	orb_advert_t  _l1_linvel_debug_pub; /**< linear velocity l1 adaptive control debug publication */
 
 	orb_id_t _attitude_setpoint_id;
 
@@ -154,6 +158,8 @@ private:
 	struct position_setpoint_triplet_s		_pos_sp_triplet;	/**< vehicle global position setpoint triplet */
 	struct vehicle_local_position_setpoint_s	_local_pos_sp;		/**< vehicle local position setpoint */
 	struct vehicle_global_velocity_setpoint_s	_global_vel_sp;		/**< vehicle global velocity setpoint */
+	struct l1_linvel_debug_s       _l1_linvel_debug; /**< linear velocity l1 adaptive control debug info */
+  struct actuator_outputs_s      _actuator_outputs; /**< actuator outputs */
 
 	control::BlockParamFloat _manual_thr_min;
 	control::BlockParamFloat _manual_thr_max;
@@ -194,8 +200,28 @@ private:
     param_t use_gravity_offset;
     param_t mass;
     param_t gravity_magnitude;
-    param_t max_thrust_newtons;
     param_t takeoff_vzsp_thresh;
+
+    param_t enable_l1ac;
+    param_t use_active_l1ac;
+    param_t enable_debug;
+    param_t cT;
+    param_t motor_constant;
+    param_t pwm_min;
+    param_t pwm_max;
+    param_t rpm_min;
+    param_t rpm_max;
+    param_t l1_bandwidth_x;
+		param_t l1_bandwidth_y;
+		param_t l1_bandwidth_z;
+		param_t l1_observer_gain_x;
+		param_t l1_observer_gain_y;
+		param_t l1_observer_gain_z;
+		param_t l1_adaptation_gain;
+		param_t l1_init_dist_x;
+		param_t l1_init_dist_y;
+		param_t l1_init_dist_z;
+		param_t l1_engage_level;
 	}		_params_handles;		/**< handles for interesting parameters */
 
 	struct {
@@ -216,8 +242,23 @@ private:
 		float hold_max_z;
 		float acc_hor_max;
     float takeoff_vzsp_thresh;
+    float cT;
+    float mass;
+    float gravity_magnitude;
+    float motor_constant;
+    float pwm_min;
+    float pwm_max;
+    float rpm_min;
+    float rpm_max;
+    float rpm_over_pwm;
+    float max_thrust;
+		float adaptation_gain;
+		float engage_level;
 
     bool use_gravity_offset;
+		bool enable_l1ac;
+		bool use_active_l1ac;
+    bool enable_debug;
 
 		math::Vector<3> pos_p;
 		math::Vector<3> vel_p;
@@ -227,6 +268,9 @@ private:
 		math::Vector<3> vel_max;
 		math::Vector<3> sp_offs_max;
 		math::Vector<3> normalized_gravity;
+		math::Vector<3> init_dist;
+    math::Vector<3> bandwidth;
+		math::Vector<3> observer_gain;
 	}		_params;
 
 	struct map_projection_reference_s _ref_pos;
@@ -241,6 +285,7 @@ private:
 	bool _run_pos_control;
 	bool _run_alt_control;
   bool _in_air;
+  bool _in_nominal_flight;
 
 	math::Vector<3> _pos;
 	math::Vector<3> _pos_sp;
@@ -257,6 +302,11 @@ private:
 	bool _in_landing;
 	float _vel_z_lp;
 	float _acc_z_lp;
+
+	math::Vector<3>     _velhat;        /**< linear velocity estimate for l1 adaptive controller */
+  math::Vector<4>     _rpmhat;        /**< RPM estimate */
+  math::Vector<3>     _dsthat;        /**< metric acceleration disturbance estimate for l1 adaptive controller */
+	math::Vector<3>     _lpd;           /**< low pass filtered metric acceleration distrubance estimate */
 
 	/**
 	 * Update our local parameter cache.
@@ -364,6 +414,7 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	_att_sp_pub(nullptr),
 	_local_pos_sp_pub(nullptr),
 	_global_vel_sp_pub(nullptr),
+	_l1_linvel_debug_pub(nullptr),
 	_attitude_setpoint_id(0),
 	_manual_thr_min(this, "MANTHR_MIN"),
 	_manual_thr_max(this, "MANTHR_MAX"),
@@ -381,6 +432,7 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	_run_pos_control(true),
 	_run_alt_control(true),
   _in_air(false),
+  _in_nominal_flight(false),
 	_yaw(0.0f),
 	_in_landing(false),
 	_vel_z_lp(0),
@@ -397,7 +449,8 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	memset(&_pos_sp_triplet, 0, sizeof(_pos_sp_triplet));
 	memset(&_local_pos_sp, 0, sizeof(_local_pos_sp));
 	memset(&_global_vel_sp, 0, sizeof(_global_vel_sp));
-
+	memset(&_l1_linvel_debug, 0, sizeof(_l1_linvel_debug));
+	memset(&_actuator_outputs, 0, sizeof(_actuator_outputs));
 	memset(&_ref_pos, 0, sizeof(_ref_pos));
 
   _params.use_gravity_offset = false;
@@ -410,7 +463,6 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	_params.vel_ff.zero();
 	_params.sp_offs_max.zero();
   _params.normalized_gravity.zero();
-  _params.normalized_gravity(2) = 1.0f;
 
 	_pos.zero();
 	_pos_sp.zero();
@@ -422,6 +474,28 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	_vel_err_d.zero();
 
 	_R.identity();
+
+  _velhat.zero();
+  _rpmhat.zero();
+  _dsthat.zero();
+  _lpd.zero();
+
+	_params.enable_l1ac = false;
+	_params.use_active_l1ac = false;
+	_params.enable_debug = false;
+	_params.init_dist.zero();
+	_params.bandwidth.zero();
+	_params.observer_gain.zero();
+	_params.adaptation_gain = 0.0f;
+	_params.engage_level = 1.0f;
+  _params.motor_constant = 0.0f;
+  _params.cT = 0.0f;
+  _params.pwm_min = 1000.0f;
+  _params.pwm_max = 2000.0f;
+  _params.rpm_min = 1000.0f;
+  _params.rpm_max = 10000.0f;
+  _params.rpm_over_pwm = 9.0f;
+  _params.max_thrust = 9.9f;
 
 	_params_handles.thr_min		= param_find("MPC_THR_MIN");
 	_params_handles.thr_max		= param_find("MPC_THR_MAX");
@@ -454,8 +528,28 @@ MulticopterPositionControl::MulticopterPositionControl() :
   _params_handles.use_gravity_offset = param_find("MPC_USE_GRAV_FF");
   _params_handles.mass = param_find("MPC_TOTAL_MASS");
   _params_handles.gravity_magnitude = param_find("MPC_GRAVITY");
-  _params_handles.max_thrust_newtons = param_find("MPC_MAX_THR_N");
   _params_handles.takeoff_vzsp_thresh = param_find("MPC_TKOFF_VZSP");
+
+	_params_handles.enable_l1ac       =   param_find("MPC_ENABLE_L1V");
+	_params_handles.use_active_l1ac   =   param_find("L1V_ACTIVE");
+	_params_handles.enable_debug    =   param_find("L1V_ENABLE_DEBUG");
+  _params_handles.cT           =   param_find("L1V_CT");
+  _params_handles.motor_constant =  param_find("L1V_MOTOR_CONSTANT");
+  _params_handles.pwm_min      =   param_find("L1V_PWM_MIN");
+  _params_handles.pwm_max      =   param_find("L1V_PWM_MAX");
+  _params_handles.rpm_min      =   param_find("L1V_RPM_MIN");
+  _params_handles.rpm_max      =   param_find("L1V_RPM_MAX");
+	_params_handles.l1_bandwidth_x  =   param_find("L1V_BANDWIDTH_X");
+	_params_handles.l1_bandwidth_y  =   param_find("L1V_BANDWIDTH_Y");
+	_params_handles.l1_bandwidth_z  =   param_find("L1V_BANDWIDTH_Z");
+	_params_handles.l1_observer_gain_x =   param_find("L1V_OBSERVER_GAIN_X");
+	_params_handles.l1_observer_gain_y =   param_find("L1V_OBSERVER_GAIN_Y");
+	_params_handles.l1_observer_gain_z =   param_find("L1V_OBSERVER_GAIN_Z");
+	_params_handles.l1_adaptation_gain =   param_find("L1V_ADAPTATION_GAIN");
+	_params_handles.l1_init_dist_x  =   param_find("L1V_INIT_DISTX");
+	_params_handles.l1_init_dist_y  =   param_find("L1V_INIT_DISTY");
+	_params_handles.l1_init_dist_z  =   param_find("L1V_INIT_DISTZ");
+	_params_handles.l1_engage_level =   param_find("L1V_ENGAGE_LEVEL");
 
 	/* fetch initial parameter values */
 	parameters_update(true);
@@ -561,19 +655,66 @@ MulticopterPositionControl::parameters_update(bool force)
 		param_get(_params_handles.acc_hor_max, &v);
 		_params.acc_hor_max = v;
 
-    // normalized_gravity = [0,0,mass*gravity_magnitude/(max thrust from all rotors)]
-    _params.normalized_gravity(2) = 1.0f;
     param_get(_params_handles.mass, &v);
-    _params.normalized_gravity(2) *= v;
+    _params.mass = v;
     param_get(_params_handles.gravity_magnitude, &v);
-    _params.normalized_gravity(2) *= v;
-    param_get(_params_handles.max_thrust_newtons, &v);
-    _params.normalized_gravity(2) /= v;
+    _params.gravity_magnitude = v;
 
     param_get(_params_handles.takeoff_vzsp_thresh, &v);
     _params.takeoff_vzsp_thresh = v;
 
 		_params.sp_offs_max = _params.vel_max.edivide(_params.pos_p) * 2.0f;
+
+    /* Parameters for L1 adaptive control */
+    param_get(_params_handles.enable_l1ac, &_params.enable_l1ac);
+    param_get(_params_handles.use_active_l1ac, &_params.use_active_l1ac);
+    param_get(_params_handles.enable_debug, &_params.enable_debug);
+
+    param_get(_params_handles.l1_bandwidth_x, &v);
+    _params.bandwidth(0) = v;
+    param_get(_params_handles.l1_bandwidth_y, &v);
+    _params.bandwidth(1) = v;
+    param_get(_params_handles.l1_bandwidth_z, &v);
+    _params.bandwidth(2) = v;
+
+    param_get(_params_handles.l1_observer_gain_x, &v);
+    _params.observer_gain(0) = v;
+    param_get(_params_handles.l1_observer_gain_y, &v);
+    _params.observer_gain(1) = v;
+    param_get(_params_handles.l1_observer_gain_z, &v);
+    _params.observer_gain(2) = v;
+
+    param_get(_params_handles.l1_adaptation_gain, &v);
+    _params.adaptation_gain = v;
+
+    param_get(_params_handles.l1_init_dist_x, &v);
+    _params.init_dist(0) = v;
+    param_get(_params_handles.l1_init_dist_y, &v);
+    _params.init_dist(1) = v;
+    param_get(_params_handles.l1_init_dist_z, &v);
+    _params.init_dist(2) = v;
+
+    param_get(_params_handles.l1_engage_level, &v);
+    _params.engage_level = v;
+
+    param_get(_params_handles.cT, &v);
+    _params.cT = v;
+    param_get(_params_handles.motor_constant, &v);
+    _params.motor_constant = v;
+
+    param_get(_params_handles.pwm_min, &v);
+    _params.pwm_min = v;
+    param_get(_params_handles.pwm_max, &v);
+    _params.pwm_max = v;
+    param_get(_params_handles.rpm_min, &v);
+    _params.rpm_min = v;
+    param_get(_params_handles.rpm_max, &v);
+    _params.rpm_max = v;
+    _params.rpm_over_pwm = (_params.rpm_max - _params.rpm_min)/(_params.pwm_max - _params.pwm_min);
+
+    _params.max_thrust = 4.0f * _params.cT * _params.rpm_max * _params.rpm_max;
+
+    _params.normalized_gravity(2) = _params.mass * _params.gravity_magnitude / _params.max_thrust;
 
 		/* mc attitude control parameters*/
 		/* manual control scale */
@@ -1140,7 +1281,7 @@ MulticopterPositionControl::task_main()
 	_pos_sp_triplet_sub = orb_subscribe(ORB_ID(position_setpoint_triplet));
 	_local_pos_sp_sub = orb_subscribe(ORB_ID(vehicle_local_position_setpoint));
 	_global_vel_sp_sub = orb_subscribe(ORB_ID(vehicle_global_velocity_setpoint));
-
+  _actuator_outputs_sub = orb_subscribe(ORB_ID(actuator_outputs));
 
 	parameters_update(true);
 
@@ -1477,6 +1618,86 @@ MulticopterPositionControl::task_main()
              thrust_sp -= _params.normalized_gravity;
           }
 
+          /* get latest RPM commands */
+          math::Vector<4> rpm_cmd;
+
+          if (_params.enable_l1ac) {
+            /* get latest PWM commands */
+            bool updated;
+          	orb_check(_actuator_outputs_sub, &updated);
+
+          	if (updated) {
+          		orb_copy(ORB_ID(actuator_outputs), _actuator_outputs_sub, &_actuator_outputs);
+          	}
+
+            /* this assumes PWM signals live in channels 5 to 8 (indices 4,5,6,7) */
+            for (int i = 0; i < 4; i++) {
+              float pwm_cmd = _actuator_outputs.output[i+4];
+              rpm_cmd(i) = _params.rpm_over_pwm * (pwm_cmd - _params.pwm_min) + _params.rpm_min;
+            }
+          }
+
+          /* reset state observer if vehicle is disarmed */
+         	if (!_control_mode.flag_armed) {
+            _in_nominal_flight = false;
+         		if (_params.enable_l1ac) {
+         			_velhat = _vel;
+              _dsthat = _params.init_dist;
+         			_lpd = _dsthat;
+              _rpmhat = rpm_cmd;
+         		}
+         	}
+
+          /* Run Luenberger observer */
+          if (_params.enable_l1ac && _in_nominal_flight) {
+
+            /* Linear Velocity Error */
+            math::Vector<3> verr = _velhat - _vel;
+
+            math::Vector<3> body_thrust;
+            body_thrust.zero();
+            body_thrust(2) = - (_rpmhat * _rpmhat) * _params.cT / _params.mass;
+
+          	math::Vector<3> velhatdot = _R * body_thrust + _dsthat - _params.observer_gain.emult(verr);
+            velhatdot(2) += _params.gravity_magnitude;
+
+            math::Vector<4> rpmhatdot = (rpm_cmd - _rpmhat) * _params.motor_constant;
+            math::Vector<3> dsthatdot = - verr * _params.adaptation_gain;
+
+          	_velhat += velhatdot * dt;
+            _rpmhat += rpmhatdot * dt;
+          	_dsthat += dsthatdot * dt;
+          	_lpd += _params.bandwidth.emult(_dsthat - _lpd) * dt;
+
+          	if (_params.enable_debug) {
+          		/* publish debug data*/
+          		_l1_linvel_debug.timestamp = hrt_absolute_time();
+          		_l1_linvel_debug.vel[0]  = _velhat(0);
+          		_l1_linvel_debug.vel[1]  = _velhat(1);
+          		_l1_linvel_debug.vel[2]  = _velhat(2);
+          		_l1_linvel_debug.rpm[0]  = _rpmhat(0);
+          		_l1_linvel_debug.rpm[1]  = _rpmhat(1);
+          		_l1_linvel_debug.rpm[2]  = _rpmhat(2);
+          		_l1_linvel_debug.rpm[3]  = _rpmhat(3);
+          		_l1_linvel_debug.dst[0]  = _dsthat(0);
+          		_l1_linvel_debug.dst[1]  = _dsthat(1);
+          		_l1_linvel_debug.dst[2]  = _dsthat(2);
+          		_l1_linvel_debug.lpd[0]  = _lpd(0);
+          		_l1_linvel_debug.lpd[1]  = _lpd(1);
+          		_l1_linvel_debug.lpd[2]  = _lpd(2);
+
+          		if (_l1_linvel_debug_pub != nullptr) {
+          			orb_publish(ORB_ID(l1_linvel_debug), _l1_linvel_debug_pub, &_l1_linvel_debug);
+          		} else {
+          			_l1_linvel_debug_pub = orb_advertise(ORB_ID(l1_linvel_debug), &_l1_linvel_debug);
+          		}
+          	}
+          }
+
+          if (_params.enable_l1ac && _params.use_active_l1ac && _in_nominal_flight) {
+            thrust_sp -= _lpd * (_params.mass / _params.max_thrust);
+	        }
+
 					if (!_control_mode.flag_control_velocity_enabled) {
 						thrust_sp(0) = 0.0f;
 						thrust_sp(1) = 0.0f;
@@ -1614,6 +1835,10 @@ MulticopterPositionControl::task_main()
 
 						thrust_abs = thr_max;
 					}
+
+          if (thrust_abs > _params.engage_level) {
+            _in_nominal_flight = true;
+          }
 
 					/* update integrals */
 					if (_control_mode.flag_control_velocity_enabled && !saturation_xy) {

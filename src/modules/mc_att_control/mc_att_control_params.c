@@ -483,7 +483,7 @@ PARAM_DEFINE_FLOAT(L1A_RPM_MIN, 0.0f);
 PARAM_DEFINE_FLOAT(L1A_RPM_MAX, 0.0f);
 
 /**
-* Bandwidth of low pass filter for x component of torque estimate
+* Bandwidth of low pass filter for x component of torque disturbance estimate
 *
 * @unit ??
 * @min 0.0
@@ -493,7 +493,7 @@ PARAM_DEFINE_FLOAT(L1A_RPM_MAX, 0.0f);
 PARAM_DEFINE_FLOAT(L1A_BANDWIDTH_X, 0.0f);
 
 /**
-* Bandwidth of low pass filter for y component of torque estimate
+* Bandwidth of low pass filter for y component of torque disturbance estimate
 *
 * @unit ??
 * @min 0.0
@@ -503,7 +503,7 @@ PARAM_DEFINE_FLOAT(L1A_BANDWIDTH_X, 0.0f);
 PARAM_DEFINE_FLOAT(L1A_BANDWIDTH_Y, 0.0f);
 
 /**
-* Bandwidth of low pass filter for z component of torque estimate
+* Bandwidth of low pass filter for z component of torque disturbance estimate
 *
 * @unit ??
 * @min 0.0

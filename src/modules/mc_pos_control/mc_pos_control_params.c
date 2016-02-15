@@ -357,15 +357,6 @@ PARAM_DEFINE_FLOAT(MPC_TOTAL_MASS, 0.0f);
 PARAM_DEFINE_FLOAT(MPC_GRAVITY, 9.80665f);
 
 /**
- * Magnitude of maximum thrust from all rotors
- *
- * @unit N
- * @min 0.00001
- * @group Multicopter Position Control
- */
-PARAM_DEFINE_FLOAT(MPC_MAX_THR_N, 99999.9f);
-
-/**
  * Magnitude of minimum setpoint z velocity at which the vehicle is
  * considered to be in takeoff.
  *
@@ -374,3 +365,196 @@ PARAM_DEFINE_FLOAT(MPC_MAX_THR_N, 99999.9f);
  * @group Multicopter Position Control
  */
 PARAM_DEFINE_FLOAT(MPC_TKOFF_VZSP, 0.05f);
+
+/**
+* Parameter to enable Linear Velocity L1 adaptive control
+*
+* @min 0
+* @max 1
+* @group Multicoptor Position Control
+*/
+PARAM_DEFINE_INT32(MPC_ENABLE_L1V, 0);
+
+/**
+* Parameter to enable disturbance accelerations to be cancelled out by velocity controller
+*
+* @min 0
+* @max 1
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_INT32(L1V_ACTIVE, 0);
+
+/**
+* Parameter to enable publishing Linear Velocity L1 adaptive control debug information
+*
+* @min 0
+* @max 1
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_INT32(L1V_ENABLE_DEBUG, 0);
+
+/**
+* Thrust coefficient, ratio of force in newtons over RPM^2
+*
+* @unit N
+* @min 0.0
+* @max 9999.9
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_CT, 0.0f);
+
+/**
+* Motor constant
+*
+* @unit ??
+* @min 0.0
+* @max 9999.9
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_MOTOR_CONSTANT, 0.0f);
+
+/**
+* Minimum PWM
+*
+* @unit microseconds
+* @min 0.0
+* @max 9999.9
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_PWM_MIN, 0.0f);
+
+/**
+* Maximum PWM
+*
+* @unit microseconds
+* @min 0.0
+* @max 9999.9
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_PWM_MAX, 0.0f);
+
+/**
+* RPM that corresponds to minimum PWM
+*
+* @unit
+* @min 0.0
+* @max 99999.9
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_RPM_MIN, 0.0f);
+
+/**
+* RPM that corresponds to maximum PWM
+*
+* @unit
+* @min 0.0
+* @max 99999.9
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_RPM_MAX, 0.0f);
+
+/**
+* Bandwidth of low pass filter for x component of acceleration disturbance estimate
+*
+* @unit ??
+* @min 0.0
+* @max 1000.0
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_BANDWIDTH_X, 5.0f);
+
+/**
+* Bandwidth of low pass filter for y component of acceleration disturbance estimate
+*
+* @unit ??
+* @min 0.0
+* @max 1000.0
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_BANDWIDTH_Y, 5.0f);
+
+/**
+* Bandwidth of low pass filter for z component of acceleration disturbance estimate
+*
+* @unit ??
+* @min 0.0
+* @max 1000.0
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_BANDWIDTH_Z, 5.0f);
+
+/**
+* Gain on state predictor in X
+*
+* @min 0.0
+* @max 1000.0
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_OBSERVER_GAIN_X, 100.0f);
+
+/**
+* Gain on state predictor in Y
+*
+* @min 0.0
+* @max 1000.0
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_OBSERVER_GAIN_Y, 100.0f);
+
+/**
+* Gain on state predictor in Z
+*
+* @unit ??
+* @min 0.0
+* @max 1000.0
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_OBSERVER_GAIN_Z, 100.0f);
+
+/**
+* Adaptation gain
+*
+* @min 0.0
+* @max 10000.0
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_ADAPTATION_GAIN, 3000.0f);
+
+/**
+* Initial acceleration disturbance estimate in X
+*
+* @unit m/s^2
+* @min 0.0
+* @max 100.0
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_INIT_DISTX, 0.0f);
+
+/**
+* Initial acceleration disturbance estimate in Y
+*
+* @unit m/s^2
+* @min 0.0
+* @max 100.0
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_INIT_DISTY, 0.0f);
+
+/**
+* Initial acceleration disturbance estimate in Z
+*
+* @unit m/s^2
+* @min 0.0
+* @max 100.0
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_INIT_DISTZ, 0.0f);
+
+/**
+* Threshold on normalized thrust before which L1 is initialized
+*
+* @min 0.0
+* @max 1.0
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_ENGAGE_LEVEL, 0.37f);
