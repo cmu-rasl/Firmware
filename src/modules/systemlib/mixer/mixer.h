@@ -131,7 +131,9 @@
 #include <px4_config.h>
 #include "drivers/drv_mixer.h"
 
+#include <uORB/uORB.h>
 #include <uORB/topics/multirotor_motor_limits.h>
+#include <uORB/topics/battery_status.h>
 
 #include "mixer_load.h"
 
@@ -486,9 +488,11 @@ public:
 	 * 				low end of their control range.
 	 * @param pwm_min      Minimum PWM signal in microseconds
    * @param pwm_max      Maximum PWM signal in microseconds
-   * @param rpm_min      Minimum RPM
    * @param rpm_max      Maximum RPM
    * @param cT           Thrust coefficient (force = cT*RPM^2)
+   * @param rpm_per_volt Coefficient A in the relationship RPM = A*volts + B*pwm + C
+   * @param rpm_per_pwm  Coefficient B in the relationship RPM = A*volts + B*pwm + C
+   * @param rpm_at_zero_pwm_and_volts Coefficient C in the relationship RPM = A*volts + B*pwm + C
    */
 	MultirotorMixer(ControlCallback control_cb,
 		uintptr_t cb_handle,
@@ -499,9 +503,11 @@ public:
 		float idle_speed,
     float pwm_min,
     float pwm_max,
-    float rpm_min,
     float rpm_max,
-    float cT);
+    float cT,
+    float rpm_per_volt,
+    float rpm_per_pwm,
+    float rpm_at_zero_pwm_and_volts);
 
   ~MultirotorMixer();
 
@@ -537,14 +543,18 @@ private:
 
   float       _pwm_min;
   float       _pwm_max;
-  float       _rpm_min;
   float       _rpm_max;
   float       _cT;
-  float       _pwm_over_rpm;
   float       _f_max;
+  float       _rpm_coeff;
+  float       _voltage_coeff;
+  float       _affine_coeff;
 
 	orb_advert_t			_limits_pub;
 	multirotor_motor_limits_s 	_limits;
+
+  int _battery_status_sub; /** < battery voltage subscription */
+  struct battery_status_s _battery_status;
 
 	unsigned			_rotor_count;
 	const Rotor			*_rotors;

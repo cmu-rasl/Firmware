@@ -86,9 +86,11 @@ MultirotorMixer::MultirotorMixer(ControlCallback control_cb,
 				 float idle_speed,
          float pwm_min,
          float pwm_max,
-         float rpm_min,
          float rpm_max,
-         float cT) :
+         float cT,
+         float rpm_per_volt,
+         float rpm_per_pwm,
+         float rpm_at_zero_pwm_and_volts) :
 	Mixer(control_cb, cb_handle),
 	_roll_scale(roll_scale),
 	_pitch_scale(pitch_scale),
@@ -96,15 +98,18 @@ MultirotorMixer::MultirotorMixer(ControlCallback control_cb,
 	_idle_speed(-1.0f + idle_speed * 2.0f),	/* shift to output range here to avoid runtime calculation */
   _pwm_min(pwm_min),
   _pwm_max(pwm_max),
-  _rpm_min(rpm_min),
   _rpm_max(rpm_max),
   _cT(cT),
 	_limits_pub(),
+  _battery_status_sub(-1),
 	_rotor_count(_config_rotor_count[(MultirotorGeometryUnderlyingType)geometry]),
 	_rotors(_config_index[(MultirotorGeometryUnderlyingType)geometry])
 {
-  _pwm_over_rpm = (_pwm_max - _pwm_min) / (_rpm_max - _rpm_min);
   _f_max = _cT * _rpm_max * _rpm_max;
+  _rpm_coeff = 1.0f / rpm_per_pwm;
+  _voltage_coeff = -rpm_per_volt / rpm_per_pwm;
+  _affine_coeff = -rpm_at_zero_pwm_and_volts / rpm_per_pwm;
+  memset(&_battery_status, 0, sizeof(_battery_status));
 }
 
 MultirotorMixer::~MultirotorMixer()
@@ -116,7 +121,7 @@ MultirotorMixer::from_text(Mixer::ControlCallback control_cb, uintptr_t cb_handl
 {
 	MultirotorGeometry geometry;
 	char geomname[8];
-	int s[10];
+	int s[13];
   int used;
 
 	/* enforce that the mixer ends with space or a new line */
@@ -137,7 +142,7 @@ MultirotorMixer::from_text(Mixer::ControlCallback control_cb, uintptr_t cb_handl
 
 	}
 
-	if (sscanf(buf, "R: %s %d %d %d %d %d %d %d %d %d %d%n", geomname, &s[0], &s[1], &s[2], &s[3], &s[4], &s[5], &s[6], &s[7], &s[8], &s[9], &used) != 11) {
+	if (sscanf(buf, "R: %s %d %d %d %d %d %d %d %d %d %d %d %d %d%n", geomname, &s[0], &s[1], &s[2], &s[3], &s[4], &s[5], &s[6], &s[7], &s[8], &s[9], &s[10], &s[11], &s[12], &used) != 14) {
 		debug("multirotor parse failed on '%s'", buf);
 		return nullptr;
 	}
@@ -218,9 +223,11 @@ MultirotorMixer::from_text(Mixer::ControlCallback control_cb, uintptr_t cb_handl
 		       s[3] / 10000.0f,
            s[4] / 1.0f,
            s[5] / 1.0f,
-           s[6] / 1.0f,
            s[7] / 1.0f,
-           s[8] / 1000.0f * powf(10.0f, s[9] / 1.0f));
+           s[8] / 1000.0f * powf(10.0f, s[9] / 1.0f),
+           s[9] / 1000.0f,
+           s[10] / 1000.0f,
+           s[11] / 1000.0f);
 }
 
 unsigned
@@ -369,6 +376,14 @@ MultirotorMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
 		}
 	}
 
+  /* check if there is a new battery status message */
+  bool updated;
+  orb_check(_battery_status_sub, &updated);
+
+  if (updated) {
+      orb_copy(ORB_ID(battery_status), _battery_status_sub, &_battery_status);
+  }
+
 	/* add yaw and scale outputs to range idle_speed...1 */
 	for (unsigned i = 0; i < _rotor_count; i++) {
 		outputs[i] = (roll * _rotors[i].roll_scale +
@@ -384,7 +399,7 @@ MultirotorMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
     float rpm = sqrtf(fnewtons / _cT);
 
     /* convert to PWMs */
-    float pwm = _pwm_over_rpm * (rpm - _rpm_min) + _pwm_min;
+    float pwm = _voltage_coeff * _battery_status.voltage_filtered_v + _rpm_coeff * rpm + _affine_coeff;
 
     /* normalize to [-1,1] range */
     float pwmout = 2.0f * (pwm - _pwm_min)/(_pwm_max - _pwm_min) - 1.0f;
