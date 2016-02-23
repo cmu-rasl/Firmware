@@ -414,37 +414,37 @@ PARAM_DEFINE_FLOAT(L1V_CT, 0.0f);
 PARAM_DEFINE_FLOAT(L1V_MOTOR_CONSTANT, 0.0f);
 
 /**
-* Minimum PWM
-*
-* @unit microseconds
-* @min 0.0
-* @max 9999.9
-* @group Linear Velocity L1 Adaptive Control
-*/
-PARAM_DEFINE_FLOAT(L1V_PWM_MIN, 0.0f);
-
-/**
-* Maximum PWM
-*
-* @unit microseconds
-* @min 0.0
-* @max 9999.9
-* @group Linear Velocity L1 Adaptive Control
-*/
-PARAM_DEFINE_FLOAT(L1V_PWM_MAX, 0.0f);
-
-/**
-* RPM that corresponds to minimum PWM
+* The coefficient A in the relationship RPM = A * PWM + B * voltage + C
 *
 * @unit
-* @min 0.0
+* @min -99999.9
 * @max 99999.9
 * @group Linear Velocity L1 Adaptive Control
 */
-PARAM_DEFINE_FLOAT(L1V_RPM_MIN, 0.0f);
+PARAM_DEFINE_FLOAT(L1V_RPM_PER_PWM, 0.0f);
 
 /**
-* RPM that corresponds to maximum PWM
+* The coefficient B in the relationship RPM = A * PWM + B * voltage + C
+*
+* @unit 1/volt
+* @min -99999.9
+* @max 99999.9
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_RPM_PER_VOLT, 0.0f);
+
+/**
+* The coefficient C in the relationship RPM = A * PWM + B * voltage + C
+*
+* @unit
+* @min -99999.9
+* @max 99999.9
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_RPM_AT_ZERO_PWM_AND_VOLTS, 0.0f);
+
+/**
+* RPM that corresponds to maximum PWM at some arbitrary voltage
 *
 * @unit
 * @min 0.0
@@ -452,6 +452,16 @@ PARAM_DEFINE_FLOAT(L1V_RPM_MIN, 0.0f);
 * @group Linear Velocity L1 Adaptive Control
 */
 PARAM_DEFINE_FLOAT(L1V_RPM_MAX, 0.0f);
+
+/**
+* Maximum battery voltage
+*
+* @unit Volts
+* @min 0.0
+* @max 100.0
+* @group Linear Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1V_VOLTAGE_MAX, 12.6f);
 
 /**
 * Bandwidth of low pass filter for x component of acceleration disturbance estimate

@@ -443,27 +443,37 @@ PARAM_DEFINE_FLOAT(L1A_MOMENT_SCALE, 0.0f);
 PARAM_DEFINE_FLOAT(L1A_MOTOR_SPREAD_ANGLE, 0.0f);
 
 /**
-* Minimum PWM
+* The coefficient A in the relationship RPM = A * PWM + B * voltage + C
 *
-* @unit microseconds
-* @min 0.0
-* @max 9999.9
+* @unit
+* @min -99999.9
+* @max 99999.9
 * @group Angular Velocity L1 Adaptive Control
 */
-PARAM_DEFINE_FLOAT(L1A_PWM_MIN, 0.0f);
+PARAM_DEFINE_FLOAT(L1A_RPM_PER_PWM, 0.0f);
 
 /**
-* Maximum PWM
+* The coefficient B in the relationship RPM = A * PWM + B * voltage + C
 *
-* @unit microseconds
-* @min 0.0
-* @max 9999.9
+* @unit 1/volt
+* @min -99999.9
+* @max 99999.9
 * @group Angular Velocity L1 Adaptive Control
 */
-PARAM_DEFINE_FLOAT(L1A_PWM_MAX, 0.0f);
+PARAM_DEFINE_FLOAT(L1A_RPM_PER_VOLT, 0.0f);
 
 /**
-* RPM that corresponds to minimum PWM
+* The coefficient C in the relationship RPM = A * PWM + B * voltage + C
+*
+* @unit
+* @min -99999.9
+* @max 99999.9
+* @group Angular Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1A_RPM_AT_ZERO_PWM_AND_VOLTS, 0.0f);
+
+/**
+* RPM that corresponds to minimum PWM at some arbitrary voltage
 *
 * @unit
 * @min 0.0
@@ -473,7 +483,7 @@ PARAM_DEFINE_FLOAT(L1A_PWM_MAX, 0.0f);
 PARAM_DEFINE_FLOAT(L1A_RPM_MIN, 0.0f);
 
 /**
-* RPM that corresponds to maximum PWM
+* RPM that corresponds to maximum PWM at some arbitrary voltage
 *
 * @unit
 * @min 0.0
@@ -481,6 +491,16 @@ PARAM_DEFINE_FLOAT(L1A_RPM_MIN, 0.0f);
 * @group Angular Velocity L1 Adaptive Control
 */
 PARAM_DEFINE_FLOAT(L1A_RPM_MAX, 0.0f);
+
+/**
+* Maximum battery voltage
+*
+* @unit Volts
+* @min 0.0
+* @max 100.0
+* @group Angular Velocity L1 Adaptive Control
+*/
+PARAM_DEFINE_FLOAT(L1A_VOLTAGE_MAX, 12.6f);
 
 /**
 * Bandwidth of low pass filter for x component of torque disturbance estimate

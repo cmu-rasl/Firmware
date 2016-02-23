@@ -83,6 +83,7 @@
 #include <uORB/topics/multirotor_motor_limits.h>
 #include <uORB/topics/mc_att_ctrl_status.h>
 #include <uORB/topics/l1_angvel_debug.h>
+#include <uORB/topics/battery_status.h>
 #include <systemlib/param/param.h>
 #include <systemlib/err.h>
 #include <systemlib/perf_counter.h>
@@ -140,6 +141,7 @@ private:
 	int		_vehicle_status_sub;	/**< vehicle status subscription */
 	int 	_motor_limits_sub;		/**< motor limits subscription */
   int   _actuator_outputs_sub; /** < PWM subscription */
+  int   _battery_status_sub; /** < battery voltage subscription */
 
 	orb_advert_t	_v_rates_sp_pub;		/**< rate setpoint publication */
 	orb_advert_t	_actuators_0_pub;		/**< attitude actuator controls publication */
@@ -164,6 +166,7 @@ private:
 	struct mc_att_ctrl_status_s 		_controller_status; /**< controller status */
 	struct l1_angvel_debug_s          _l1_angvel_debug; /**< angular velocity l1 adaptive control debug info */
   struct actuator_outputs_s      _actuator_outputs; /**< actuator outputs */
+  struct battery_status_s        _battery_status; /**< battery status */
 
 	perf_counter_t	_loop_perf;			/**< loop performance counter */
 	perf_counter_t	_controller_latency_perf;
@@ -227,10 +230,12 @@ private:
     param_t arm_length;
     param_t moment_scale;
     param_t motor_spread_angle;
-		param_t pwm_min;
-    param_t pwm_max;
+		param_t rpm_per_pwm;
+    param_t rpm_per_volt;
+    param_t rpm_at_zero_pwm_and_volts;
     param_t rpm_min;
     param_t rpm_max;
+    param_t voltage_max;
     param_t l1_bandwidth_x;
 		param_t l1_bandwidth_y;
 		param_t l1_bandwidth_z;
@@ -279,10 +284,12 @@ private:
     float               cT;            /**< thrust coefficient of motors, force [N] = cT * RPM^2 */
     float               motor_constant; /**< describes the motor RPM response */
     math::Matrix<3,4>   mixer;         /**< matrix that relates individual rotor forces to generated torque */
-    float               pwm_min;
-    float               pwm_max;
+    float               rpm_per_pwm;
+    float               rpm_per_volt;
+    float               rpm_at_zero_pwm_and_volts;
     float               rpm_min;
     float               rpm_max;
+    float               voltage_max;
     float               rpm_over_pwm;
     math::Vector<3>     max_torques;  /**< maximum torque about the 3 body axes */
 
@@ -352,6 +359,11 @@ private:
 	 */
 	void		actuator_outputs_poll();
 
+  /**
+	 * Check for battery status updates.
+	 */
+	void		battery_status_poll();
+
 	/**
 	 * Shim for calling task_main from task_create.
 	 */
@@ -383,6 +395,7 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_armed_sub(-1),
 	_vehicle_status_sub(-1),
   _actuator_outputs_sub(-1),
+  _battery_status_sub(-1),
 
 	/* publications */
 	_v_rates_sp_pub(nullptr),
@@ -413,6 +426,7 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	memset(&_controller_status, 0, sizeof(_controller_status));
 	memset(&_l1_angvel_debug, 0, sizeof(_l1_angvel_debug));
 	memset(&_actuator_outputs, 0, sizeof(_actuator_outputs));
+  memset(&_battery_status, 0, sizeof(_battery_status));
   _vehicle_status.is_rotary_wing = true;
 
 	_params.att_p.zero();
@@ -458,11 +472,12 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
   _params.mixer.zero();
   _params.motor_constant = 0.0f;
   _params.cT = 0.0f;
-  _params.pwm_min = 1000.0f;
-  _params.pwm_max = 2000.0f;
+  _params.rpm_per_pwm = 20.42540f;
+  _params.rpm_per_volt = 915.39889f;
+  _params.rpm_at_zero_pwm_and_volts = -27662.65982f;
   _params.rpm_min = 1000.0f;
   _params.rpm_max = 10000.0f;
-  _params.rpm_over_pwm = 9.0f;
+  _params.voltage_max = 12.60f;
 
 	_params_handles.roll_p			= 	param_find("MC_ROLL_P");
 	_params_handles.roll_rate_p		= 	param_find("MC_ROLLRATE_P");
@@ -506,10 +521,12 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
   _params_handles.arm_length   =   param_find("L1A_ARM_LENGTH");
   _params_handles.moment_scale  =  param_find("L1A_MOMENT_SCALE");
   _params_handles.motor_spread_angle =  param_find("L1A_MOTOR_SPREAD_ANGLE");
-  _params_handles.pwm_min      =   param_find("L1A_PWM_MIN");
-  _params_handles.pwm_max      =   param_find("L1A_PWM_MAX");
+  _params_handles.rpm_per_pwm      =   param_find("L1A_RPM_PER_PWM");
+  _params_handles.rpm_per_volt      =   param_find("L1A_RPM_PER_VOLT");
+  _params_handles.rpm_at_zero_pwm_and_volts      =   param_find("L1A_RPM_AT_ZERO_PWM_AND_VOLTS");
   _params_handles.rpm_min      =   param_find("L1A_RPM_MIN");
   _params_handles.rpm_max      =   param_find("L1A_RPM_MAX");
+  _params_handles.voltage_max      =   param_find("L1A_VOLTAGE_MAX");
 	_params_handles.l1_bandwidth_x  =   param_find("L1A_BANDWIDTH_X");
 	_params_handles.l1_bandwidth_y  =   param_find("L1A_BANDWIDTH_Y");
 	_params_handles.l1_bandwidth_z  =   param_find("L1A_BANDWIDTH_Z");
@@ -724,15 +741,19 @@ MulticopterAttitudeControl::parameters_update()
   _params.mixer(2,2) = -kQ;
   _params.mixer(2,3) = -kQ;
 
-  param_get(_params_handles.pwm_min, &v);
-  _params.pwm_min = v;
-  param_get(_params_handles.pwm_max, &v);
-  _params.pwm_max = v;
+  param_get(_params_handles.rpm_per_pwm, &v);
+  _params.rpm_per_pwm = v;
+  param_get(_params_handles.rpm_per_volt, &v);
+  _params.rpm_per_volt = v;
+  param_get(_params_handles.rpm_at_zero_pwm_and_volts, &v);
+  _params.rpm_at_zero_pwm_and_volts = v;
   param_get(_params_handles.rpm_min, &v);
   _params.rpm_min = v;
   param_get(_params_handles.rpm_max, &v);
   _params.rpm_max = v;
-  _params.rpm_over_pwm = (_params.rpm_max - _params.rpm_min)/(_params.pwm_max - _params.pwm_min);
+
+  param_get(_params_handles.voltage_max, &v);
+  _params.voltage_max = v;
 
   float fmax = _params.cT * _params.rpm_max * _params.rpm_max;
   float fmin = _params.cT * _params.rpm_min * _params.rpm_min;
@@ -869,6 +890,18 @@ MulticopterAttitudeControl::actuator_outputs_poll()
 	}
 }
 
+void
+MulticopterAttitudeControl::battery_status_poll()
+{
+  /* check if there is a new message */
+  bool updated;
+	orb_check(_battery_status_sub, &updated);
+
+	if (updated) {
+		orb_copy(ORB_ID(battery_status), _battery_status_sub, &_battery_status);
+	}
+}
+
 /**
  * Attitude controller.
  * Input: 'vehicle_attitude_setpoint' topics (depending on mode)
@@ -974,6 +1007,9 @@ MulticopterAttitudeControl::control_attitude_rates(float dt)
 {
   math::Vector<4> rpm_cmd;
 
+  /* get latest battery voltage */
+  battery_status_poll();
+
   if (_params.enable_l1ac) {
     /* get latest PWM commands */
     actuator_outputs_poll();
@@ -981,7 +1017,7 @@ MulticopterAttitudeControl::control_attitude_rates(float dt)
     /* this assumes PWM signals live in channels 5 to 8 (indices 4,5,6,7) */
     for (int i = 0; i < 4; i++) {
       float pwm_cmd = _actuator_outputs.output[i+4];
-      rpm_cmd(i) = _params.rpm_over_pwm * (pwm_cmd - _params.pwm_min) + _params.rpm_min;
+      rpm_cmd(i) = _params.rpm_per_pwm * pwm_cmd + _params.rpm_per_volt * _battery_status.voltage_filtered_v + _params.rpm_at_zero_pwm_and_volts;
     }
   }
 
@@ -1108,6 +1144,7 @@ MulticopterAttitudeControl::task_main()
 	_vehicle_status_sub = orb_subscribe(ORB_ID(vehicle_status));
 	_motor_limits_sub = orb_subscribe(ORB_ID(multirotor_motor_limits));
   _actuator_outputs_sub = orb_subscribe(ORB_ID(actuator_outputs));
+  _battery_status_sub = orb_subscribe(ORB_ID(battery_status));
 
 	/* initialize parameters cache */
 	parameters_update();
@@ -1250,7 +1287,9 @@ MulticopterAttitudeControl::task_main()
 				_actuators.control[1] = (PX4_ISFINITE(_att_control(1))) ? _att_control(1) : 0.0f;
 				_actuators.control[2] = (PX4_ISFINITE(_att_control(2))) ? _att_control(2) : 0.0f;
 				_actuators.control[3] = (PX4_ISFINITE(_thrust_sp)) ? _thrust_sp : 0.0f;
-				_actuators.timestamp = hrt_absolute_time();
+        // hack: stuff the normalized filtered battery voltage into unused fifth element of array
+        _actuators.control[4] = _battery_status.voltage_filtered_v / _params.voltage_max;
+        _actuators.timestamp = hrt_absolute_time();
 				_actuators.timestamp_sample = _ctrl_state.timestamp;
 
 				_controller_status.roll_rate_integ = _rates_int(0);
