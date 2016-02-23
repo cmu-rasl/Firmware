@@ -131,9 +131,7 @@
 #include <px4_config.h>
 #include "drivers/drv_mixer.h"
 
-#include <uORB/uORB.h>
 #include <uORB/topics/multirotor_motor_limits.h>
-#include <uORB/topics/battery_status.h>
 
 #include "mixer_load.h"
 
@@ -489,6 +487,7 @@ public:
 	 * @param pwm_min      Minimum PWM signal in microseconds
    * @param pwm_max      Maximum PWM signal in microseconds
    * @param rpm_max      Maximum RPM
+   * @param voltage_max  Maximum battery voltage in volts
    * @param cT           Thrust coefficient (force = cT*RPM^2)
    * @param rpm_per_volt Coefficient A in the relationship RPM = A*volts + B*pwm + C
    * @param rpm_per_pwm  Coefficient B in the relationship RPM = A*volts + B*pwm + C
@@ -504,6 +503,7 @@ public:
     float pwm_min,
     float pwm_max,
     float rpm_max,
+    float voltage_max,
     float cT,
     float rpm_per_volt,
     float rpm_per_pwm,
@@ -546,15 +546,13 @@ private:
   float       _rpm_max;
   float       _cT;
   float       _f_max;
+  float       _voltage_max;
   float       _rpm_coeff;
   float       _voltage_coeff;
   float       _affine_coeff;
 
 	orb_advert_t			_limits_pub;
 	multirotor_motor_limits_s 	_limits;
-
-  int _battery_status_sub; /** < battery voltage subscription */
-  struct battery_status_s _battery_status;
 
 	unsigned			_rotor_count;
 	const Rotor			*_rotors;
