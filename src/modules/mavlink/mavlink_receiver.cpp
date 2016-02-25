@@ -599,26 +599,35 @@ MavlinkReceiver::handle_message_att_pos_mocap(mavlink_message_t *msg)
 	struct att_pos_mocap_s att_pos_mocap;
 	memset(&att_pos_mocap, 0, sizeof(att_pos_mocap));
 
-	// Use the component ID to identify the mocap system
-	att_pos_mocap.id = msg->compid;
+// Only pay attention to messages sent from a mavros node with a system id
+// equal to the component id of this mavlink instance! (Follows the naming
+// convention where this mavlink "component id" is the vehicle id #.
+// Example: component_id = 10 for vehicle10. )
+//printf("message system id = %u \n", msg->sysid);
 
-	att_pos_mocap.timestamp_boot = hrt_absolute_time(); // Monotonic time
-	att_pos_mocap.timestamp_computer = sync_stamp(mocap.time_usec); // Synced time
+if (mavlink_system.compid == msg->sysid){
+	//printf("mavlink component id == message system id == %u \n", mavlink_system.compid);
 
-	att_pos_mocap.q[0] = mocap.q[0];
-	att_pos_mocap.q[1] = mocap.q[1];
-	att_pos_mocap.q[2] = mocap.q[2];
-	att_pos_mocap.q[3] = mocap.q[3];
+		att_pos_mocap.id = msg->compid;
 
-	att_pos_mocap.x = mocap.x;
-	att_pos_mocap.y = mocap.y;
-	att_pos_mocap.z = mocap.z;
+		att_pos_mocap.timestamp_boot = hrt_absolute_time(); // Monotonic time
+		att_pos_mocap.timestamp_computer = sync_stamp(mocap.time_usec); // Synced time
 
-	if (_att_pos_mocap_pub == nullptr) {
-		_att_pos_mocap_pub = orb_advertise(ORB_ID(att_pos_mocap), &att_pos_mocap);
+		att_pos_mocap.q[0] = mocap.q[0];
+		att_pos_mocap.q[1] = mocap.q[1];
+		att_pos_mocap.q[2] = mocap.q[2];
+		att_pos_mocap.q[3] = mocap.q[3];
 
-	} else {
-		orb_publish(ORB_ID(att_pos_mocap), _att_pos_mocap_pub, &att_pos_mocap);
+		att_pos_mocap.x = mocap.x;
+		att_pos_mocap.y = mocap.y;
+		att_pos_mocap.z = mocap.z;
+
+		if (_att_pos_mocap_pub == nullptr) {
+			_att_pos_mocap_pub = orb_advertise(ORB_ID(att_pos_mocap), &att_pos_mocap);
+
+		} else {
+			orb_publish(ORB_ID(att_pos_mocap), _att_pos_mocap_pub, &att_pos_mocap);
+		}
 	}
 }
 
