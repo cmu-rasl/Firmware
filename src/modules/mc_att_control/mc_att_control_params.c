@@ -443,36 +443,6 @@ PARAM_DEFINE_FLOAT(L1A_MOMENT_SCALE, 0.0f);
 PARAM_DEFINE_FLOAT(L1A_MOTOR_SPREAD_ANGLE, 0.0f);
 
 /**
-* The coefficient A in the relationship RPM = A * PWM + B * voltage + C
-*
-* @unit
-* @min -99999.9
-* @max 99999.9
-* @group Angular Velocity L1 Adaptive Control
-*/
-PARAM_DEFINE_FLOAT(L1A_RPM_PER_PWM, 0.0f);
-
-/**
-* The coefficient B in the relationship RPM = A * PWM + B * voltage + C
-*
-* @unit 1/volt
-* @min -99999.9
-* @max 99999.9
-* @group Angular Velocity L1 Adaptive Control
-*/
-PARAM_DEFINE_FLOAT(L1A_RPM_PER_VOLT, 0.0f);
-
-/**
-* The coefficient C in the relationship RPM = A * PWM + B * voltage + C
-*
-* @unit
-* @min -99999.9
-* @max 99999.9
-* @group Angular Velocity L1 Adaptive Control
-*/
-PARAM_DEFINE_FLOAT(L1A_RPM_AT_ZERO_PWM_AND_VOLTS, 0.0f);
-
-/**
 * RPM that corresponds to minimum PWM at some arbitrary voltage
 *
 * @unit

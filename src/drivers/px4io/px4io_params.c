@@ -156,3 +156,33 @@ PARAM_DEFINE_INT32(PWM_MAIN_REV8, 0);
  * @group PWM Outputs
  */
 PARAM_DEFINE_INT32(PWM_SBUS_MODE, 0);
+
+/**
+* The coefficient A in the relationship RPM = A * PWM + B * voltage + C
+*
+* @unit
+* @min -99999.9
+* @max 99999.9
+* @group PWM Outputs
+*/
+PARAM_DEFINE_FLOAT(RPM_PER_PWM, 0.0f);
+
+/**
+* The coefficient B in the relationship RPM = A * PWM + B * voltage + C
+*
+* @unit 1/volt
+* @min -99999.9
+* @max 99999.9
+* @group PWM Outputs
+*/
+PARAM_DEFINE_FLOAT(RPM_PER_VOLT, 0.0f);
+
+/**
+* The coefficient C in the relationship RPM = A * PWM + B * voltage + C
+*
+* @unit
+* @min -99999.9
+* @max 99999.9
+* @group PWM Outputs
+*/
+PARAM_DEFINE_FLOAT(RPM_AT_ZERO_PWM_AND_VOLTS, 0.0f);

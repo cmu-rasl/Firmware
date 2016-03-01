@@ -89,6 +89,7 @@
 #include <uORB/topics/servorail_status.h>
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/multirotor_motor_limits.h>
+#include <uORB/topics/rpm_command.h>
 
 #include <debug.h>
 
@@ -293,9 +294,11 @@ private:
 	orb_advert_t		_to_servorail;		///< servorail status
 	orb_advert_t		_to_safety;		///< status of safety
 	orb_advert_t 		_to_mixer_status; 	///< mixer status flags
+  orb_advert_t    _to_rpm_command;   ///< commanded rpm outputs
 
 	actuator_outputs_s	_outputs;		///< mixed outputs
 	servorail_status_s	_servorail_status;	///< servorail status
+  rpm_command_s       _rpm_command; ///< rpm command
 
 	bool			_primary_pwm_device;	///< true if we are the default PWM output
 	bool			_lockdown_override;	///< allow to override the safety lockdown
@@ -306,6 +309,11 @@ private:
 	uint64_t		_battery_last_timestamp;///< last amp hour calculation timestamp
 	bool			_cb_flighttermination;	///< true if the flight termination circuit breaker is enabled
 	bool 			_in_esc_calibration_mode;	///< do not send control outputs to IO (used for esc calibration)
+
+  float     _rpm_per_pwm;
+  float     _rpm_per_volt;
+  float     _rpm_at_zero_pwm_and_volts;
+  float     _latest_voltage_filtered_v;
 
 	int32_t			_rssi_pwm_chan; ///< RSSI PWM input channel
 	int32_t			_rssi_pwm_max; ///< max RSSI input on PWM channel
@@ -526,9 +534,11 @@ PX4IO::PX4IO(device::Device *interface) :
 	_to_servorail(nullptr),
 	_to_safety(nullptr),
 	_to_mixer_status(nullptr),
-	_outputs{},
+	_to_rpm_command(nullptr),
+  _outputs{},
 	_servorail_status{},
-	_primary_pwm_device(false),
+	_rpm_command{},
+  _primary_pwm_device(false),
 	_lockdown_override(false),
 	_battery_amp_per_volt(90.0f / 5.0f), // this matches the 3DR current sensor
 	_battery_amp_bias(0),
@@ -536,7 +546,11 @@ PX4IO::PX4IO(device::Device *interface) :
 	_battery_last_timestamp(0),
 	_cb_flighttermination(true),
 	_in_esc_calibration_mode(false),
-	_rssi_pwm_chan(0),
+  _rpm_per_pwm(0.0f),
+  _rpm_per_volt(0.0f),
+  _rpm_at_zero_pwm_and_volts(0.0f),
+  _latest_voltage_filtered_v(12.6f),
+  _rssi_pwm_chan(0),
 	_rssi_pwm_max(0),
 	_rssi_pwm_min(0)
 #ifdef CONFIG_ARCH_BOARD_PX4FMU_V1
@@ -688,6 +702,10 @@ PX4IO::init()
 	param_get(param_find("RC_RSSI_PWM_CHAN"), &_rssi_pwm_chan);
 	param_get(param_find("RC_RSSI_PWM_MAX"), &_rssi_pwm_max);
 	param_get(param_find("RC_RSSI_PWM_MIN"), &_rssi_pwm_min);
+
+	param_get(param_find("RPM_PER_PWM"), &_rpm_per_pwm);
+	param_get(param_find("RPM_PER_VOLT"), &_rpm_per_volt);
+	param_get(param_find("RPM_AT_ZERO_PWM_AND_VOLTS"), &_rpm_at_zero_pwm_and_volts);
 
 	/*
 	 * Check for IO flight state - if FMU was flagged to be in
@@ -1643,6 +1661,7 @@ PX4IO::io_handle_battery(uint16_t vbatt, uint16_t ibatt)
 	/* voltage is scaled to mV */
 	battery_status.voltage_v = vbatt / 1000.0f;
 	battery_status.voltage_filtered_v = vbatt / 1000.0f;
+  _latest_voltage_filtered_v = battery_status.voltage_filtered_v;
 
 	/*
 	  ibatt contains the raw ADC count, as 12 bit ADC
@@ -1859,8 +1878,10 @@ PX4IO::io_publish_pwm_outputs()
 	/* data we are going to fetch */
 	actuator_outputs_s outputs = {};
 	multirotor_motor_limits_s motor_limits;
+  rpm_command_s rpm_command = {};
 
 	outputs.timestamp = hrt_absolute_time();
+  rpm_command.timestamp = outputs.timestamp;
 
 	/* get servo values from IO */
 	uint16_t ctl[_max_actuators];
@@ -1875,7 +1896,13 @@ PX4IO::io_publish_pwm_outputs()
 		outputs.output[i] = ctl[i];
 	}
 
+  /* convert PWM to RPM using voltage */
+  for (int i = 0; i < _max_actuators; i++) {
+    rpm_command.output[i] = _rpm_per_pwm * outputs.output[i] + _rpm_per_volt * _latest_voltage_filtered_v + _rpm_at_zero_pwm_and_volts;
+  }
+
 	outputs.noutputs = _max_actuators;
+  rpm_command.noutputs = _max_actuators;
 
 	/* lazily advertise on first publication */
 	if (_to_outputs == nullptr) {
@@ -1902,6 +1929,15 @@ PX4IO::io_publish_pwm_outputs()
 
 	} else {
 		orb_publish(ORB_ID(multirotor_motor_limits), _to_mixer_status, &motor_limits);
+	}
+
+	/* lazily advertise on first publication */
+	if (_to_rpm_command == nullptr) {
+		int instance;
+		_to_rpm_command = orb_advertise_multi(ORB_ID(rpm_command),
+						  &rpm_command, &instance, ORB_PRIO_MAX);
+	} else {
+		orb_publish(ORB_ID(rpm_command), _to_rpm_command, &rpm_command);
 	}
 
 	return OK;
@@ -2364,7 +2400,9 @@ PX4IO::print_status(bool extended_status)
 		printf(" %u", io_reg_get(PX4IO_PAGE_DISARMED_PWM, i));
 	}
 
-	printf("\n");
+  printf("\nrpm per pwm = %8.7f\n", (double) _rpm_per_pwm);
+  printf("rpm per volt = %8.7f\n", (double) _rpm_per_volt);
+	printf("rpm at zero pwm and volts = %8.7f\n", (double) _rpm_at_zero_pwm_and_volts);
 }
 
 int
