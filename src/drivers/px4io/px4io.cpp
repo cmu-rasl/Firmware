@@ -703,9 +703,9 @@ PX4IO::init()
 	param_get(param_find("RC_RSSI_PWM_MAX"), &_rssi_pwm_max);
 	param_get(param_find("RC_RSSI_PWM_MIN"), &_rssi_pwm_min);
 
-	param_get(param_find("RPM_PER_PWM"), &_rpm_per_pwm);
-	param_get(param_find("RPM_PER_VOLT"), &_rpm_per_volt);
-	param_get(param_find("RPM_AT_ZERO_PWM_AND_VOLTS"), &_rpm_at_zero_pwm_and_volts);
+	param_get(param_find("PHY_RPM_PER_PWM"), &_rpm_per_pwm);
+	param_get(param_find("PHY_RPM_PER_VOLT"), &_rpm_per_volt);
+	param_get(param_find("PHY_RPM_AT_ZERO_PWM_AND_VOLTS"), &_rpm_at_zero_pwm_and_volts);
 
 	/*
 	 * Check for IO flight state - if FMU was flagged to be in
@@ -2403,6 +2403,7 @@ PX4IO::print_status(bool extended_status)
   printf("\nrpm per pwm = %8.7f\n", (double) _rpm_per_pwm);
   printf("rpm per volt = %8.7f\n", (double) _rpm_per_volt);
 	printf("rpm at zero pwm and volts = %8.7f\n", (double) _rpm_at_zero_pwm_and_volts);
+  printf("latest battery voltage = %8.7f\n", (double) _latest_voltage_filtered_v);
 }
 
 int

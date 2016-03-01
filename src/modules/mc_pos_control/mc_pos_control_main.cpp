@@ -515,16 +515,16 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	_params_handles.hold_max_z = param_find("MPC_HOLD_MAX_Z");
 	_params_handles.acc_hor_max = param_find("MPC_ACC_HOR_MAX");
   _params_handles.use_gravity_offset = param_find("MPC_USE_GRAV_FF");
-  _params_handles.mass = param_find("MPC_TOTAL_MASS");
-  _params_handles.gravity_magnitude = param_find("MPC_GRAVITY");
+  _params_handles.mass = param_find("PHY_TOTAL_MASS");
+  _params_handles.gravity_magnitude = param_find("PHY_GRAVITY");
   _params_handles.takeoff_vzsp_thresh = param_find("MPC_TKOFF_VZSP");
 
 	_params_handles.enable_l1ac       =   param_find("MPC_ENABLE_L1V");
 	_params_handles.use_active_l1ac   =   param_find("L1V_ACTIVE");
 	_params_handles.enable_debug    =   param_find("L1V_ENABLE_DEBUG");
-  _params_handles.cT           =   param_find("L1V_CT");
-  _params_handles.motor_constant =  param_find("L1V_MOTOR_CONSTANT");
-  _params_handles.rpm_max      =   param_find("L1V_RPM_MAX");
+  _params_handles.cT           =   param_find("PHY_CT");
+  _params_handles.motor_constant =  param_find("PHY_MOTOR_CONSTANT");
+  _params_handles.rpm_max      =   param_find("PHY_RPM_MAX");
 	_params_handles.l1_bandwidth_x  =   param_find("L1V_BANDWIDTH_X");
 	_params_handles.l1_bandwidth_y  =   param_find("L1V_BANDWIDTH_Y");
 	_params_handles.l1_bandwidth_z  =   param_find("L1V_BANDWIDTH_Z");
