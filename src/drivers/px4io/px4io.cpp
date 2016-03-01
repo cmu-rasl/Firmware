@@ -286,6 +286,10 @@ private:
 	int			_t_param;		///< parameter update topic
 	bool			_param_update_force;	///< force a parameter update
 	int			_t_vehicle_command;	///< vehicle command topic
+  int     _t_battery_status; ///< battery status from sensors module
+
+  // struct to put subscribed battery status in
+  battery_status_s _battery_status;
 
 	/* advertised topics */
 	orb_advert_t 		_to_input_rc;		///< rc inputs from io
@@ -313,7 +317,6 @@ private:
   float     _rpm_per_pwm;
   float     _rpm_per_volt;
   float     _rpm_at_zero_pwm_and_volts;
-  float     _latest_voltage_filtered_v;
 
 	int32_t			_rssi_pwm_chan; ///< RSSI PWM input channel
 	int32_t			_rssi_pwm_max; ///< max RSSI input on PWM channel
@@ -528,6 +531,8 @@ PX4IO::PX4IO(device::Device *interface) :
 	_t_param(-1),
 	_param_update_force(false),
 	_t_vehicle_command(-1),
+  _t_battery_status(-1),
+  _battery_status{},
 	_to_input_rc(nullptr),
 	_to_outputs(nullptr),
 	_to_battery(nullptr),
@@ -549,7 +554,6 @@ PX4IO::PX4IO(device::Device *interface) :
   _rpm_per_pwm(0.0f),
   _rpm_per_volt(0.0f),
   _rpm_at_zero_pwm_and_volts(0.0f),
-  _latest_voltage_filtered_v(12.6f),
   _rssi_pwm_chan(0),
 	_rssi_pwm_max(0),
 	_rssi_pwm_min(0)
@@ -930,12 +934,16 @@ PX4IO::task_main()
 	_t_vehicle_control_mode = orb_subscribe(ORB_ID(vehicle_control_mode));
 	_t_param = orb_subscribe(ORB_ID(parameter_update));
 	_t_vehicle_command = orb_subscribe(ORB_ID(vehicle_command));
+  _t_battery_status = orb_subscribe(ORB_ID(battery_status));
+
+  memset(&_battery_status, 0, sizeof(_battery_status));
 
 	if ((_t_actuator_controls_0 < 0) ||
 	    (_t_actuator_armed < 0) ||
 	    (_t_vehicle_control_mode < 0) ||
 	    (_t_param < 0) ||
-	    (_t_vehicle_command < 0)) {
+	    (_t_vehicle_command < 0) ||
+      (_t_battery_status < 0)) {
 		warnx("subscription(s) failed");
 		goto out;
 	}
@@ -1661,7 +1669,6 @@ PX4IO::io_handle_battery(uint16_t vbatt, uint16_t ibatt)
 	/* voltage is scaled to mV */
 	battery_status.voltage_v = vbatt / 1000.0f;
 	battery_status.voltage_filtered_v = vbatt / 1000.0f;
-  _latest_voltage_filtered_v = battery_status.voltage_filtered_v;
 
 	/*
 	  ibatt contains the raw ADC count, as 12 bit ADC
@@ -1896,9 +1903,17 @@ PX4IO::io_publish_pwm_outputs()
 		outputs.output[i] = ctl[i];
 	}
 
+  /* get filtered voltage */
+  bool updated;
+  orb_check(_t_battery_status, &updated);
+
+  if (updated) {
+     orb_copy(ORB_ID(battery_status), _t_battery_status, &_battery_status);
+  }
+
   /* convert PWM to RPM using voltage */
   for (int i = 0; i < _max_actuators; i++) {
-    rpm_command.output[i] = _rpm_per_pwm * outputs.output[i] + _rpm_per_volt * _latest_voltage_filtered_v + _rpm_at_zero_pwm_and_volts;
+    rpm_command.output[i] = _rpm_per_pwm * outputs.output[i] + _rpm_per_volt * _battery_status.voltage_filtered_v + _rpm_at_zero_pwm_and_volts;
   }
 
 	outputs.noutputs = _max_actuators;
@@ -2403,7 +2418,7 @@ PX4IO::print_status(bool extended_status)
   printf("\nrpm per pwm = %8.7f\n", (double) _rpm_per_pwm);
   printf("rpm per volt = %8.7f\n", (double) _rpm_per_volt);
 	printf("rpm at zero pwm and volts = %8.7f\n", (double) _rpm_at_zero_pwm_and_volts);
-  printf("latest battery voltage = %8.7f\n", (double) _latest_voltage_filtered_v);
+  printf("battery voltage filtered = %8.7f\n", (double) _battery_status.voltage_filtered_v);
 }
 
 int
