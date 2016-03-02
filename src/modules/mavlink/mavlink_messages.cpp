@@ -75,6 +75,7 @@
 #include <uORB/topics/camera_trigger.h>
 #include <uORB/topics/vehicle_land_detected.h>
 #include <uORB/topics/estimator_status.h>
+#include <uORB/topics/rpm_command.h>
 
 #include <drivers/drv_rc_input.h>
 #include <drivers/drv_pwm_output.h>
@@ -2819,6 +2820,69 @@ protected:
 	}
 };
 
+class MavlinkStreamRPMOutput : public MavlinkStream
+{
+public:
+	const char *get_name() const
+	{
+		return MavlinkStreamRPMOutput::get_name_static();
+	}
+
+	static const char *get_name_static()
+	{
+		return "RPM_OUTPUT";
+	}
+
+	uint8_t get_id()
+	{
+		return MAVLINK_MSG_ID_RPM_OUTPUT;
+	}
+
+	static MavlinkStream *new_instance(Mavlink *mavlink)
+	{
+		return new MavlinkStreamRPMOutput(mavlink);
+	}
+
+	unsigned get_size()
+	{
+		return _rpm_command_sub->is_published() ? (MAVLINK_MSG_ID_RPM_OUTPUT_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES) :
+		       0;
+	}
+
+private:
+	MavlinkOrbSubscription *_rpm_command_sub;
+	uint64_t _rpm_command_time;
+
+	/* do not allow top copying this class */
+	MavlinkStreamRPMOutput(MavlinkStreamRPMOutput &);
+	MavlinkStreamRPMOutput &operator = (const MavlinkStreamRPMOutput &);
+
+protected:
+	explicit MavlinkStreamRPMOutput(Mavlink *mavlink) : MavlinkStream(mavlink),
+		_rpm_command_sub(_mavlink->add_orb_subscription(ORB_ID(rpm_command))),
+		_rpm_command_time(0)
+	{}
+
+	void send(const hrt_abstime t)
+	{
+		struct rpm_command_s rpm_command;
+
+		if (_rpm_command_sub->update(&_rpm_command_time, &rpm_command)) {
+
+			mavlink_rpm_output_t msg;
+
+			msg.time_usec = rpm_command.timestamp;
+      msg.noutputs = rpm_command.noutputs;
+
+			for (int i = 0; i < sizeof(rpm_command.output)/sizeof(rpm_command.output[0]); i++) {
+				msg.output[i] = rpm_command.output[i];
+			}
+
+			_mavlink->send_message(MAVLINK_MSG_ID_RPM_OUTPUT, &msg);
+		}
+	}
+};
+
 const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamHeartbeat::new_instance, &MavlinkStreamHeartbeat::get_name_static),
 	new StreamListItem(&MavlinkStreamStatustext::new_instance, &MavlinkStreamStatustext::get_name_static),
@@ -2858,5 +2922,6 @@ const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamDistanceSensor::new_instance, &MavlinkStreamDistanceSensor::get_name_static),
 	new StreamListItem(&MavlinkStreamExtendedSysState::new_instance, &MavlinkStreamExtendedSysState::get_name_static),
 	new StreamListItem(&MavlinkStreamAltitude::new_instance, &MavlinkStreamAltitude::get_name_static),
+	new StreamListItem(&MavlinkStreamRPMOutput::new_instance, &MavlinkStreamRPMOutput::get_name_static),
 	nullptr
 };
