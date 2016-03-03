@@ -270,6 +270,10 @@ MultirotorMixer::mix(float *outputs, unsigned space, uint16_t *status_reg)
   // hack: normalized voltage is stuffed into the fifth element of actuator_controls array
   float   voltage = _voltage_max*get_control(0, 4);
 
+  // enforce min voltage to prevent failsafe PWM (when RPM = 0, voltage = 0) from being higher than min PWM
+  if (voltage < 9.0f)
+    voltage = 9.0f;
+
 	// clean register for saturation status flags
 	if (status_reg != NULL) {
 		(*status_reg) = 0;
