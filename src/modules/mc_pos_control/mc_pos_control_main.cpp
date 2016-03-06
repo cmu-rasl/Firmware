@@ -67,7 +67,7 @@
 
 #include <uORB/topics/manual_control_setpoint.h>
 #include <uORB/topics/actuator_controls.h>
-#include <uORB/topics/actuator_outputs.h>
+#include <uORB/topics/rpm_command.h>
 #include <uORB/topics/vehicle_rates_setpoint.h>
 #include <uORB/topics/control_state.h>
 #include <uORB/topics/mc_virtual_attitude_setpoint.h>
@@ -139,7 +139,7 @@ private:
 	int		_pos_sp_triplet_sub;		/**< position setpoint triplet */
 	int		_local_pos_sp_sub;		/**< offboard local position setpoint */
 	int		_global_vel_sp_sub;		/**< offboard global velocity setpoint */
-  int   _actuator_outputs_sub; /** < PWM subscription */
+  int   _rpm_command_sub; /** < RPM command subscription */
 
 	orb_advert_t	_att_sp_pub;			/**< attitude setpoint publication */
 	orb_advert_t	_local_pos_sp_pub;		/**< vehicle local position setpoint publication */
@@ -159,7 +159,7 @@ private:
 	struct vehicle_local_position_setpoint_s	_local_pos_sp;		/**< vehicle local position setpoint */
 	struct vehicle_global_velocity_setpoint_s	_global_vel_sp;		/**< vehicle global velocity setpoint */
 	struct l1_linvel_debug_s       _l1_linvel_debug; /**< linear velocity l1 adaptive control debug info */
-  struct actuator_outputs_s      _actuator_outputs; /**< actuator outputs */
+  struct rpm_command_s      _rpm_command; /**< rpm command */
 
 	control::BlockParamFloat _manual_thr_min;
 	control::BlockParamFloat _manual_thr_max;
@@ -207,9 +207,6 @@ private:
     param_t enable_debug;
     param_t cT;
     param_t motor_constant;
-    param_t pwm_min;
-    param_t pwm_max;
-    param_t rpm_min;
     param_t rpm_max;
     param_t l1_bandwidth_x;
 		param_t l1_bandwidth_y;
@@ -246,11 +243,7 @@ private:
     float mass;
     float gravity_magnitude;
     float motor_constant;
-    float pwm_min;
-    float pwm_max;
-    float rpm_min;
     float rpm_max;
-    float rpm_over_pwm;
     float max_thrust;
 		float adaptation_gain;
 		float engage_level;
@@ -450,7 +443,7 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	memset(&_local_pos_sp, 0, sizeof(_local_pos_sp));
 	memset(&_global_vel_sp, 0, sizeof(_global_vel_sp));
 	memset(&_l1_linvel_debug, 0, sizeof(_l1_linvel_debug));
-	memset(&_actuator_outputs, 0, sizeof(_actuator_outputs));
+	memset(&_rpm_command, 0, sizeof(_rpm_command));
 	memset(&_ref_pos, 0, sizeof(_ref_pos));
 
   _params.use_gravity_offset = false;
@@ -490,11 +483,7 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	_params.engage_level = 1.0f;
   _params.motor_constant = 0.0f;
   _params.cT = 0.0f;
-  _params.pwm_min = 1000.0f;
-  _params.pwm_max = 2000.0f;
-  _params.rpm_min = 1000.0f;
   _params.rpm_max = 10000.0f;
-  _params.rpm_over_pwm = 9.0f;
   _params.max_thrust = 9.9f;
 
 	_params_handles.thr_min		= param_find("MPC_THR_MIN");
@@ -526,19 +515,16 @@ MulticopterPositionControl::MulticopterPositionControl() :
 	_params_handles.hold_max_z = param_find("MPC_HOLD_MAX_Z");
 	_params_handles.acc_hor_max = param_find("MPC_ACC_HOR_MAX");
   _params_handles.use_gravity_offset = param_find("MPC_USE_GRAV_FF");
-  _params_handles.mass = param_find("MPC_TOTAL_MASS");
-  _params_handles.gravity_magnitude = param_find("MPC_GRAVITY");
+  _params_handles.mass = param_find("PHY_TOTAL_MASS");
+  _params_handles.gravity_magnitude = param_find("PHY_GRAVITY");
   _params_handles.takeoff_vzsp_thresh = param_find("MPC_TKOFF_VZSP");
 
 	_params_handles.enable_l1ac       =   param_find("MPC_ENABLE_L1V");
 	_params_handles.use_active_l1ac   =   param_find("L1V_ACTIVE");
 	_params_handles.enable_debug    =   param_find("L1V_ENABLE_DEBUG");
-  _params_handles.cT           =   param_find("L1V_CT");
-  _params_handles.motor_constant =  param_find("L1V_MOTOR_CONSTANT");
-  _params_handles.pwm_min      =   param_find("L1V_PWM_MIN");
-  _params_handles.pwm_max      =   param_find("L1V_PWM_MAX");
-  _params_handles.rpm_min      =   param_find("L1V_RPM_MIN");
-  _params_handles.rpm_max      =   param_find("L1V_RPM_MAX");
+  _params_handles.cT           =   param_find("PHY_CT");
+  _params_handles.motor_constant =  param_find("PHY_MOTOR_CONSTANT");
+  _params_handles.rpm_max      =   param_find("PHY_RPM_MAX");
 	_params_handles.l1_bandwidth_x  =   param_find("L1V_BANDWIDTH_X");
 	_params_handles.l1_bandwidth_y  =   param_find("L1V_BANDWIDTH_Y");
 	_params_handles.l1_bandwidth_z  =   param_find("L1V_BANDWIDTH_Z");
@@ -702,15 +688,8 @@ MulticopterPositionControl::parameters_update(bool force)
     param_get(_params_handles.motor_constant, &v);
     _params.motor_constant = v;
 
-    param_get(_params_handles.pwm_min, &v);
-    _params.pwm_min = v;
-    param_get(_params_handles.pwm_max, &v);
-    _params.pwm_max = v;
-    param_get(_params_handles.rpm_min, &v);
-    _params.rpm_min = v;
     param_get(_params_handles.rpm_max, &v);
     _params.rpm_max = v;
-    _params.rpm_over_pwm = (_params.rpm_max - _params.rpm_min)/(_params.pwm_max - _params.pwm_min);
 
     _params.max_thrust = 4.0f * _params.cT * _params.rpm_max * _params.rpm_max;
 
@@ -1281,7 +1260,7 @@ MulticopterPositionControl::task_main()
 	_pos_sp_triplet_sub = orb_subscribe(ORB_ID(position_setpoint_triplet));
 	_local_pos_sp_sub = orb_subscribe(ORB_ID(vehicle_local_position_setpoint));
 	_global_vel_sp_sub = orb_subscribe(ORB_ID(vehicle_global_velocity_setpoint));
-  _actuator_outputs_sub = orb_subscribe(ORB_ID(actuator_outputs));
+  _rpm_command_sub = orb_subscribe(ORB_ID(rpm_command));
 
 	parameters_update(true);
 
@@ -1624,16 +1603,15 @@ MulticopterPositionControl::task_main()
           if (_params.enable_l1ac) {
             /* get latest PWM commands */
             bool updated;
-          	orb_check(_actuator_outputs_sub, &updated);
+          	orb_check(_rpm_command_sub, &updated);
 
           	if (updated) {
-          		orb_copy(ORB_ID(actuator_outputs), _actuator_outputs_sub, &_actuator_outputs);
+          		orb_copy(ORB_ID(rpm_command), _rpm_command_sub, &_rpm_command);
           	}
 
             /* this assumes PWM signals live in channels 5 to 8 (indices 4,5,6,7) */
             for (int i = 0; i < 4; i++) {
-              float pwm_cmd = _actuator_outputs.output[i+4];
-              rpm_cmd(i) = _params.rpm_over_pwm * (pwm_cmd - _params.pwm_min) + _params.rpm_min;
+              rpm_cmd(i) = _rpm_command.output[i+4];
             }
           }
 

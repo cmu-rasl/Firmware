@@ -343,18 +343,18 @@ PARAM_DEFINE_INT32(MPC_USE_GRAV_FF, 0);
  *
  * @unit kg
  * @min 0.0
- * @group Multicopter Position Control
+ * @group Physics
  */
-PARAM_DEFINE_FLOAT(MPC_TOTAL_MASS, 0.0f);
+PARAM_DEFINE_FLOAT(PHY_TOTAL_MASS, 0.0f);
 
 /**
  * Magnitude of gravitational acceleration
  *
  * @unit m/s^2
  * @min 0.0
- * @group Multicopter Position Control
+ * @group Physics
  */
-PARAM_DEFINE_FLOAT(MPC_GRAVITY, 9.80665f);
+PARAM_DEFINE_FLOAT(PHY_GRAVITY, 9.80665f);
 
 /**
  * Magnitude of minimum setpoint z velocity at which the vehicle is
@@ -392,66 +392,6 @@ PARAM_DEFINE_INT32(L1V_ACTIVE, 0);
 * @group Linear Velocity L1 Adaptive Control
 */
 PARAM_DEFINE_INT32(L1V_ENABLE_DEBUG, 0);
-
-/**
-* Thrust coefficient, ratio of force in newtons over RPM^2
-*
-* @unit N
-* @min 0.0
-* @max 9999.9
-* @group Linear Velocity L1 Adaptive Control
-*/
-PARAM_DEFINE_FLOAT(L1V_CT, 0.0f);
-
-/**
-* Motor constant
-*
-* @unit ??
-* @min 0.0
-* @max 9999.9
-* @group Linear Velocity L1 Adaptive Control
-*/
-PARAM_DEFINE_FLOAT(L1V_MOTOR_CONSTANT, 0.0f);
-
-/**
-* Minimum PWM
-*
-* @unit microseconds
-* @min 0.0
-* @max 9999.9
-* @group Linear Velocity L1 Adaptive Control
-*/
-PARAM_DEFINE_FLOAT(L1V_PWM_MIN, 0.0f);
-
-/**
-* Maximum PWM
-*
-* @unit microseconds
-* @min 0.0
-* @max 9999.9
-* @group Linear Velocity L1 Adaptive Control
-*/
-PARAM_DEFINE_FLOAT(L1V_PWM_MAX, 0.0f);
-
-/**
-* RPM that corresponds to minimum PWM
-*
-* @unit
-* @min 0.0
-* @max 99999.9
-* @group Linear Velocity L1 Adaptive Control
-*/
-PARAM_DEFINE_FLOAT(L1V_RPM_MIN, 0.0f);
-
-/**
-* RPM that corresponds to maximum PWM
-*
-* @unit
-* @min 0.0
-* @max 99999.9
-* @group Linear Velocity L1 Adaptive Control
-*/
-PARAM_DEFINE_FLOAT(L1V_RPM_MAX, 0.0f);
 
 /**
 * Bandwidth of low pass filter for x component of acceleration disturbance estimate

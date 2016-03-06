@@ -121,7 +121,7 @@ using namespace DriverFramework;
  */
 
 
-#define BATT_V_LOWPASS			0.001f
+#define BATT_V_LOWPASS			0.01f
 #define BATT_V_IGNORE_THRESHOLD		2.1f
 
 /**
