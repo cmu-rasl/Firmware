@@ -647,9 +647,17 @@ MavlinkReceiver::handle_message_set_position_target_local_ned(mavlink_message_t 
 			 set_position_target_local_ned.target_component == 0)) {
 
 		/* convert mavlink type (local, NED) to uORB offboard control struct */
-		offboard_control_mode.ignore_position = (bool)(set_position_target_local_ned.type_mask & 0x7);
+        // we need a temporary variable for ignoring position, to refer to in the following logic, because we
+        // can't refer to "offboard_control_mode.ignore_position" since we're going to hack that to reflect
+        // that we want the acceleration message to trigger offboard mode & mc_pos_control
+        bool really_ignore_position = (bool)(set_position_target_local_ned.type_mask & 0x7);
+        offboard_control_mode.ignore_position = really_ignore_position;
 		offboard_control_mode.ignore_velocity = (bool)(set_position_target_local_ned.type_mask & 0x38);
 		offboard_control_mode.ignore_acceleration_force = (bool)(set_position_target_local_ned.type_mask & 0x1C0);
+        // HACK TO MAKE MC_POS_CONTROL REALIZE THAT THE ACCELERATION MESSAGE SHOULD TRIGGER THE OFFBOARD CONTROL UPDATE
+        if (!offboard_control_mode.ignore_acceleration_force){
+            offboard_control_mode.ignore_position = false;
+        }
 		bool is_force_sp = (bool)(set_position_target_local_ned.type_mask & (1 << 9));
 		/* yaw ignore flag mapps to ignore_attitude */
 		offboard_control_mode.ignore_attitude = (bool)(set_position_target_local_ned.type_mask & 0x400);
@@ -674,8 +682,7 @@ MavlinkReceiver::handle_message_set_position_target_local_ned(mavlink_message_t 
 				orb_copy(ORB_ID(vehicle_control_mode), _control_mode_sub, &_control_mode);
 			}
 			if (_control_mode.flag_control_offboard_enabled) {
-				if (is_force_sp && offboard_control_mode.ignore_position &&
-						offboard_control_mode.ignore_velocity) {
+                if (is_force_sp && really_ignore_position && offboard_control_mode.ignore_velocity) {
 					/* The offboard setpoint is a force setpoint only, directly writing to the force
 					 * setpoint topic and not publishing the setpoint triplet topic */
 					struct vehicle_force_setpoint_s	force_sp;
@@ -697,7 +704,7 @@ MavlinkReceiver::handle_message_set_position_target_local_ned(mavlink_message_t 
 					pos_sp_triplet.current.type = position_setpoint_s::SETPOINT_TYPE_POSITION; //XXX support others
 
 					/* set the local pos values */
-					if (!offboard_control_mode.ignore_position) {
+                    if (!really_ignore_position) {
 						pos_sp_triplet.current.position_valid = true;
 						pos_sp_triplet.current.x = set_position_target_local_ned.x;
 						pos_sp_triplet.current.y = set_position_target_local_ned.y;
