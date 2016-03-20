@@ -280,11 +280,17 @@ private:
   float gravity_magnitude, length, m_scale, motor_constant;
   float mass;
   float motor_spread_angle;
-  // Inverse mixing matrix
-  float m11, m12, m13, m14;
+
+  // Mixing matrix
   float m21, m22, m23, m24;
   float m31, m32, m33, m34;
   float m41, m42, m43, m44;
+
+  // Inverse mixing matrix
+  float invm11, invm12, invm13, invm14;
+  float invm21, invm22, invm23, invm24;
+  float invm31, invm32, invm33, invm34;
+  float invm41, invm42, invm43, invm44;
 
   uint64_t cmd_time;
   bool ctrl_state_set;

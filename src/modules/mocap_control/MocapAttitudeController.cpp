@@ -260,10 +260,10 @@ void MocapAttitudeController::convertBodyForcesToRPM(const body_forces_t& b,
 
   // Force at each of the motors (NED frame!)
   float fm[4];
-  fm[0] = m11*fbz + m12*b.Mb[0] + m13*b.Mb[1] + m14*b.Mb[2];
-  fm[1] = m21*fbz + m22*b.Mb[0] + m23*b.Mb[1] + m24*b.Mb[2];
-  fm[2] = m31*fbz + m32*b.Mb[0] + m33*b.Mb[1] + m34*b.Mb[2];
-  fm[3] = m41*fbz + m42*b.Mb[0] + m43*b.Mb[1] + m44*b.Mb[2];
+  fm[0] = invm11*fbz + invm12*b.Mb[0] + invm13*b.Mb[1] + invm14*b.Mb[2];
+  fm[1] = invm21*fbz + invm22*b.Mb[0] + invm23*b.Mb[1] + invm24*b.Mb[2];
+  fm[2] = invm31*fbz + invm32*b.Mb[0] + invm33*b.Mb[1] + invm34*b.Mb[2];
+  fm[3] = invm41*fbz + invm42*b.Mb[0] + invm43*b.Mb[1] + invm44*b.Mb[2];
 
   // Convert the forces to RPM commands
   for (unsigned int i = 0; i < 4; i++)
@@ -580,19 +580,28 @@ bool MocapAttitudeController::loadParameters()
 
   cT_inv = 1.0f/cT;
 
-  m11 = m21 = m31 = m41 = -0.25f;
-
   float dsm = length*sinf(motor_spread_angle);
   float dcm = length*cosf(motor_spread_angle);
 
-  m12 = m42 = -0.25f/dsm;
-  m22 = m32 = 0.25f/dsm;
+  // Mixing matrix
+  m21 = m24 = -dsm;
+  m22 = m23 = dsm;
+  m31 = m33 = dcm;
+  m32 = m34 = -dcm;
+  m41 = m42 = m_scale;
+  m43 = m44 = -m_scale;
 
-  m13 = m33 = 0.25f/dcm;
-  m23 = m43 = -0.25f/dcm;
+  // Inverse mixing matrix
+  invm11 = invm21 = invm31 = invm41 = -0.25f;
 
-  m14 = m24 = 0.25f/m_scale;
-  m34 = m44 = -0.25f/m_scale;
+  invm12 = invm42 = -0.25f/dsm;
+  invm22 = invm32 = 0.25f/dsm;
+
+  invm13 = invm33 = 0.25f/dcm;
+  invm23 = invm43 = -0.25f/dcm;
+
+  invm14 = invm24 = 0.25f/m_scale;
+  invm34 = invm44 = -0.25f/m_scale;
 
   Ixx = pu::getFloatParam("MCC_INERTIA_XX");
   Ixy = pu::getFloatParam("MCC_INERTIA_XY");
@@ -724,9 +733,10 @@ void MocapAttitudeController::updateStatePredictor(float dt, float wbx, float wb
   float f2 = convertRPMToForce(rpmhat[1]);
   float f3 = convertRPMToForce(rpmhat[2]);
   float f4 = convertRPMToForce(rpmhat[3]);
-  float tau_x = length*(f2 - f4);
-  float tau_y = -length*(f1 - f3);
-  float tau_z = -m_scale*(f1 - f2 + f3 - f4);
+
+  float tau_x = m21*f1 + m22*f2 + m23*f3 + m24*f4;
+  float tau_y = m31*f1 + m32*f2 + m33*f3 + m34*f4;
+  float tau_z = m41*f1 + m42*f2 + m43*f3 + m44*f4;
 
   float avlrate[3];
 
