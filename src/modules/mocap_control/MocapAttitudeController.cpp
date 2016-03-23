@@ -54,10 +54,10 @@ MocapAttitudeController::MocapAttitudeController() :
   l1_initialized(false),
   l1_engage_level(0.0f)
 {
-  memset(avlhat, 0.0f, sizeof(avlhat));
-  memset(dsthat, 0.0f, sizeof(dsthat));
-  memset(lpd, 0.0f, sizeof(lpd));
-  memset(rpmhat, 0.0f, sizeof(rpmhat));
+  memset(avlhat, 0, sizeof(avlhat));
+  memset(dsthat, 0, sizeof(dsthat));
+  memset(lpd, 0, sizeof(lpd));
+  memset(rpmhat, 0, sizeof(rpmhat));
 }
 
 MocapAttitudeController::~MocapAttitudeController() { }
