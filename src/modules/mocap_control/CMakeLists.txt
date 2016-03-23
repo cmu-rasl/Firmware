@@ -33,7 +33,7 @@
 px4_add_module(
 	MODULE modules__mocap_control
 	MAIN mocap_control
-	STACK 1200
+	STACK 1500
 	SRCS
 	    mocap_control.cpp
 	    mocap_control_params.c
