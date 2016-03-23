@@ -141,7 +141,12 @@ MavlinkReceiver::MavlinkReceiver(Mavlink *parent) :
 	_time_offset(0),
 	_orb_class_instance(-1),
 	_mom_switch_pos{},
-	_mom_switch_state(0)
+	_mom_switch_state(0),
+        //Begin custom publishers
+        _cascaded_command_pub(nullptr),
+        _cascaded_command_gains_pub(nullptr),
+        _mocap_motor_state_pub(nullptr)
+        //End custom publishers
 {
 
 }
@@ -225,6 +230,18 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
 	case MAVLINK_MSG_ID_DISTANCE_SENSOR:
 		handle_message_distance_sensor(msg);
 		break;
+
+// Begin custom message
+          case MAVLINK_MSG_ID_CASCADED_CMD:
+            handle_message_cascaded_cmd(msg);
+            break;
+          case MAVLINK_MSG_ID_CASCADED_CMD_GAINS:
+            handle_message_cascaded_cmd_gains(msg);
+            break;
+          case MAVLINK_MSG_ID_MOCAP_MOTOR_STATE:
+            handle_message_mocap_motor_state(msg);
+            break;
+// End custom message
 
 	default:
 		break;
@@ -1738,6 +1755,91 @@ MavlinkReceiver::handle_message_hil_state_quaternion(mavlink_message_t *msg)
 	}
 }
 
+// Begin Custom Handlers
+void
+MavlinkReceiver::handle_message_cascaded_cmd(mavlink_message_t *msg)
+{
+  mavlink_cascaded_cmd_t mavlink_cascaded_cmd;
+  mavlink_msg_cascaded_cmd_decode(msg, &mavlink_cascaded_cmd);
+
+  if (mavlink_cascaded_cmd.target_system != _mavlink->get_system_id())
+    return;
+
+  struct cascaded_command_s cascaded_command;
+  memset(&cascaded_command, 0, sizeof(cascaded_command));
+
+  cascaded_command.timestamp = mavlink_cascaded_cmd.time_usec;
+
+  cascaded_command.thrust = mavlink_cascaded_cmd.thrust;
+  math::Quaternion q(mavlink_cascaded_cmd.q);
+  q.normalize();
+
+  for (unsigned int i = 0; i < 4; i++)
+    cascaded_command.q[i] = q(i);
+
+  for (unsigned int i = 0; i < 3; i++)
+    cascaded_command.ang_vel[i] = mavlink_cascaded_cmd.ang_vel[i];
+
+  for (unsigned int i = 0; i < 3; i++)
+    cascaded_command.ang_acc[i] = mavlink_cascaded_cmd.ang_acc[i];
+
+  if (_cascaded_command_pub == nullptr)
+    _cascaded_command_pub = orb_advertise(ORB_ID(cascaded_command), &cascaded_command);
+  else
+    orb_publish(ORB_ID(cascaded_command), _cascaded_command_pub, &cascaded_command);
+}
+
+void
+MavlinkReceiver::handle_message_cascaded_cmd_gains(mavlink_message_t *msg)
+{
+  mavlink_cascaded_cmd_gains_t mavlink_cascaded_cmd_gains;
+  mavlink_msg_cascaded_cmd_gains_decode(msg, &mavlink_cascaded_cmd_gains);
+
+  if (mavlink_cascaded_cmd_gains.target_system != _mavlink->get_system_id())
+    return;
+
+  struct cascaded_command_gains_s cascaded_command_gains;
+  memset(&cascaded_command_gains, 0, sizeof(cascaded_command_gains));
+
+  cascaded_command_gains.timestamp = mavlink_cascaded_cmd_gains.time_usec;
+
+  for (unsigned int i = 0; i < 3; i++)
+    cascaded_command_gains.kR[i] = mavlink_cascaded_cmd_gains.kR[i];
+
+  for (unsigned int i = 0; i < 3; i++)
+    cascaded_command_gains.kOm[i] = mavlink_cascaded_cmd_gains.kOm[i];
+
+  if (_cascaded_command_gains_pub == nullptr)
+    _cascaded_command_gains_pub =
+      orb_advertise(ORB_ID(cascaded_command_gains), &cascaded_command_gains);
+  else
+    orb_publish(ORB_ID(cascaded_command_gains),
+                _cascaded_command_gains_pub, &cascaded_command_gains);
+}
+
+void
+MavlinkReceiver::handle_message_mocap_motor_state(mavlink_message_t *msg)
+{
+  mavlink_mocap_motor_state_t mavlink_mocap_motor_state;
+  mavlink_msg_mocap_motor_state_decode(msg, &mavlink_mocap_motor_state);
+
+  if (mavlink_mocap_motor_state.target_system != _mavlink->get_system_id())
+    return;
+
+  struct mocap_motor_state_s mocap_motor_state;
+  memset(&mocap_motor_state, 0, sizeof(mocap_motor_state));
+
+  mocap_motor_state.timestamp = mavlink_mocap_motor_state.time_usec;
+  mocap_motor_state.state = mavlink_mocap_motor_state.state;
+
+  if (_mocap_motor_state_pub == nullptr)
+    _mocap_motor_state_pub =
+      orb_advertise(ORB_ID(mocap_motor_state), &mocap_motor_state);
+  else
+    orb_publish(ORB_ID(mocap_motor_state),
+                _mocap_motor_state_pub, &mocap_motor_state);
+}
+// End Custom Handlers
 
 /**
  * Receive data from UART.

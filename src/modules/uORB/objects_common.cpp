@@ -285,3 +285,14 @@ ORB_DEFINE(ekf2_innovations, struct ekf2_innovations_s);
 
 #include "topics/rpm_command.h"
 ORB_DEFINE(rpm_command, struct rpm_command_s);
+
+// Begin custom uORB topics
+#include "topics/cascaded_command.h"
+ORB_DEFINE(cascaded_command, struct cascaded_command_s);
+
+#include "topics/cascaded_command_gains.h"
+ORB_DEFINE(cascaded_command_gains, struct cascaded_command_gains_s);
+
+#include "topics/mocap_motor_state.h"
+ORB_DEFINE(mocap_motor_state, struct mocap_motor_state_s);
+// End custom uORB topics
