@@ -38,3 +38,6 @@
 [submodule "cmake/cmake_hexagon"]
 	path = cmake/cmake_hexagon
 	url = https://github.com/ATLFlight/cmake_hexagon
+[submodule "src/modules/mocap_control"]
+	path = src/modules/mocap_control
+	url = git@nmichael.frc.ri.cmu.edu:nmichael/mocap_control.git
