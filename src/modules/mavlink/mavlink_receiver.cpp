@@ -241,6 +241,9 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
           case MAVLINK_MSG_ID_MOCAP_MOTOR_STATE:
             handle_message_mocap_motor_state(msg);
             break;
+          case MAVLINK_MSG_ID_BLINKM_CONTROL:
+            handle_message_blinkm_control(msg);
+            break;
 // End custom message
 
 	default:
@@ -1839,6 +1842,19 @@ MavlinkReceiver::handle_message_mocap_motor_state(mavlink_message_t *msg)
     orb_publish(ORB_ID(mocap_motor_state),
                 _mocap_motor_state_pub, &mocap_motor_state);
 }
+
+void
+MavlinkReceiver::handle_message_blinkm_control(mavlink_message_t *msg)
+{
+  mavlink_blinkm_control_t mavlink_blinkm_control;
+  mavlink_msg_blinkm_control_decode(msg, &mavlink_blinkm_control);
+
+  if (mavlink_blinkm_control.target_system != _mavlink->get_system_id())
+    return;
+
+  printf("handle_message_blinkm_control: %u\n", mavlink_blinkm_control.control);
+}
+
 // End Custom Handlers
 
 /**
