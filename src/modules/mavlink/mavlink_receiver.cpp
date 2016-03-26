@@ -145,7 +145,8 @@ MavlinkReceiver::MavlinkReceiver(Mavlink *parent) :
         //Begin custom publishers
         _cascaded_command_pub(nullptr),
         _cascaded_command_gains_pub(nullptr),
-        _mocap_motor_state_pub(nullptr)
+        _mocap_motor_state_pub(nullptr),
+        _mocap_rpm_cmd_pub(nullptr)
         //End custom publishers
 {
 
@@ -240,6 +241,9 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
             break;
           case MAVLINK_MSG_ID_MOCAP_MOTOR_STATE:
             handle_message_mocap_motor_state(msg);
+            break;
+          case MAVLINK_MSG_ID_MOCAP_RPM_CMD:
+            handle_message_mocap_rpm_cmd(msg);
             break;
 // End custom message
 
@@ -1838,6 +1842,31 @@ MavlinkReceiver::handle_message_mocap_motor_state(mavlink_message_t *msg)
   else
     orb_publish(ORB_ID(mocap_motor_state),
                 _mocap_motor_state_pub, &mocap_motor_state);
+}
+
+void
+MavlinkReceiver::handle_message_mocap_rpm_cmd(mavlink_message_t *msg)
+{
+  mavlink_mocap_rpm_cmd_t mavlink_mocap_rpm_cmd;
+  mavlink_msg_mocap_rpm_cmd_decode(msg, &mavlink_mocap_rpm_cmd);
+
+  if (mavlink_mocap_rpm_cmd.target_system != _mavlink->get_system_id())
+    return;
+
+  struct mocap_rpm_command_s mocap_rpm_cmd;
+  memset(&mocap_rpm_cmd, 0, sizeof(mocap_rpm_cmd));
+
+  mocap_rpm_cmd.timestamp = mavlink_mocap_rpm_cmd.time_usec;
+  mocap_rpm_cmd.ninputs = mavlink_mocap_rpm_cmd.ninputs;
+
+  for (unsigned int i = 0; i < mavlink_mocap_rpm_cmd.ninputs; i++)
+    mocap_rpm_cmd.input[i] = mavlink_mocap_rpm_cmd.input[i];
+
+  if (_mocap_rpm_cmd_pub == nullptr)
+    _mocap_rpm_cmd_pub =
+      orb_advertise(ORB_ID(mocap_rpm_command), &mocap_rpm_cmd);
+  else
+    orb_publish(ORB_ID(mocap_rpm_command), _mocap_rpm_cmd_pub, &mocap_rpm_cmd);
 }
 // End Custom Handlers
 

@@ -295,4 +295,7 @@ ORB_DEFINE(cascaded_command_gains, struct cascaded_command_gains_s);
 
 #include "topics/mocap_motor_state.h"
 ORB_DEFINE(mocap_motor_state, struct mocap_motor_state_s);
+
+#include "topics/mocap_rpm_command.h"
+ORB_DEFINE(mocap_rpm_command, struct mocap_rpm_command_s);
 // End custom uORB topics
