@@ -75,6 +75,8 @@ set(config_module_list
 	modules/uavcan
 	modules/land_detector
 
+        modules/mocap_status_monitor
+
 	#
 	# Estimation modules (EKF/ SO3 / other filters)
 	#
