@@ -1919,6 +1919,10 @@ MavlinkReceiver::receive_thread(void *arg)
 #endif
 	ssize_t nread = 0;
 
+        param_t h = param_find("MAV_BASE_ID");
+        int base_id;
+        param_get(h, &base_id);
+
 	while (!_mavlink->_task_should_exit) {
 		if (poll(&fds[0], 1, timeout) > 0) {
 			if (_mavlink->get_protocol() == SERIAL) {
@@ -1961,11 +1965,15 @@ MavlinkReceiver::receive_thread(void *arg)
 			/* if read failed, this loop won't execute */
 			for (ssize_t i = 0; i < nread; i++) {
 				if (mavlink_parse_char(_mavlink->get_channel(), buf[i], &msg, &status)) {
+
+                                  if (msg.sysid == base_id)
+                                  {
 					/* handle generic messages and commands */
 					handle_message(&msg);
 
 					/* handle packet with parent object */
 					_mavlink->handle_message(&msg);
+                                  }
 				}
 			}
 
