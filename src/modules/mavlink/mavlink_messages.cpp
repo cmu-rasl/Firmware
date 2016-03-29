@@ -2883,6 +2883,69 @@ protected:
 	}
 };
 
+class MavlinkStreamBatteryStatus : public MavlinkStream
+{
+public:
+  const char *get_name() const
+  {
+    return MavlinkStreamBatteryStatus::get_name_static();
+  }
+
+  static const char *get_name_static()
+  {
+    return "BATTERY_STATUS";
+  }
+
+  uint8_t get_id()
+  {
+    return MAVLINK_MSG_ID_BATTERY_STATUS;
+  }
+
+  static MavlinkStream *new_instance(Mavlink *mavlink)
+  {
+    return new MavlinkStreamBatteryStatus(mavlink);
+  }
+
+  unsigned get_size()
+  {
+    return MAVLINK_MSG_ID_BATTERY_STATUS_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES;
+  }
+
+private:
+  MavlinkOrbSubscription *_battery_status_sub;
+
+  /* do not allow top copying this class */
+  MavlinkStreamBatteryStatus(MavlinkStreamBatteryStatus &);
+  MavlinkStreamBatteryStatus& operator = (const MavlinkStreamBatteryStatus &);
+
+protected:
+  explicit MavlinkStreamBatteryStatus(Mavlink *mavlink) : MavlinkStream(mavlink),
+                                                          _battery_status_sub(_mavlink->add_orb_subscription(ORB_ID(battery_status)))
+  {}
+
+  void send(const hrt_abstime t)
+  {
+    struct battery_status_s bs;
+
+    if (_battery_status_sub->update(&bs)) {
+      mavlink_battery_status_t bat_msg;
+      bat_msg.id = 0;
+      bat_msg.battery_function = MAV_BATTERY_FUNCTION_ALL;
+      bat_msg.type = MAV_BATTERY_TYPE_LIPO;
+      bat_msg.temperature = INT16_MAX;
+      bat_msg.voltages[0] =
+        static_cast<uint16_t>(bs.voltage_filtered_v*1000.0f);
+      bat_msg.current_battery =
+        static_cast<int16_t>(bs.current_a*100.0f);
+      bat_msg.current_consumed = bs.discharged_mah;
+      bat_msg.battery_remaining = -1.0f;
+      bat_msg.energy_consumed = -1.0f;
+
+      _mavlink->send_message(MAVLINK_MSG_ID_BATTERY_STATUS, &bat_msg);
+    }
+  }
+};
+
 const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamHeartbeat::new_instance, &MavlinkStreamHeartbeat::get_name_static),
 	new StreamListItem(&MavlinkStreamStatustext::new_instance, &MavlinkStreamStatustext::get_name_static),
@@ -2923,5 +2986,6 @@ const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamExtendedSysState::new_instance, &MavlinkStreamExtendedSysState::get_name_static),
 	new StreamListItem(&MavlinkStreamAltitude::new_instance, &MavlinkStreamAltitude::get_name_static),
 	new StreamListItem(&MavlinkStreamRPMOutput::new_instance, &MavlinkStreamRPMOutput::get_name_static),
+	new StreamListItem(&MavlinkStreamBatteryStatus::new_instance, &MavlinkStreamBatteryStatus::get_name_static),
 	nullptr
 };
