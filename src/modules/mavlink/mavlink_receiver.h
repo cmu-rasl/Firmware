@@ -148,6 +148,7 @@ private:
         void handle_message_cascaded_cmd_gains(mavlink_message_t *msg);
         void handle_message_mocap_motor_state(mavlink_message_t *msg);
         void handle_message_mocap_rpm_cmd(mavlink_message_t *msg);
+        void handle_message_mocap_timesync(mavlink_message_t *msg);
 // End Custom Handlers
 
 	void *receive_thread(void *arg);

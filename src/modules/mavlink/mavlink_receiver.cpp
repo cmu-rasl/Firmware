@@ -245,6 +245,9 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
           case MAVLINK_MSG_ID_MOCAP_RPM_CMD:
             handle_message_mocap_rpm_cmd(msg);
             break;
+          case MAVLINK_MSG_ID_MOCAP_TIMESYNC:
+            handle_message_mocap_timesync(msg);
+            break;
 // End custom message
 
 	default:
@@ -1867,6 +1870,55 @@ MavlinkReceiver::handle_message_mocap_rpm_cmd(mavlink_message_t *msg)
       orb_advertise(ORB_ID(mocap_rpm_command), &mocap_rpm_cmd);
   else
     orb_publish(ORB_ID(mocap_rpm_command), _mocap_rpm_cmd_pub, &mocap_rpm_cmd);
+}
+
+void
+MavlinkReceiver::handle_message_mocap_timesync(mavlink_message_t *msg)
+{
+  // Specialized handler to ensure that time sync is wrt specific systems
+  mavlink_mocap_timesync_t tsync;
+  mavlink_msg_mocap_timesync_decode(msg, &tsync);
+
+  if (tsync.target_system != _mavlink->get_system_id())
+    return;
+
+  struct time_offset_s tsync_offset;
+  memset(&tsync_offset, 0, sizeof(tsync_offset));
+
+  uint64_t now_ns = hrt_absolute_time() * 1000LL ;
+
+  if (tsync.tc1 == 0) {
+
+    mavlink_timesync_t rsync; // return timestamped sync message
+
+    rsync.tc1 = now_ns;
+    rsync.ts1 = tsync.ts1;
+
+    _mavlink->send_message(MAVLINK_MSG_ID_TIMESYNC, &rsync);
+
+    return;
+
+  } else if (tsync.tc1 > 0) {
+
+    int64_t offset_ns = (tsync.ts1 + now_ns - tsync.tc1*2)/2 ;
+    int64_t dt = _time_offset - offset_ns;
+
+    if (dt > 10000000LL || dt < -10000000LL) { // 10 millisecond skew
+      _time_offset = offset_ns;
+      //printf("[timesync] Hard setting offset (%lld)\n", dt);
+    } else {
+      smooth_time_offset(offset_ns);
+    }
+  }
+
+  tsync_offset.offset_ns = _time_offset ;
+
+  if (_time_offset_pub == nullptr) {
+    _time_offset_pub = orb_advertise(ORB_ID(time_offset), &tsync_offset);
+
+  } else {
+    orb_publish(ORB_ID(time_offset), _time_offset_pub, &tsync_offset);
+  }
 }
 // End Custom Handlers
 
