@@ -248,6 +248,9 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
           case MAVLINK_MSG_ID_MOCAP_TIMESYNC:
             handle_message_mocap_timesync(msg);
             break;
+          case MAVLINK_MSG_ID_MOCAP_MULTI_POSE:
+            handle_message_mocap_multi_pose(msg);
+            break;
 // End custom message
 
 	default:
@@ -1918,6 +1921,63 @@ MavlinkReceiver::handle_message_mocap_timesync(mavlink_message_t *msg)
 
   } else {
     orb_publish(ORB_ID(time_offset), _time_offset_pub, &tsync_offset);
+  }
+}
+
+void
+MavlinkReceiver::handle_message_mocap_multi_pose(mavlink_message_t *msg)
+{
+  mavlink_mocap_multi_pose_t mpose;
+  mavlink_msg_mocap_multi_pose_decode(msg, &mpose);
+
+  int indx = -1;
+  for (unsigned int i = 0; i < mpose.npose; i++)
+    if (mpose.ids[i] == _mavlink->get_system_id())
+    {
+      indx = i;
+      break;
+    }
+
+  if (indx == -1)
+    return;
+
+  struct att_pos_mocap_s att_pos_mocap;
+  memset(&att_pos_mocap, 0, sizeof(att_pos_mocap));
+
+  // Use the component ID to identify the mocap system
+  att_pos_mocap.id = msg->compid;
+
+  att_pos_mocap.timestamp_boot = hrt_absolute_time(); // Monotonic time
+  att_pos_mocap.timestamp_computer = sync_stamp(mpose.time_usec); // Synced time
+
+  unsigned int k = 4*indx;
+  att_pos_mocap.x = mpose.pose[k++]/1000.0f;
+  att_pos_mocap.y = mpose.pose[k++]/1000.0f;
+  att_pos_mocap.z = mpose.pose[k++]/1000.0f;
+
+  float heading = mpose.pose[k++]/10000.0f;
+  math::Quaternion mq;
+  mq.from_yaw(heading);
+
+#if 0
+  // Hack to address NuttX printf issue re: handling of float/double
+  char buf[128];
+  sprintf(buf, "position = %0.5f, %0.5f, %0.5f, heading = %0.5f",
+          (double)att_pos_mocap.x, (double)att_pos_mocap.y,
+          (double)att_pos_mocap.z, (double)heading);
+  printf("%s\n", buf);
+#endif
+
+  att_pos_mocap.q[0] = mq(0);
+  att_pos_mocap.q[1] = mq(1);
+  att_pos_mocap.q[2] = mq(2);
+  att_pos_mocap.q[3] = mq(3);
+
+  if (_att_pos_mocap_pub == nullptr) {
+    _att_pos_mocap_pub = orb_advertise(ORB_ID(att_pos_mocap), &att_pos_mocap);
+
+  } else {
+    orb_publish(ORB_ID(att_pos_mocap), _att_pos_mocap_pub, &att_pos_mocap);
   }
 }
 // End Custom Handlers
