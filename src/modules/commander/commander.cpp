@@ -722,10 +722,10 @@ bool handle_command(struct vehicle_status_s *status_local, const struct safety_s
 					// Refuse to arm if preflight checks have failed
 					if ((!status.hil_state) != vehicle_status_s::HIL_STATE_ON && !status.condition_system_sensors_initialized) {
 						mavlink_log_critical(mavlink_fd, "Arming DENIED. Preflight checks have failed.");
-						cmd_result = vehicle_command_s::VEHICLE_CMD_RESULT_DENIED;			
+						cmd_result = vehicle_command_s::VEHICLE_CMD_RESULT_DENIED;
 						break;
 					}
-					
+
 				}
 
 				transition_result_t arming_res = arm_disarm(cmd_arms, mavlink_fd, "arm/disarm component command");
@@ -1116,7 +1116,7 @@ int commander_thread_main(int argc, char *argv[])
 	memset(&status, 0, sizeof(status));
 	status.condition_landed = true;	// initialize to safe value
 	// We want to accept RC inputs as default
-	status.rc_input_blocked = false;
+	status.rc_input_blocked = true;
 	status.rc_input_mode = vehicle_status_s::RC_IN_MODE_DEFAULT;
 	status.main_state =vehicle_status_s::MAIN_STATE_MANUAL;
 	status.main_state_prev = vehicle_status_s::MAIN_STATE_MAX;
@@ -1145,7 +1145,7 @@ int commander_thread_main(int argc, char *argv[])
 
 	// XXX for now just set sensors as initialized
 	status.condition_system_sensors_initialized = true;
-	
+
 	status.condition_system_prearm_error_reported = false;
 	status.condition_system_hotplug_timeout = false;
 
@@ -2570,7 +2570,7 @@ int commander_thread_main(int argc, char *argv[])
 		} else {
 			set_tune(TONE_STOP_TUNE);
 		}
-		
+
 		/* reset arm_tune_played when disarmed */
 		if (!armed.armed || (safety.safety_switch_available && !safety.safety_off)) {
 
@@ -2581,16 +2581,16 @@ int commander_thread_main(int argc, char *argv[])
 
 			arm_tune_played = false;
 		}
-		
+
 		/* play sensor failure tunes if we already waited for hotplug sensors to come up and failed */
 		hotplug_timeout = hrt_elapsed_time(&commander_boot_timestamp) > HOTPLUG_SENS_TIMEOUT;
-		
+
 		if (!sensor_fail_tune_played && (!status.condition_system_sensors_initialized && hotplug_timeout)) {
 			set_tune_override(TONE_GPS_WARNING_TUNE);
 			sensor_fail_tune_played = true;
 			status_changed = true;
 		}
-		
+
 		/* update timeout flag */
 		if(!(hotplug_timeout == status.condition_system_hotplug_timeout)) {
 			status.condition_system_hotplug_timeout = hotplug_timeout;
@@ -2682,7 +2682,7 @@ control_status_leds(vehicle_status_s *status_local, const actuator_armed_s *actu
 	if (changed) {
 		bool set_normal_color = false;
 		bool hotplug_timeout = hrt_elapsed_time(&commander_boot_timestamp) > HOTPLUG_SENS_TIMEOUT;
-		
+
 		/* set mode */
 		if (status_local->arming_state == vehicle_status_s::ARMING_STATE_ARMED) {
 			rgbled_set_mode(RGBLED_MODE_ON);
@@ -2695,7 +2695,7 @@ control_status_leds(vehicle_status_s *status_local, const actuator_armed_s *actu
 		} else if (status_local->arming_state == vehicle_status_s::ARMING_STATE_STANDBY) {
 			rgbled_set_mode(RGBLED_MODE_BREATHE);
 			set_normal_color = true;
-		
+
 		} else if (!status.condition_system_sensors_initialized && !hotplug_timeout) {
 			rgbled_set_mode(RGBLED_MODE_BREATHE);
 			set_normal_color = true;
@@ -2844,9 +2844,9 @@ set_main_state_rc(struct vehicle_status_s *status_local, struct manual_control_s
 				res = main_state_transition(status_local,vehicle_status_s::MAIN_STATE_STAB);
 			}
 
-		} 
+		}
 		else if(sp_man->rattitude_switch == manual_control_setpoint_s::SWITCH_POS_ON){
-			/* Similar to acro transitions for multirotors.  FW aircraft don't need a 
+			/* Similar to acro transitions for multirotors.  FW aircraft don't need a
 			 * rattitude mode.*/
 			if (status.is_rotary_wing) {
 				res = main_state_transition(status_local,vehicle_status_s::MAIN_STATE_RATTITUDE);
@@ -3366,7 +3366,7 @@ void *commander_low_prio_loop(void *arg)
 						/* do esc calibration */
 						answer_command(cmd, vehicle_command_s::VEHICLE_CMD_RESULT_ACCEPTED, command_ack_pub, command_ack);
 						calib_ret = do_esc_calibration(mavlink_fd, &armed);
-						
+
 					} else if ((int)(cmd.param4) == 0) {
 						/* RC calibration ended - have we been in one worth confirming? */
 						if (status.rc_input_blocked) {

@@ -60,4 +60,5 @@ rootfs/
 CMakeLists.txt.user
 GPATH
 GRTAGS
+pixhawk.*
 GTAGS
