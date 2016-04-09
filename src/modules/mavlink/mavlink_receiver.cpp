@@ -146,7 +146,9 @@ MavlinkReceiver::MavlinkReceiver(Mavlink *parent) :
         _cascaded_command_pub(nullptr),
         _cascaded_command_gains_pub(nullptr),
         _mocap_motor_state_pub(nullptr),
-        _mocap_rpm_cmd_pub(nullptr)
+        _mocap_rpm_cmd_pub(nullptr),
+        _mocap_position_command_pub(nullptr),
+        _mocap_position_command_gains_pub(nullptr)
         //End custom publishers
 {
 
@@ -250,6 +252,12 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
             break;
           case MAVLINK_MSG_ID_MOCAP_MULTI_POSE:
             handle_message_mocap_multi_pose(msg);
+            break;
+          case MAVLINK_MSG_ID_MOCAP_POSITION_CMD:
+            handle_message_mocap_position_cmd(msg);
+            break;
+          case MAVLINK_MSG_ID_MOCAP_POSITION_CMD_GAINS:
+            handle_message_mocap_position_cmd_gains(msg);
             break;
 // End custom message
 
@@ -1980,6 +1988,62 @@ MavlinkReceiver::handle_message_mocap_multi_pose(mavlink_message_t *msg)
     orb_publish(ORB_ID(att_pos_mocap), _att_pos_mocap_pub, &att_pos_mocap);
   }
 }
+
+void
+MavlinkReceiver::handle_message_mocap_position_cmd(mavlink_message_t *msg)
+{
+  mavlink_mocap_position_cmd_t mcmd;
+  mavlink_msg_mocap_position_cmd_decode(msg, &mcmd);
+
+  if (mcmd.target_system != _mavlink->get_system_id())
+    return;
+
+  struct mocap_position_command_s cmd;
+  memset(&cmd, 0, sizeof(cmd));
+
+  cmd.timestamp = mcmd.time_usec;
+  for (unsigned int i = 0; i < 3; i++)
+  {
+    cmd.pos[i] = static_cast<float>(mcmd.pos[i])*1e-3f;
+    cmd.vel[i] = static_cast<float>(mcmd.vel[i])*1e-3f;
+    cmd.acc[i] = static_cast<float>(mcmd.acc[i])*1e-3f;
+    cmd.jerk[i] = static_cast<float>(mcmd.jerk[i])*1e-3f;
+    cmd.heading = static_cast<float>(mcmd.heading)*1e-4f;
+  }
+
+  if (_mocap_position_command_pub == nullptr)
+    _mocap_position_command_pub = orb_advertise(ORB_ID(mocap_position_command), &cmd);
+  else
+    orb_publish(ORB_ID(mocap_position_command), _mocap_position_command_pub, &cmd);
+}
+
+void
+MavlinkReceiver::handle_message_mocap_position_cmd_gains(mavlink_message_t *msg)
+{
+  mavlink_mocap_position_cmd_gains_t mcmd_gains;
+  mavlink_msg_mocap_position_cmd_gains_decode(msg, &mcmd_gains);
+
+  if (mcmd_gains.target_system != _mavlink->get_system_id())
+    return;
+
+  struct mocap_position_command_gains_s cmd_gains;
+  memset(&cmd_gains, 0, sizeof(cmd_gains));
+
+  cmd_gains.timestamp = mcmd_gains.time_usec;
+  for (unsigned int i = 0; i < 3; i++)
+  {
+    cmd_gains.kp[i] = mcmd_gains.kp[i];
+    cmd_gains.kd[i] = mcmd_gains.kd[i];
+  }
+
+  if (_mocap_position_command_gains_pub == nullptr)
+    _mocap_position_command_gains_pub =
+      orb_advertise(ORB_ID(mocap_position_command_gains), &mcmd_gains);
+  else
+    orb_publish(ORB_ID(mocap_position_command_gains),
+                _mocap_position_command_gains_pub, &mcmd_gains);
+}
+
 // End Custom Handlers
 
 /**

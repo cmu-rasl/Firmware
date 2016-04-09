@@ -79,6 +79,8 @@
 #include <uORB/topics/cascaded_command_gains.h>
 #include <uORB/topics/mocap_motor_state.h>
 #include <uORB/topics/mocap_rpm_command.h>
+#include <uORB/topics/mocap_position_command.h>
+#include <uORB/topics/mocap_position_command_gains.h>
 // End custom uORB
 
 #include "mavlink_ftp.h"
@@ -150,6 +152,8 @@ private:
         void handle_message_mocap_rpm_cmd(mavlink_message_t *msg);
         void handle_message_mocap_timesync(mavlink_message_t *msg);
         void handle_message_mocap_multi_pose(mavlink_message_t *msg);
+        void handle_message_mocap_position_cmd(mavlink_message_t *msg);
+        void handle_message_mocap_position_cmd_gains(mavlink_message_t *msg);
 // End Custom Handlers
 
 	void *receive_thread(void *arg);
@@ -237,5 +241,7 @@ private:
   orb_advert_t _cascaded_command_gains_pub;
   orb_advert_t _mocap_motor_state_pub;
   orb_advert_t _mocap_rpm_cmd_pub;
+  orb_advert_t _mocap_position_command_pub;
+  orb_advert_t _mocap_position_command_gains_pub;
 //End custom publishers
 };
