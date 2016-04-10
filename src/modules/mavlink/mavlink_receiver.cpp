@@ -2008,7 +2008,7 @@ MavlinkReceiver::handle_message_mocap_position_cmd(mavlink_message_t *msg)
     cmd.vel[i] = static_cast<float>(mcmd.vel[i])*1e-3f;
     cmd.acc[i] = static_cast<float>(mcmd.acc[i])*1e-3f;
     cmd.jerk[i] = static_cast<float>(mcmd.jerk[i])*1e-3f;
-    cmd.heading = static_cast<float>(mcmd.heading)*1e-4f;
+    cmd.heading[i] = static_cast<float>(mcmd.heading[i])*1e-4f;
   }
 
   if (_mocap_position_command_pub == nullptr)
