@@ -47,6 +47,7 @@
 #include <sys/ioctl.h>
 
 #define BLINKM0_DEVICE_PATH	"/dev/blinkm0"
+#define BLINKM1_DEVICE_PATH	"/dev/blinkm1"
 
 /*
  * ioctl() definitions
@@ -68,3 +69,6 @@
  * The script is terminated by a zero command.
  */
 #define BLINKM_SET_USER_SCRIPT		_BLINKMIOC(3)
+
+#define BLINKM_SET_MODE		_BLINKMIOC(4)
+#define BLINKM_SET_INTENSITY		_BLINKMIOC(5)
