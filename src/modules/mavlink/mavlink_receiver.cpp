@@ -148,7 +148,8 @@ MavlinkReceiver::MavlinkReceiver(Mavlink *parent) :
         _mocap_motor_state_pub(nullptr),
         _mocap_rpm_cmd_pub(nullptr),
         _mocap_position_command_pub(nullptr),
-        _mocap_position_command_gains_pub(nullptr)
+        _mocap_position_command_gains_pub(nullptr),
+        _blinkm_control_pub(nullptr)
         //End custom publishers
 {
 
@@ -258,6 +259,9 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
             break;
           case MAVLINK_MSG_ID_MOCAP_POSITION_CMD_GAINS:
             handle_message_mocap_position_cmd_gains(msg);
+            break;
+          case MAVLINK_MSG_ID_BLINKM_CONTROL:
+            handle_message_blinkm_control(msg);
             break;
 // End custom message
 
@@ -2044,6 +2048,25 @@ MavlinkReceiver::handle_message_mocap_position_cmd_gains(mavlink_message_t *msg)
                 _mocap_position_command_gains_pub, &mcmd_gains);
 }
 
+void
+MavlinkReceiver::handle_message_blinkm_control(mavlink_message_t *msg)
+{
+  mavlink_blinkm_control_t mb;
+  mavlink_msg_blinkm_control_decode(msg, &mb);
+
+  if (mb.target_system != _mavlink->get_system_id())
+    return;
+
+  struct blinkm_control_s bc;
+  memset(&bc, 0, sizeof(bc));
+
+  bc.control = mb.control;
+
+  if (_blinkm_control_pub == nullptr)
+    _blinkm_control_pub = orb_advertise(ORB_ID(blinkm_control), &bc);
+  else
+    orb_publish(ORB_ID(blinkm_control), _blinkm_control_pub, &bc);
+}
 // End Custom Handlers
 
 /**

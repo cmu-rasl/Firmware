@@ -304,4 +304,7 @@ ORB_DEFINE(mocap_position_command, struct mocap_position_command_s);
 
 #include "topics/mocap_position_command_gains.h"
 ORB_DEFINE(mocap_position_command_gains, struct mocap_position_command_gains_s);
+
+#include "topics/blinkm_control.h"
+ORB_DEFINE(blinkm_control, struct blinkm_control_s);
 // End custom uORB topics
