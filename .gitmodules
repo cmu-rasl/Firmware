@@ -44,3 +44,6 @@
 [submodule "src/modules/mocap_status_monitor"]
 	path = src/modules/mocap_status_monitor
 	url = git@nmichael.frc.ri.cmu.edu:nmichael/mocap_status_monitor.git
+[submodule "src/modules/mocap_blinkm"]
+	path = src/modules/mocap_blinkm
+	url = git@nmichael.frc.ri.cmu.edu:nmichael/mocap_blinkm.git
