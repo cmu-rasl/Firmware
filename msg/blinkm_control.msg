@@ -1,1 +1,1 @@
-uint64 control
+uint8 control

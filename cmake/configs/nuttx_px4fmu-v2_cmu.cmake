@@ -76,6 +76,7 @@ set(config_module_list
 	modules/land_detector
 
         modules/mocap_status_monitor
+        modules/mocap_blinkm
 
 	#
 	# Estimation modules (EKF/ SO3 / other filters)
