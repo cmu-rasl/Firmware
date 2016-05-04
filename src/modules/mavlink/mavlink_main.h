@@ -68,6 +68,7 @@
 #include "mavlink_parameters.h"
 #include "mavlink_ftp.h"
 #include "mavlink_log_handler.h"
+#include "cmu_mavlink.h"
 
 enum Protocol {
 	SERIAL = 0,
@@ -520,4 +521,7 @@ private:
 	/* do not allow copying this class */
 	Mavlink(const Mavlink&);
 	Mavlink operator=(const Mavlink&);
+
+        // Custom message handler
+        CMUMavlink *_cmu_mavlink;
 };
