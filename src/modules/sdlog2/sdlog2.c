@@ -114,6 +114,11 @@
 #include <uORB/topics/l1_linvel_debug.h>
 #include <uORB/topics/ekf2_innovations.h>
 
+#include <uORB/topics/cascaded_command.h>
+#include <uORB/topics/cascaded_command_gains.h>
+#include <uORB/topics/mocap_position_command.h>
+#include <uORB/topics/mocap_position_command_gains.h>
+
 #include <systemlib/systemlib.h>
 #include <systemlib/param/param.h>
 #include <systemlib/perf_counter.h>
@@ -1103,6 +1108,10 @@ int sdlog2_thread_main(int argc, char *argv[])
 		struct l1_linvel_debug_s l1_linvel_debug;
 		struct control_state_s ctrl_state;
 		struct ekf2_innovations_s innovations;
+		struct cascaded_command_s cascaded_command;
+		struct cascaded_command_gains_s cascaded_command_gains;
+		struct mocap_position_command_s mocap_position_command;
+		struct mocap_position_command_gains_s mocap_position_command_gains;
 	} buf;
 
 	memset(&buf, 0, sizeof(buf));
@@ -1157,6 +1166,11 @@ int sdlog2_thread_main(int argc, char *argv[])
 			struct log_CTS_s log_CTS;
 			struct log_EST4_s log_INO1;
 			struct log_EST5_s log_INO2;
+                  struct log_CC_s log_CC;
+                  struct log_CCG_s log_CCG;
+                  struct log_MPC_s log_MPC;
+                  struct log_MPCG_s log_MPCG;
+
 		} body;
 	} log_msg = {
 		LOG_PACKET_HEADER_INIT(0)
@@ -1205,6 +1219,10 @@ int sdlog2_thread_main(int argc, char *argv[])
 		int l1_linvel_debug_sub;
 		int ctrl_state_sub;
 		int innov_sub;
+		int cascaded_command_sub;
+		int cascaded_command_gains_sub;
+      		int mocap_position_command_sub;
+		int mocap_position_command_gains_sub;
 	} subs;
 
 	subs.cmd_sub = -1;
@@ -1245,7 +1263,10 @@ int sdlog2_thread_main(int argc, char *argv[])
 	subs.ctrl_state_sub = -1;
 	subs.encoders_sub = -1;
 	subs.innov_sub = -1;
-
+	subs.cascaded_command_sub = -1;
+	subs.cascaded_command_gains_sub = -1;
+	subs.mocap_position_command_sub = -1;
+	subs.mocap_position_command_gains_sub = -1;
 	/* add new topics HERE */
 
 
@@ -1998,6 +2019,59 @@ int sdlog2_thread_main(int argc, char *argv[])
 			log_msg.body.log_CTS.pitch_rate = buf.ctrl_state.pitch_rate;
 			log_msg.body.log_CTS.yaw_rate = buf.ctrl_state.yaw_rate;
 			LOGBUFFER_WRITE_AND_COUNT(CTS);
+		}
+
+		/* --- Cascaded Command --- */
+		if (copy_if_updated(ORB_ID(cascaded_command), &subs.cascaded_command_sub, &buf.cascaded_command)) {
+			log_msg.msg_type = LOG_CC_MSG;
+			memset(&(log_msg.body.log_CC.q), 0, sizeof(log_msg.body.log_CC.q));
+			memset(&(log_msg.body.log_CC.ang_vel), 0, sizeof(log_msg.body.log_CC.ang_vel));
+			memset(&(log_msg.body.log_CC.ang_acc), 0, sizeof(log_msg.body.log_CC.ang_acc));
+
+                        log_msg.body.log_CC.thrust = buf.cascaded_command.thrust;
+			memcpy(&(log_msg.body.log_CC.q), buf.cascaded_command.q, sizeof(buf.cascaded_command.q));
+                        memcpy(&(log_msg.body.log_CC.ang_vel), buf.cascaded_command.ang_vel, sizeof(buf.cascaded_command.ang_vel));
+                        memcpy(&(log_msg.body.log_CC.ang_acc), buf.cascaded_command.ang_acc, sizeof(buf.cascaded_command.ang_acc));
+			LOGBUFFER_WRITE_AND_COUNT(CC);
+		}
+
+		/* --- Cascaded Command Gains --- */
+		if (copy_if_updated(ORB_ID(cascaded_command_gains), &subs.cascaded_command_gains_sub, &buf.cascaded_command_gains)) {
+			log_msg.msg_type = LOG_CCG_MSG;
+			memset(&(log_msg.body.log_CCG.kR), 0, sizeof(log_msg.body.log_CCG.kR));
+			memset(&(log_msg.body.log_CCG.kOm), 0, sizeof(log_msg.body.log_CCG.kOm));
+
+			memcpy(&(log_msg.body.log_CCG.kR), buf.cascaded_command_gains.kR, sizeof(buf.cascaded_command_gains.kR));
+			memcpy(&(log_msg.body.log_CCG.kOm), buf.cascaded_command_gains.kOm, sizeof(buf.cascaded_command_gains.kOm));
+			LOGBUFFER_WRITE_AND_COUNT(CCG);
+		}
+
+		/* --- Mocap Position Command --- */
+		if (copy_if_updated(ORB_ID(mocap_position_command), &subs.mocap_position_command_sub, &buf.mocap_position_command)) {
+			log_msg.msg_type = LOG_MPC_MSG;
+			memset(&(log_msg.body.log_MPC.pos), 0, sizeof(log_msg.body.log_MPC.pos));
+			memset(&(log_msg.body.log_MPC.vel), 0, sizeof(log_msg.body.log_MPC.vel));
+			memset(&(log_msg.body.log_MPC.acc), 0, sizeof(log_msg.body.log_MPC.acc));
+			memset(&(log_msg.body.log_MPC.jerk), 0, sizeof(log_msg.body.log_MPC.jerk));
+                        memset(&(log_msg.body.log_MPC.heading), 0, sizeof(log_msg.body.log_MPC.heading));
+
+			memcpy(&(log_msg.body.log_MPC.pos), buf.mocap_position_command.pos, sizeof(buf.mocap_position_command.pos));
+			memcpy(&(log_msg.body.log_MPC.vel), buf.mocap_position_command.vel, sizeof(buf.mocap_position_command.vel));
+                        memcpy(&(log_msg.body.log_MPC.acc), buf.mocap_position_command.acc, sizeof(buf.mocap_position_command.acc));
+                        memcpy(&(log_msg.body.log_MPC.jerk), buf.mocap_position_command.jerk, sizeof(buf.mocap_position_command.jerk));
+                        memcpy(&(log_msg.body.log_MPC.heading), buf.mocap_position_command.heading, sizeof(buf.mocap_position_command.heading));
+			LOGBUFFER_WRITE_AND_COUNT(MPC);
+		}
+
+		/* --- Mocap Position Command Gains --- */
+		if (copy_if_updated(ORB_ID(mocap_position_command_gains), &subs.mocap_position_command_gains_sub, &buf.mocap_position_command_gains)) {
+			log_msg.msg_type = LOG_MPCG_MSG;
+			memset(&(log_msg.body.log_MPCG.kp), 0, sizeof(log_msg.body.log_MPCG.kp));
+			memset(&(log_msg.body.log_MPCG.kd), 0, sizeof(log_msg.body.log_MPCG.kd));
+
+			memcpy(&(log_msg.body.log_MPCG.kp), buf.mocap_position_command_gains.kp, sizeof(buf.mocap_position_command_gains.kp));
+			memcpy(&(log_msg.body.log_MPCG.kd), buf.mocap_position_command_gains.kd, sizeof(buf.mocap_position_command_gains.kd));
+			LOGBUFFER_WRITE_AND_COUNT(MPCG);
 		}
 
 		/* signal the other thread new data, but not yet unlock */

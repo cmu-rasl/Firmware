@@ -540,6 +540,39 @@ struct log_L1V_s {
 	float lpd[3];
 };
 
+/* --- CC - Cascaded Command --- */
+#define LOG_CC_MSG 52
+struct log_CC_s {
+        float thrust;
+	float q[4];
+	float ang_vel[3];
+	float ang_acc[3];
+};
+
+/* --- CCG - Cascaded Command Gains --- */
+#define LOG_CCG_MSG 53
+struct log_CCG_s {
+	float kR[3];
+	float kOm[3];
+};
+
+/* --- MPC - Mocap Position Command --- */
+#define LOG_MPC_MSG 54
+struct log_MPC_s {
+	float pos[3];
+	float vel[4];
+	float acc[3];
+	float jerk[3];
+	float heading[3];
+};
+
+/* --- MPCG - Mocap Position Command Gains --- */
+#define LOG_MPCG_MSG 55
+struct log_MPCG_s {
+	float kp[3];
+	float kd[4];
+};
+
 /********** SYSTEM MESSAGES, ID > 0x80 **********/
 
 /* --- TIME - TIME STAMP --- */
@@ -618,6 +651,10 @@ static const struct log_format_s log_formats[] = {
 	LOG_FORMAT(FFLW, "ffffffffff", "XIntg,YIntg,VelX,VelY,RateX,RateY,RateZ,BiasX,BiasY,BiasZ"),
 	LOG_FORMAT(L1A, "fffffffffffff", "avlx,avly,avlz,rpm1,rpm2,rpm3,rpm4,dstx,dsty,dstz,lpdx,lpdy,lpdz"),
 	LOG_FORMAT(L1V, "fffffffffffff", "velx,vely,velz,rpm1,rpm2,rpm3,rpm4,dstx,dsty,dstz,lpdx,lpdy,lpdz"),
+	LOG_FORMAT(CC, "fffffffffff", "thrust,QW,QX,QY,QZ,avx,avy,avz,aax,aay,aaz"),
+	LOG_FORMAT(CCG, "ffffff", "kRx,kRy,kRz,kOmx,kOmy,kOmz"),
+	LOG_FORMAT(MPC, "fffffffffffffff", "px,py,pz,vx,vy,vz,ax,ay,az,jx,jy,jz,psi,psid,psidd"),
+	LOG_FORMAT(MPCG, "ffffff", "kpx,kpy,kpz,kdx,kdy,kdz"),
 
 	/* system-level messages, ID >= 0x80 */
 	/* FMT: don't write format of format message, it's useless */
