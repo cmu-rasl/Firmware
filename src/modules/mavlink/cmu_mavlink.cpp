@@ -23,7 +23,9 @@ CMUMavlink::CMUMavlink(Mavlink* parent) :
   mocap_rpm_cmd_pub(nullptr),
   mocap_position_command_pub(nullptr),
   mocap_position_command_gains_pub(nullptr),
-  blinkm_control_pub(nullptr)
+  blinkm_control_pub(nullptr),
+  time_offset_pub(nullptr),
+  att_pos_mocap_pub(nullptr)
 {
   return;
 }
@@ -95,10 +97,9 @@ void CMUMavlink::handle_message_cascaded_cmd(const mavlink_message_t *msg)
   for (unsigned int i = 0; i < 3; i++)
     cascaded_command.ang_acc[i] = mavlink_cascaded_cmd.ang_acc[i];
 
-  if (cascaded_command_pub == nullptr)
-    cascaded_command_pub = orb_advertise(ORB_ID(cascaded_command), &cascaded_command);
-  else
-    orb_publish(ORB_ID(cascaded_command), cascaded_command_pub, &cascaded_command);
+  int inst; // Not used
+  orb_publish_auto(ORB_ID(cascaded_command), &cascaded_command_pub,
+                   &cascaded_command, &inst, ORB_PRIO_HIGH);
 }
 
 void CMUMavlink::handle_message_cascaded_cmd_gains(const mavlink_message_t *msg)
@@ -120,12 +121,9 @@ void CMUMavlink::handle_message_cascaded_cmd_gains(const mavlink_message_t *msg)
   for (unsigned int i = 0; i < 3; i++)
     cascaded_command_gains.kOm[i] = mavlink_cascaded_cmd_gains.kOm[i];
 
-  if (cascaded_command_gains_pub == nullptr)
-    cascaded_command_gains_pub =
-      orb_advertise(ORB_ID(cascaded_command_gains), &cascaded_command_gains);
-  else
-    orb_publish(ORB_ID(cascaded_command_gains),
-                cascaded_command_gains_pub, &cascaded_command_gains);
+  int inst; // Not used
+  orb_publish_auto(ORB_ID(cascaded_command_gains), &cascaded_command_gains_pub,
+                   &cascaded_command_gains, &inst, ORB_PRIO_HIGH);
 }
 
 void CMUMavlink::handle_message_mocap_motor_state(const mavlink_message_t *msg)
@@ -142,12 +140,9 @@ void CMUMavlink::handle_message_mocap_motor_state(const mavlink_message_t *msg)
   mocap_motor_state.timestamp = mavlink_mocap_motor_state.time_usec;
   mocap_motor_state.state = mavlink_mocap_motor_state.state;
 
-  if (mocap_motor_state_pub == nullptr)
-    mocap_motor_state_pub =
-      orb_advertise(ORB_ID(mocap_motor_state), &mocap_motor_state);
-  else
-    orb_publish(ORB_ID(mocap_motor_state),
-                mocap_motor_state_pub, &mocap_motor_state);
+  int inst; // Not used
+  orb_publish_auto(ORB_ID(mocap_motor_state), &mocap_motor_state_pub,
+                   &mocap_motor_state, &inst, ORB_PRIO_HIGH);
 }
 
 void CMUMavlink::handle_message_mocap_rpm_cmd(const mavlink_message_t *msg)
@@ -167,11 +162,9 @@ void CMUMavlink::handle_message_mocap_rpm_cmd(const mavlink_message_t *msg)
   for (unsigned int i = 0; i < mavlink_mocap_rpm_cmd.ninputs; i++)
     mocap_rpm_cmd.input[i] = mavlink_mocap_rpm_cmd.input[i];
 
-  if (mocap_rpm_cmd_pub == nullptr)
-    mocap_rpm_cmd_pub =
-      orb_advertise(ORB_ID(mocap_rpm_command), &mocap_rpm_cmd);
-  else
-    orb_publish(ORB_ID(mocap_rpm_command), mocap_rpm_cmd_pub, &mocap_rpm_cmd);
+  int inst; // Not used
+  orb_publish_auto(ORB_ID(mocap_rpm_command), &mocap_rpm_cmd_pub,
+                   &mocap_rpm_cmd, &inst, ORB_PRIO_HIGH);
 }
 
 void CMUMavlink::handle_message_mocap_timesync(const mavlink_message_t *msg)
@@ -214,10 +207,9 @@ void CMUMavlink::handle_message_mocap_timesync(const mavlink_message_t *msg)
 
   tsync_offset.offset_ns = time_offset;
 
-  if (time_offset_pub == nullptr)
-    time_offset_pub = orb_advertise(ORB_ID(time_offset), &tsync_offset);
-  else
-    orb_publish(ORB_ID(time_offset), time_offset_pub, &tsync_offset);
+  int inst; // Not used
+  orb_publish_auto(ORB_ID(time_offset), &time_offset_pub,
+                   &tsync_offset, &inst, ORB_PRIO_HIGH);
 }
 
 void CMUMavlink::handle_message_mocap_multi_pose(const mavlink_message_t *msg)
@@ -268,10 +260,9 @@ void CMUMavlink::handle_message_mocap_multi_pose(const mavlink_message_t *msg)
   att_pos_mocap.q[2] = mq(2);
   att_pos_mocap.q[3] = mq(3);
 
-  if (att_pos_mocap_pub == nullptr)
-    att_pos_mocap_pub = orb_advertise(ORB_ID(att_pos_mocap), &att_pos_mocap);
-  else
-    orb_publish(ORB_ID(att_pos_mocap), att_pos_mocap_pub, &att_pos_mocap);
+  int inst; // Not used
+  orb_publish_auto(ORB_ID(att_pos_mocap), &att_pos_mocap_pub,
+                   &att_pos_mocap, &inst, ORB_PRIO_HIGH);
 }
 
 void CMUMavlink::handle_message_mocap_position_cmd(const mavlink_message_t *msg)
@@ -295,11 +286,9 @@ void CMUMavlink::handle_message_mocap_position_cmd(const mavlink_message_t *msg)
     cmd.heading[i] = static_cast<float>(mcmd.heading[i])*1e-4f;
   }
 
-  if (mocap_position_command_pub == nullptr)
-    mocap_position_command_pub =
-      orb_advertise(ORB_ID(mocap_position_command), &cmd);
-  else
-    orb_publish(ORB_ID(mocap_position_command), mocap_position_command_pub, &cmd);
+  int inst; // Not used
+  orb_publish_auto(ORB_ID(mocap_position_command), &mocap_position_command_pub,
+                   &cmd, &inst, ORB_PRIO_HIGH);
 }
 
 void CMUMavlink::handle_message_mocap_position_cmd_gains(const mavlink_message_t *msg)
@@ -320,12 +309,10 @@ void CMUMavlink::handle_message_mocap_position_cmd_gains(const mavlink_message_t
     cmd_gains.kd[i] = mcmd_gains.kd[i];
   }
 
-  if (mocap_position_command_gains_pub == nullptr)
-    mocap_position_command_gains_pub =
-      orb_advertise(ORB_ID(mocap_position_command_gains), &mcmd_gains);
-  else
-    orb_publish(ORB_ID(mocap_position_command_gains),
-                mocap_position_command_gains_pub, &mcmd_gains);
+  int inst; // Not used
+  orb_publish_auto(ORB_ID(mocap_position_command_gains),
+                   &mocap_position_command_gains_pub,
+                   &mcmd_gains, &inst, ORB_PRIO_HIGH);
 }
 
 void CMUMavlink::handle_message_blinkm_control(const mavlink_message_t *msg)
@@ -345,4 +332,8 @@ void CMUMavlink::handle_message_blinkm_control(const mavlink_message_t *msg)
     blinkm_control_pub = orb_advertise(ORB_ID(blinkm_control), &bc);
   else
     orb_publish(ORB_ID(blinkm_control), blinkm_control_pub, &bc);
+
+  int inst; // Not used
+  orb_publish_auto(ORB_ID(blinkm_control), &blinkm_control_pub,
+                   &bc, &inst, ORB_PRIO_HIGH);
 }
