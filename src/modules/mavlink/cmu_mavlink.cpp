@@ -328,11 +328,6 @@ void CMUMavlink::handle_message_blinkm_control(const mavlink_message_t *msg)
 
   bc.control = mb.control;
 
-  if (blinkm_control_pub == nullptr)
-    blinkm_control_pub = orb_advertise(ORB_ID(blinkm_control), &bc);
-  else
-    orb_publish(ORB_ID(blinkm_control), blinkm_control_pub, &bc);
-
   int inst; // Not used
   orb_publish_auto(ORB_ID(blinkm_control), &blinkm_control_pub,
                    &bc, &inst, ORB_PRIO_HIGH);
