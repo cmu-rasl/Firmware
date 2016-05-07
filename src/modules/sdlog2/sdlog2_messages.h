@@ -560,7 +560,7 @@ struct log_CCG_s {
 #define LOG_MPC_MSG 54
 struct log_MPC_s {
 	float pos[3];
-	float vel[4];
+	float vel[3];
 	float acc[3];
 	float jerk[3];
 	float heading[3];
@@ -570,7 +570,7 @@ struct log_MPC_s {
 #define LOG_MPCG_MSG 55
 struct log_MPCG_s {
 	float kp[3];
-	float kd[4];
+	float kd[3];
 };
 
 /********** SYSTEM MESSAGES, ID > 0x80 **********/
