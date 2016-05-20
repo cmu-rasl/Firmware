@@ -123,6 +123,8 @@
 #include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/vehicle_gps_position.h>
 #include <uORB/topics/safety.h>
+#include <uORB/topics/blinkm_control.h>
+#include <uORB/topics/sensor_accel.h>
 
 static const float MAX_CELL_VOLTAGE	= 4.3f;
 static const int LED_ONTIME = 120;
@@ -133,14 +135,16 @@ static const int LED_NOBLINK = 0;
 class BlinkM : public device::I2C
 {
 public:
-	BlinkM(int bus, int blinkm);
+	BlinkM(int bus, int blinkm, const char * path);
 	virtual ~BlinkM();
 
 
 	virtual int		init();
 	virtual int		probe();
+	virtual int 	address();
 	virtual int		setMode(int mode);
 	virtual int		ioctl(device::file_t *filp, int cmd, unsigned long arg);
+
 
 	static const char	*const script_names[];
 
@@ -191,6 +195,10 @@ private:
 	int led_color_7;
 	int led_color_8;
 	int led_blink;
+	int brightness;
+	int led_r;
+	int led_g;
+	int led_b;
 
 	bool systemstate_run;
 
@@ -199,6 +207,8 @@ private:
 	int vehicle_gps_position_sub_fd;
 	int actuator_armed_sub_fd;
 	int safety_sub_fd;
+	int blinkm_control_sub_fd;
+	int sensor_accel_sub_fd;
 
 	int num_of_cells;
 	int detected_cells_runcount;
@@ -239,13 +249,19 @@ private:
 	int			get_rgb(uint8_t &r, uint8_t &g, uint8_t &b);
 
 	int			get_firmware_version(uint8_t version[2]);
+
+	int 	 	get_blinkm_address(uint8_t *addr);
+
 };
 
 /* for now, we only support one BlinkM */
 namespace
 {
 BlinkM *g_blinkm;
+BlinkM *blinkm_multi[10]={nullptr};
 }
+
+
 
 /* list of script names, must match script ID numbers */
 const char *const BlinkM::script_names[] = {
@@ -274,8 +290,8 @@ const char *const BlinkM::script_names[] = {
 
 extern "C" __EXPORT int blinkm_main(int argc, char *argv[]);
 
-BlinkM::BlinkM(int bus, int blinkm) :
-	I2C("blinkm", BLINKM0_DEVICE_PATH, bus, blinkm
+BlinkM::BlinkM(int bus, int blinkm, const char *path) :
+	I2C("blinkm", path, bus, blinkm
 #ifdef __PX4_NUTTX
 	    , 100000
 #endif
@@ -289,12 +305,17 @@ BlinkM::BlinkM(int bus, int blinkm) :
 	led_color_7(LED_OFF),
 	led_color_8(LED_OFF),
 	led_blink(LED_NOBLINK),
+	brightness(LED_OFF),
+	led_r(LED_OFF),
+	led_g(LED_OFF),
+	led_b(LED_OFF),
 	systemstate_run(false),
 	vehicle_status_sub_fd(-1),
 	vehicle_control_mode_sub_fd(-1),
 	vehicle_gps_position_sub_fd(-1),
 	actuator_armed_sub_fd(-1),
 	safety_sub_fd(-1),
+	sensor_accel_sub_fd(-1),
 	num_of_cells(0),
 	detected_cells_runcount(0),
 	t_led_color{0},
@@ -364,6 +385,21 @@ BlinkM::probe()
 }
 
 int
+BlinkM::address()
+{
+	uint8_t addr;
+	int ret;
+
+	ret = get_blinkm_address(&addr);
+
+	if (ret == OK) {
+		DEVICE_DEBUG("found BlinkM address %d", addr);
+	}
+
+	return ret;
+}
+
+int
 BlinkM::ioctl(device::file_t *filp, int cmd, unsigned long arg)
 {
 	int ret = ENOTTY;
@@ -407,6 +443,35 @@ BlinkM::ioctl(device::file_t *filp, int cmd, unsigned long arg)
 
 			break;
 		}
+          case BLINKM_SET_MODE:
+          {
+            switch (arg)
+            {
+              case 0: puts("not listening"); break;
+              case 1: puts("listening"); break;
+            }
+
+            ret = 0;
+            break;
+          }
+          case BLINKM_SET_INTENSITY:
+          {
+            printf("BLINKM_SET_INTENSITY = %lu\n", arg);
+            break;
+          }
+    case BLINKM_SET_COLOR:
+    {
+    	setLEDColor(arg);
+    	break;
+    }
+    case BLINKM_SET_RGB:
+    {
+    	int r = arg & 255;
+    	int g = (arg >> 8) & 255;
+    	int b = (arg >> 16) & 255;
+    	set_rgb(r,g,b);
+    	break;
+    }
 
 	default:
 		break;
@@ -437,345 +502,110 @@ BlinkM::led()
 		vehicle_control_mode_sub_fd = orb_subscribe(ORB_ID(vehicle_control_mode));
 		orb_set_interval(vehicle_control_mode_sub_fd, 250);
 
-		actuator_armed_sub_fd = orb_subscribe(ORB_ID(actuator_armed));
-		orb_set_interval(actuator_armed_sub_fd, 250);
-
 		vehicle_gps_position_sub_fd = orb_subscribe(ORB_ID(vehicle_gps_position));
 		orb_set_interval(vehicle_gps_position_sub_fd, 250);
 
-		/* Subscribe to safety topic */
-		safety_sub_fd = orb_subscribe(ORB_ID(safety));
-		orb_set_interval(safety_sub_fd, 250);
+		blinkm_control_sub_fd = orb_subscribe(ORB_ID(blinkm_control));
+		orb_set_interval(blinkm_control_sub_fd, 250);
+
+		sensor_accel_sub_fd = orb_subscribe(ORB_ID(sensor_accel));
+		//orb_set_interval(sensor_accel_sub_fd, 50);
 
 		topic_initialized = true;
 	}
-
-	if (led_thread_ready == true) {
-		if (!detected_cells_blinked) {
-			if (num_of_cells > 0) {
-				t_led_color[0] = LED_PURPLE;
-			}
-
-			if (num_of_cells > 1) {
-				t_led_color[1] = LED_PURPLE;
-			}
-
-			if (num_of_cells > 2) {
-				t_led_color[2] = LED_PURPLE;
-			}
-
-			if (num_of_cells > 3) {
-				t_led_color[3] = LED_PURPLE;
-			}
-
-			if (num_of_cells > 4) {
-				t_led_color[4] = LED_PURPLE;
-			}
-
-			if (num_of_cells > 5) {
-				t_led_color[5] = LED_PURPLE;
-			}
-
-			t_led_color[6] = LED_OFF;
-			t_led_color[7] = LED_OFF;
-			t_led_blink = LED_BLINK;
-
-		} else {
-			t_led_color[0] = led_color_1;
-			t_led_color[1] = led_color_2;
-			t_led_color[2] = led_color_3;
-			t_led_color[3] = led_color_4;
-			t_led_color[4] = led_color_5;
-			t_led_color[5] = led_color_6;
-			t_led_color[6] = led_color_7;
-			t_led_color[7] = led_color_8;
-			t_led_blink = led_blink;
-		}
-
-		led_thread_ready = false;
-	}
-
-	if (led_thread_runcount & 1) {
-		if (t_led_blink) {
-			setLEDColor(LED_OFF);
-		}
-
-		led_interval = LED_OFFTIME;
-
-	} else {
-		setLEDColor(t_led_color[(led_thread_runcount / 2) % 8]);
-		//led_interval = (led_thread_runcount & 1) : LED_ONTIME;
-		led_interval = LED_ONTIME;
-	}
-
-	if (led_thread_runcount == 15) {
 		/* obtained data for the first file descriptor */
-		struct vehicle_status_s vehicle_status_raw;
-		struct vehicle_control_mode_s vehicle_control_mode;
-		struct actuator_armed_s actuator_armed;
-		struct vehicle_gps_position_s vehicle_gps_position_raw;
-		struct safety_s safety;
+	struct vehicle_status_s vehicle_status_raw;
+	struct vehicle_control_mode_s vehicle_control_mode;
+	struct vehicle_gps_position_s vehicle_gps_position_raw;
+	struct blinkm_control_s blk;
+	struct sensor_accel_s sc;
 
-		memset(&vehicle_status_raw, 0, sizeof(vehicle_status_raw));
-		memset(&vehicle_gps_position_raw, 0, sizeof(vehicle_gps_position_raw));
-		memset(&safety, 0, sizeof(safety));
+	memset(&vehicle_status_raw, 0, sizeof(vehicle_status_raw));
+	memset(&vehicle_gps_position_raw, 0, sizeof(vehicle_gps_position_raw));
+	memset(&blk, 0, sizeof(blk));
+		//memset(&sc, 0, sizeof(sc));
 
-		bool new_data_vehicle_status;
-		bool new_data_vehicle_control_mode;
-		bool new_data_actuator_armed;
-		bool new_data_vehicle_gps_position;
-		bool new_data_safety;
+	bool new_data_vehicle_status;
+	bool new_data_vehicle_control_mode;
+	bool new_data_vehicle_gps_position;
 
-		orb_check(vehicle_status_sub_fd, &new_data_vehicle_status);
+	orb_check(vehicle_status_sub_fd, &new_data_vehicle_status);
 
-		int no_data_vehicle_status = 0;
-		int no_data_vehicle_control_mode = 0;
-		int no_data_actuator_armed = 0;
-		int no_data_vehicle_gps_position = 0;
+	int no_data_vehicle_status = 0;
+	int no_data_vehicle_control_mode = 0;
+	int no_data_vehicle_gps_position = 0;
 
-		if (new_data_vehicle_status) {
-			orb_copy(ORB_ID(vehicle_status), vehicle_status_sub_fd, &vehicle_status_raw);
-			no_data_vehicle_status = 0;
-
-		} else {
-			no_data_vehicle_status++;
-
-			if (no_data_vehicle_status >= 3) {
-				no_data_vehicle_status = 3;
-			}
-		}
-
-		orb_check(vehicle_control_mode_sub_fd, &new_data_vehicle_control_mode);
-
-		if (new_data_vehicle_control_mode) {
-			orb_copy(ORB_ID(vehicle_control_mode), vehicle_control_mode_sub_fd, &vehicle_control_mode);
-			no_data_vehicle_control_mode = 0;
-
-		} else {
-			no_data_vehicle_control_mode++;
-
-			if (no_data_vehicle_control_mode >= 3) {
-				no_data_vehicle_control_mode = 3;
-			}
-		}
-
-		orb_check(actuator_armed_sub_fd, &new_data_actuator_armed);
-
-		if (new_data_actuator_armed) {
-			orb_copy(ORB_ID(actuator_armed), actuator_armed_sub_fd, &actuator_armed);
-			no_data_actuator_armed = 0;
-
-		} else {
-			no_data_actuator_armed++;
-
-			if (no_data_actuator_armed >= 3) {
-				no_data_actuator_armed = 3;
-			}
-		}
-
-		orb_check(vehicle_gps_position_sub_fd, &new_data_vehicle_gps_position);
-
-		if (new_data_vehicle_gps_position) {
-			orb_copy(ORB_ID(vehicle_gps_position), vehicle_gps_position_sub_fd, &vehicle_gps_position_raw);
-			no_data_vehicle_gps_position = 0;
-
-		} else {
-			no_data_vehicle_gps_position++;
-
-			if (no_data_vehicle_gps_position >= 3) {
-				no_data_vehicle_gps_position = 3;
-			}
-		}
-
-		/* update safety topic */
-		orb_check(safety_sub_fd, &new_data_safety);
-
-		if (new_data_safety) {
-			orb_copy(ORB_ID(safety), safety_sub_fd, &safety);
-		}
-
-		/* get number of used satellites in navigation */
-		num_of_used_sats = vehicle_gps_position_raw.satellites_used;
-
-		if (new_data_vehicle_status || no_data_vehicle_status < 3) {
-			if (num_of_cells == 0) {
-				/* looking for lipo cells that are connected */
-				printf("<blinkm> checking cells\n");
-
-				for (num_of_cells = 2; num_of_cells < 7; num_of_cells++) {
-					if (vehicle_status_raw.battery_voltage < num_of_cells * MAX_CELL_VOLTAGE) { break; }
-				}
-
-				printf("<blinkm> cells found:%d\n", num_of_cells);
-
-			} else {
-				if (vehicle_status_raw.battery_warning == vehicle_status_s::VEHICLE_BATTERY_WARNING_CRITICAL) {
-					/* LED Pattern for battery critical alerting */
-					led_color_1 = LED_RED;
-					led_color_2 = LED_RED;
-					led_color_3 = LED_RED;
-					led_color_4 = LED_RED;
-					led_color_5 = LED_RED;
-					led_color_6 = LED_RED;
-					led_color_7 = LED_RED;
-					led_color_8 = LED_RED;
-					led_blink = LED_BLINK;
-
-				} else if (vehicle_status_raw.rc_signal_lost) {
-					/* LED Pattern for FAILSAFE */
-					led_color_1 = LED_BLUE;
-					led_color_2 = LED_BLUE;
-					led_color_3 = LED_BLUE;
-					led_color_4 = LED_BLUE;
-					led_color_5 = LED_BLUE;
-					led_color_6 = LED_BLUE;
-					led_color_7 = LED_BLUE;
-					led_color_8 = LED_BLUE;
-					led_blink = LED_BLINK;
-
-				} else if (vehicle_status_raw.battery_warning == vehicle_status_s::VEHICLE_BATTERY_WARNING_LOW) {
-					/* LED Pattern for battery low warning */
-					led_color_1 = LED_YELLOW;
-					led_color_2 = LED_YELLOW;
-					led_color_3 = LED_YELLOW;
-					led_color_4 = LED_YELLOW;
-					led_color_5 = LED_YELLOW;
-					led_color_6 = LED_YELLOW;
-					led_color_7 = LED_YELLOW;
-					led_color_8 = LED_YELLOW;
-					led_blink = LED_BLINK;
-
-				} else {
-					/* no battery warnings here */
-
-					if (actuator_armed.armed == false) {
-						/* system not armed */
-						if (safety.safety_off) {
-							led_color_1 = LED_ORANGE;
-							led_color_2 = LED_ORANGE;
-							led_color_3 = LED_ORANGE;
-							led_color_4 = LED_ORANGE;
-							led_color_5 = LED_ORANGE;
-							led_color_6 = LED_ORANGE;
-							led_color_7 = LED_ORANGE;
-							led_color_8 = LED_ORANGE;
-							led_blink = LED_BLINK;
-
-						} else {
-							led_color_1 = LED_CYAN;
-							led_color_2 = LED_CYAN;
-							led_color_3 = LED_CYAN;
-							led_color_4 = LED_CYAN;
-							led_color_5 = LED_CYAN;
-							led_color_6 = LED_CYAN;
-							led_color_7 = LED_CYAN;
-							led_color_8 = LED_CYAN;
-							led_blink = LED_NOBLINK;
-						}
-
-					} else {
-						/* armed system - initial led pattern */
-						led_color_1 = LED_RED;
-						led_color_2 = LED_RED;
-						led_color_3 = LED_RED;
-						led_color_4 = LED_OFF;
-						led_color_5 = LED_OFF;
-						led_color_6 = LED_OFF;
-						led_color_7 = LED_OFF;
-						led_color_8 = LED_OFF;
-						led_blink = LED_BLINK;
-
-						if (new_data_vehicle_control_mode || no_data_vehicle_control_mode < 3) {
-							/* indicate main control state */
-							if (vehicle_status_raw.main_state == vehicle_status_s::MAIN_STATE_POSCTL) {
-								led_color_4 = LED_GREEN;
-							}
-
-							/* TODO: add other Auto modes */
-							else if (vehicle_status_raw.main_state == vehicle_status_s::MAIN_STATE_AUTO_MISSION) {
-								led_color_4 = LED_BLUE;
-
-							} else if (vehicle_status_raw.main_state == vehicle_status_s::MAIN_STATE_ALTCTL) {
-								led_color_4 = LED_YELLOW;
-
-							} else if (vehicle_status_raw.main_state == vehicle_status_s::MAIN_STATE_MANUAL) {
-								led_color_4 = LED_WHITE;
-
-							} else {
-								led_color_4 = LED_OFF;
-							}
-
-							led_color_5 = led_color_4;
-						}
-
-						if (new_data_vehicle_gps_position || no_data_vehicle_gps_position < 3) {
-							/* handling used satus */
-							if (num_of_used_sats >= 7) {
-								led_color_1 = LED_OFF;
-								led_color_2 = LED_OFF;
-								led_color_3 = LED_OFF;
-
-							} else if (num_of_used_sats == 6) {
-								led_color_2 = LED_OFF;
-								led_color_3 = LED_OFF;
-
-							} else if (num_of_used_sats == 5) {
-								led_color_3 = LED_OFF;
-							}
-
-						} else {
-							/* no vehicle_gps_position data */
-							led_color_1 = LED_WHITE;
-							led_color_2 = LED_WHITE;
-							led_color_3 = LED_WHITE;
-
-						}
-
-					}
-				}
-			}
-
-		} else {
-			/* LED Pattern for general Error - no vehicle_status can retrieved */
-			led_color_1 = LED_WHITE;
-			led_color_2 = LED_WHITE;
-			led_color_3 = LED_WHITE;
-			led_color_4 = LED_WHITE;
-			led_color_5 = LED_WHITE;
-			led_color_6 = LED_WHITE;
-			led_color_7 = LED_WHITE;
-			led_color_8 = LED_WHITE;
-			led_blink = LED_BLINK;
-
-		}
-
-		/*
-		printf( "<blinkm> Volt:%8.4f\tArmed:%4u\tMode:%4u\tCells:%4u\tNDVS:%4u\tNDSAT:%4u\tSats:%4u\tFix:%4u\tVisible:%4u\n",
-		vehicle_status_raw.voltage_battery,
-		vehicle_status_raw.flag_system_armed,
-		vehicle_status_raw.flight_mode,
-		num_of_cells,
-		no_data_vehicle_status,
-		no_data_vehicle_gps_position,
-		num_of_used_sats,
-		vehicle_gps_position_raw.fix_type,
-		vehicle_gps_position_raw.satellites_visible);
-		*/
-
-		led_thread_runcount = 0;
-		led_thread_ready = true;
-		led_interval = LED_OFFTIME;
-
-		if (detected_cells_runcount < 4) {
-			detected_cells_runcount++;
-
-		} else {
-			detected_cells_blinked = true;
-		}
+	if (new_data_vehicle_status) {
+		orb_copy(ORB_ID(vehicle_status), vehicle_status_sub_fd, &vehicle_status_raw);
+		no_data_vehicle_status = 0;
 
 	} else {
-		led_thread_runcount++;
+	no_data_vehicle_status++;
+
+	if (no_data_vehicle_status >= 3) {
+		no_data_vehicle_status = 3;
 	}
+	}
+
+	orb_check(vehicle_control_mode_sub_fd, &new_data_vehicle_control_mode);
+
+	if (new_data_vehicle_control_mode) {
+		orb_copy(ORB_ID(vehicle_control_mode), vehicle_control_mode_sub_fd, &vehicle_control_mode);
+		no_data_vehicle_control_mode = 0;
+
+	} else {
+		no_data_vehicle_control_mode++;
+
+		if (no_data_vehicle_control_mode >= 3) {
+			no_data_vehicle_control_mode = 3;
+		}
+	}
+
+	orb_check(vehicle_gps_position_sub_fd, &new_data_vehicle_gps_position);
+
+	if (new_data_vehicle_gps_position) {
+		orb_copy(ORB_ID(vehicle_gps_position), vehicle_gps_position_sub_fd, &vehicle_gps_position_raw);
+		no_data_vehicle_gps_position = 0;
+
+	} else {
+		no_data_vehicle_gps_position++;
+
+		if (no_data_vehicle_gps_position >= 3) {
+			no_data_vehicle_gps_position = 3;
+		}
+	}
+
+	orb_copy(ORB_ID(blinkm_control), blinkm_control_sub_fd, &blk);
+
+	orb_copy(ORB_ID(sensor_accel), sensor_accel_sub_fd, &sc);
+
+	//printf("\t%8.4f\t%8.4f\t%8.4f\n",(double)sc.x,(double)sc.y,(double)sc.z);
+	brightness=blk.control;
+	//if (blk.control>15){led_blink = LED_BLINK;}
+	//else {}
+	led_r=abs((int)(sc.x*20));
+	led_g=abs((int)(sc.y*20));
+	led_b=abs((int)(sc.z*20));
+
+	if (this->get_address()==9) {
+		set_rgb(led_r,led_g,led_b);
+	}
+	else {
+		if (brightness) {
+			if (led_thread_runcount%10==0) {
+				setLEDColor(LED_ORANGE);
+			}
+			else {
+				setLEDColor(LED_OFF);
+			}
+			led_thread_runcount++;
+		}
+		else {
+			setLEDColor(LED_BLUE);
+		}
+	}
+	led_interval=50;
+
 
 	if (systemstate_run == true) {
 		/* re-queue ourselves to run again later */
@@ -988,6 +818,15 @@ BlinkM::get_firmware_version(uint8_t version[2])
 	return transfer(&msg, sizeof(msg), version, 2);
 }
 
+int
+BlinkM::get_blinkm_address(uint8_t *addr)
+{
+	const uint8_t msg = 'a';
+	int ret = transfer(&msg, sizeof(msg), addr, 1);
+
+	return ret;
+}
+
 void blinkm_usage();
 
 void blinkm_usage()
@@ -1004,6 +843,7 @@ blinkm_main(int argc, char *argv[])
 
 	int i2cdevice = PX4_I2C_BUS_EXPANSION;
 	int blinkmadr = 9;
+	const char *path="/dev/blinkm0";
 
 	int x;
 
@@ -1025,15 +865,25 @@ blinkm_main(int argc, char *argv[])
 			}
 		}
 
+		if (strcmp(argv[x], "-p") == 0 || strcmp(argv[x], "--path") == 0) {
+			if (argc > x + 1) {
+				path = argv[x + 1];
+			}
+		}
+
 	}
 
 	if (!strcmp(argv[1], "start")) {
+
 		if (g_blinkm != nullptr) {
-			warnx("already started");
-			return 1;
+			if (blinkmadr==g_blinkm->get_address()) {
+				printf("already started, current address: %d, new address: %d", g_blinkm->get_address(), blinkmadr);
+				return 1;
+			}
 		}
 
-		g_blinkm = new BlinkM(i2cdevice, blinkmadr);
+		g_blinkm = new BlinkM(i2cdevice, blinkmadr, path);
+		blinkm_multi[blinkmadr-9]=g_blinkm;
 
 		if (g_blinkm == nullptr) {
 			warnx("new failed");
@@ -1063,10 +913,22 @@ blinkm_main(int argc, char *argv[])
 	}
 
 	if (!strcmp(argv[1], "ledoff")) {
-		g_blinkm->setMode(0);
+		return g_blinkm->setMode(0);
 		return 0;
 	}
 
+	if (!strcmp(argv[1], "switch")) {
+		if (g_blinkm->get_address()==blinkmadr) {
+			warn("already on BlinkM device");
+			return 1;
+		}
+		if (blinkm_multi[blinkmadr-9]==nullptr) {
+			warn("BlinkM device not started");
+			return 1;
+		}
+		g_blinkm=blinkm_multi[blinkmadr-9];
+		return 0;
+	}
 
 	if (!strcmp(argv[1], "list")) {
 		for (unsigned i = 0; BlinkM::script_names[i] != nullptr; i++) {
@@ -1078,7 +940,7 @@ blinkm_main(int argc, char *argv[])
 	}
 
 	/* things that require access to the device */
-	int fd = px4_open(BLINKM0_DEVICE_PATH, 0);
+	int fd = px4_open(path, 0);
 
 	if (fd < 0) {
 		warn("can't open BlinkM device");

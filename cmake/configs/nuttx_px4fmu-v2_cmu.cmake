@@ -104,6 +104,11 @@ set(config_module_list
 	modules/sdlog2
 
 	#
+	# Blinkm Support
+	#
+	modules/mocap_blinkm
+
+	#
 	# Library modules
 	#
 	modules/param
