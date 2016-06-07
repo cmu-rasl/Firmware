@@ -144,6 +144,8 @@ public:
 
 	static const char	*const script_names[];
 
+	int			get_firmware_version(uint8_t version[2]);
+
 private:
 	enum ScriptID {
 		USER		= 0,
@@ -238,7 +240,7 @@ private:
 
 	int			get_rgb(uint8_t &r, uint8_t &g, uint8_t &b);
 
-	int			get_firmware_version(uint8_t version[2]);
+
 };
 
 /* for now, we only support one BlinkM */
@@ -1003,7 +1005,7 @@ blinkm_main(int argc, char *argv[])
 {
 
 	int i2cdevice = PX4_I2C_BUS_EXPANSION;
-	int blinkmadr = 9;
+	int blinkmadr = 10;
 
 	int x;
 
@@ -1059,6 +1061,14 @@ blinkm_main(int argc, char *argv[])
 
 	if (!strcmp(argv[1], "systemstate")) {
 		g_blinkm->setMode(1);
+		return 0;
+	}
+
+	uint8_t version[2];
+
+	if (!strcmp(argv[1], "firmware")) {
+		g_blinkm->get_firmware_version(version);
+		printf("%c%c\n", version[0],version[1]);
 		return 0;
 	}
 

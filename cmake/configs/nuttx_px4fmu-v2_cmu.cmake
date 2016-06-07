@@ -46,6 +46,7 @@ set(config_module_list
 	drivers/pwm_input
 	drivers/camera_trigger
 	drivers/bst
+	drivers/charger
 
 	#
 	# System commands
