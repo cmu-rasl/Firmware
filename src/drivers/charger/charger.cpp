@@ -203,11 +203,11 @@ charger::setMode(int mode)
 }
 
 int charger::probe() {
-	int ret;
-	uint8_t data[2];
-	uint8_t msg=I2C_BALANCER_VOLTAGE;
-	ret = transfer(&msg, sizeof(msg), data, sizeof(data));
-	return ret;
+	//int ret;
+	//uint8_t data[2];
+	//uint8_t msg=I2C_BALANCER_VOLTAGE;
+	//ret = transfer(&msg, sizeof(msg), data, sizeof(data));
+	return OK;
 }
 
 int	charger::ioctl(device::file_t *filp, int cmd, unsigned long arg) {
@@ -374,8 +374,10 @@ charger_main(int argc, char *argv[])
 
 	if (!strcmp(argv[1], "start")) {
 		if (g_charger != nullptr) {
-			warnx("already started");
-			return 1;
+			if (chargeraddr==g_charger->get_address()) {
+				printf("already started, current address: %d, new address: %d", g_charger->get_address(), chargeraddr);
+				return 1;
+			}
 		}
 
 		g_charger = new charger(i2cdevice, chargeraddr, path);
