@@ -8,6 +8,7 @@
 #include <uORB/topics/mocap_position_command.h>
 #include <uORB/topics/mocap_position_command_gains.h>
 #include <uORB/topics/blinkm_control.h>
+#include <uORB/topics/charger_gpio.h>
 
 #include "mavlink_main.h"
 #include "cmu_mavlink.h"
@@ -25,7 +26,8 @@ CMUMavlink::CMUMavlink(Mavlink* parent) :
   mocap_position_command_gains_pub(nullptr),
   blinkm_control_pub(nullptr),
   time_offset_pub(nullptr),
-  att_pos_mocap_pub(nullptr)
+  att_pos_mocap_pub(nullptr),
+  charger_gpio_pub(nullptr)
 {
   return;
 }
@@ -68,6 +70,8 @@ void CMUMavlink::handle_message(const mavlink_message_t *msg)
     case MAVLINK_MSG_ID_BLINKM_CONTROL:
       handle_message_blinkm_control(msg);
       break;
+    case MAVLINK_MSG_ID_CHARGER_GPIO:
+      handle_message_charger_gpio(msg);
   }
 }
 
@@ -331,4 +335,23 @@ void CMUMavlink::handle_message_blinkm_control(const mavlink_message_t *msg)
   int inst; // Not used
   orb_publish_auto(ORB_ID(blinkm_control), &blinkm_control_pub,
                    &bc, &inst, ORB_PRIO_HIGH);
+}
+
+void CMUMavlink::handle_message_charger_gpio(const mavlink_message_t *msg)
+{
+  mavlink_charger_gpio_t mc;
+  mavlink_msg_charger_gpio_decode(msg, &mc);
+
+  if (mc.target_system != system_id)
+    return;
+
+  struct charger_gpio_s cg;
+  memset(&cg, 0, sizeof(cg));
+
+  cg.on = mc.on;
+
+  int inst; // Not used
+  orb_publish_auto(ORB_ID(charger_gpio), &charger_gpio_pub, 
+                    &cg, &inst, ORB_PRIO_HIGH);
+
 }

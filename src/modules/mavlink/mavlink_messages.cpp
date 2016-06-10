@@ -76,6 +76,7 @@
 #include <uORB/topics/vehicle_land_detected.h>
 #include <uORB/topics/estimator_status.h>
 #include <uORB/topics/rpm_command.h>
+#include <uORB/topics/charger_info.h>
 
 #include <drivers/drv_rc_input.h>
 #include <drivers/drv_pwm_output.h>
@@ -2946,6 +2947,63 @@ protected:
   }
 };
 
+class MavlinkStreamChargerInfo : public MavlinkStream
+{
+public:
+  const char *get_name() const
+  {
+    return MavlinkStreamChargerInfo::get_name_static();
+  }
+
+  static const char *get_name_static()
+  {
+    return "CHARGER_INFO";
+  }
+
+  uint8_t get_id()
+  {
+    return MAVLINK_MSG_ID_CHARGER_INFO;
+  }
+
+  static MavlinkStream *new_instance(Mavlink *mavlink)
+  {
+    return new MavlinkStreamChargerInfo(mavlink);
+  }
+
+  unsigned get_size()
+  {
+    return MAVLINK_MSG_ID_CHARGER_INFO_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES;
+  }
+
+private:
+  MavlinkOrbSubscription *_charger_info_sub;
+
+  /* do not allow top copying this class */
+  MavlinkStreamChargerInfo(MavlinkStreamChargerInfo &);
+  MavlinkStreamChargerInfo& operator = (const MavlinkStreamChargerInfo &);
+
+protected:
+  explicit MavlinkStreamChargerInfo(Mavlink *mavlink) : MavlinkStream(mavlink),
+                                                          _charger_info_sub(_mavlink->add_orb_subscription(ORB_ID(charger_info)))
+  {}
+
+  void send(const hrt_abstime t)
+  {
+    struct charger_info_s ci;
+
+    if (_charger_info_sub->update(&ci)) {
+      mavlink_charger_info_t ch_msg;
+      ch_msg.time_usec = hrt_absolute_time();
+      ch_msg.voltage = ci.voltage;
+      ch_msg.ups_current = ci.ups_current;
+      ch_msg.hss_current = ci.hss_current;
+      ch_msg.gpio_status = (ci.gpio_status) ? 1 : 0;
+
+      _mavlink->send_message(MAVLINK_MSG_ID_CHARGER_INFO, &ch_msg);
+    }
+  }
+};
+
 const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamHeartbeat::new_instance, &MavlinkStreamHeartbeat::get_name_static),
 	new StreamListItem(&MavlinkStreamStatustext::new_instance, &MavlinkStreamStatustext::get_name_static),
@@ -2987,5 +3045,6 @@ const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamAltitude::new_instance, &MavlinkStreamAltitude::get_name_static),
 	new StreamListItem(&MavlinkStreamRPMOutput::new_instance, &MavlinkStreamRPMOutput::get_name_static),
 	new StreamListItem(&MavlinkStreamBatteryStatus::new_instance, &MavlinkStreamBatteryStatus::get_name_static),
+	new StreamListItem(&MavlinkStreamChargerInfo::new_instance, &MavlinkStreamChargerInfo::get_name_static),
 	nullptr
 };

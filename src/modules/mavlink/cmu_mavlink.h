@@ -30,6 +30,7 @@ private:
   void handle_message_mocap_position_cmd(const mavlink_message_t *msg);
   void handle_message_mocap_position_cmd_gains(const mavlink_message_t *msg);
   void handle_message_blinkm_control(const mavlink_message_t *msg);
+  void handle_message_charger_gpio(const mavlink_message_t *msg);
 
   // Copied from MavlinkReceiver
   uint64_t sync_stamp(uint64_t usec)
@@ -64,4 +65,5 @@ private:
   orb_advert_t blinkm_control_pub;
   orb_advert_t time_offset_pub;
   orb_advert_t att_pos_mocap_pub;
+  orb_advert_t charger_gpio_pub;
 };

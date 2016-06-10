@@ -308,6 +308,9 @@ ORB_DEFINE(mocap_position_command_gains, struct mocap_position_command_gains_s);
 #include "topics/blinkm_control.h"
 ORB_DEFINE(blinkm_control, struct blinkm_control_s);
 
-#include "topics/batt_info.h"
-ORB_DEFINE(batt_info, struct batt_info_s);
+#include "topics/charger_info.h"
+ORB_DEFINE(charger_info, struct charger_info_s);
+
+#include "topics/charger_gpio.h"
+ORB_DEFINE(charger_gpio, struct charger_gpio_s);
 // End custom uORB topics
