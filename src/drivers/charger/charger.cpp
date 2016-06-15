@@ -56,8 +56,11 @@
 #include <drivers/drv_charger.h>
 
 #include <uORB/uORB.h>
-#include <uORB/topics/charger_info.h>
+#include <uORB/topics/charger_hss.h>
+#include <uORB/topics/charger_ups.h>
+#include <uORB/topics/charger_gpio_status.h>
 #include <uORB/topics/charger_gpio.h>
+
 
 static const float MAX_CELL_VOLTAGE	= 4.3f;
 
@@ -82,7 +85,9 @@ private:
 	int monitor_interval;
 	int charger_gpio_sub_fd;
 	bool topic_initialized;
-	orb_advert_t charger_info_pub;
+	orb_advert_t charger_ups_pub;
+	orb_advert_t charger_hss_pub;
+	orb_advert_t charger_gpio_status_pub;
 
 	static void		monitor_trampoline(void *arg);
 	void			monitor();
@@ -183,6 +188,9 @@ int charger::set_gpio(bool toggle) {
 	uint8_t data = (toggle == true) ? HSS_ACTIVE : HSS_INACTIVE;
 	uint8_t msg[2] = { HSS_GPIODAT, data };
 	ret = transfer(msg, sizeof(msg), nullptr, 0);
+	if (!toggle) {
+		printf("yay\n");
+	}
 	return ret;
 }
 
@@ -254,10 +262,14 @@ charger::monitor()
 	int ups_current=0;
 	int hss_current=0;
 	bool gpio_status=false;
-	struct charger_info_s bi;
+	struct charger_hss_s ch;
+	struct charger_ups_s cu;
+	struct charger_gpio_status_s cg;
 
 	if (!topic_initialized) {
-		charger_info_pub = orb_advertise(ORB_ID(charger_info), &bi);
+		charger_ups_pub = orb_advertise(ORB_ID(charger_ups), &cu);
+		charger_hss_pub = orb_advertise(ORB_ID(charger_hss), &ch);
+		charger_gpio_status_pub = orb_advertise(ORB_ID(charger_gpio_status), &cg);
 		charger_gpio_sub_fd = orb_subscribe(ORB_ID(charger_gpio));
 		orb_set_interval(charger_gpio_sub_fd, 250);
 		topic_initialized = true;
@@ -278,6 +290,12 @@ charger::monitor()
 		if (ups_current==UPS_CURRENT_ERR) {
 			get_ups_current(&ups_current);
 		}
+		cu.voltage=voltage;
+		cu.ups_current=ups_current;
+		if (voltage!=VOLTAGE_ERR && ups_current!=UPS_CURRENT_ERR) {
+			orb_publish(ORB_ID(charger_ups), charger_ups_pub, &cu);
+			//printf("voltage: %d, current: %d\n", voltage, ups_current);
+		}
 	}
 
 	if (this->get_address()==HSS_ADC_ADDRESS) {
@@ -285,6 +303,8 @@ charger::monitor()
 			warnx("failed to get current");
 			return;
 		}
+		ch.hss_current=hss_current;
+		orb_publish(ORB_ID(charger_hss), charger_hss_pub, &ch);
 	}
 
 	if (this->get_address()==HSS_GPIO_ADDRESS) {
@@ -306,13 +326,8 @@ charger::monitor()
 			warnx("failed to get gpio status");
 			return;
 		}
-	}
-
-	bi = {.voltage = voltage, .ups_current = ups_current, .hss_current = hss_current, .gpio_status = gpio_status};
-
-	if (voltage!=VOLTAGE_ERR && ups_current!=UPS_CURRENT_ERR) {
-		orb_publish(ORB_ID(charger_info), charger_info_pub, &bi);
-		//printf("voltage: %d, current: %d\n", voltage, ups_current);
+		cg.gpio_status=gpio_status;
+		orb_publish(ORB_ID(charger_gpio_status), charger_gpio_status_pub, &cg);
 	}
 
 

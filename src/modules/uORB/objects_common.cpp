@@ -308,8 +308,14 @@ ORB_DEFINE(mocap_position_command_gains, struct mocap_position_command_gains_s);
 #include "topics/blinkm_control.h"
 ORB_DEFINE(blinkm_control, struct blinkm_control_s);
 
-#include "topics/charger_info.h"
-ORB_DEFINE(charger_info, struct charger_info_s);
+#include "topics/charger_ups.h"
+ORB_DEFINE(charger_ups, struct charger_ups_s);
+
+#include "topics/charger_hss.h"
+ORB_DEFINE(charger_hss, struct charger_hss_s);
+
+#include "topics/charger_gpio_status.h"
+ORB_DEFINE(charger_gpio_status, struct charger_gpio_status_s);
 
 #include "topics/charger_gpio.h"
 ORB_DEFINE(charger_gpio, struct charger_gpio_s);

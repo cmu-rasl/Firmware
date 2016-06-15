@@ -1,0 +1,1 @@
+bool  gpio_status

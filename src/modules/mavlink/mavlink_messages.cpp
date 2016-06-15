@@ -76,7 +76,9 @@
 #include <uORB/topics/vehicle_land_detected.h>
 #include <uORB/topics/estimator_status.h>
 #include <uORB/topics/rpm_command.h>
-#include <uORB/topics/charger_info.h>
+#include <uORB/topics/charger_ups.h>
+#include <uORB/topics/charger_hss.h>
+#include <uORB/topics/charger_gpio_status.h>
 
 #include <drivers/drv_rc_input.h>
 #include <drivers/drv_pwm_output.h>
@@ -2976,7 +2978,10 @@ public:
   }
 
 private:
-  MavlinkOrbSubscription *_charger_info_sub;
+  MavlinkOrbSubscription *_charger_ups_sub;
+  MavlinkOrbSubscription *_charger_hss_sub;
+  MavlinkOrbSubscription *_charger_gpio_status_sub;
+
 
   /* do not allow top copying this class */
   MavlinkStreamChargerInfo(MavlinkStreamChargerInfo &);
@@ -2984,23 +2989,28 @@ private:
 
 protected:
   explicit MavlinkStreamChargerInfo(Mavlink *mavlink) : MavlinkStream(mavlink),
-                                                          _charger_info_sub(_mavlink->add_orb_subscription(ORB_ID(charger_info)))
+                                                          _charger_ups_sub(_mavlink->add_orb_subscription(ORB_ID(charger_ups))),
+                                                          _charger_hss_sub(_mavlink->add_orb_subscription(ORB_ID(charger_hss))),
+                                                          _charger_gpio_status_sub(_mavlink->add_orb_subscription(ORB_ID(charger_gpio_status)))
   {}
 
   void send(const hrt_abstime t)
   {
-    struct charger_info_s ci;
+    struct charger_ups_s cu;
+    struct charger_hss_s ch;
+    struct charger_gpio_status_s cg;
 
-    if (_charger_info_sub->update(&ci)) {
+    _charger_ups_sub->update(&cu);
+    _charger_hss_sub->update(&ch);
+    _charger_gpio_status_sub->update(&cg);
       mavlink_charger_info_t ch_msg;
       ch_msg.time_usec = hrt_absolute_time();
-      ch_msg.voltage = ci.voltage;
-      ch_msg.ups_current = ci.ups_current;
-      ch_msg.hss_current = ci.hss_current;
-      ch_msg.gpio_status = (ci.gpio_status) ? 1 : 0;
+      ch_msg.voltage = cu.voltage;
+      ch_msg.ups_current = cu.ups_current;
+      ch_msg.hss_current = ch.hss_current;
+      ch_msg.gpio_status = (cg.gpio_status) ? 1 : 0;
 
       _mavlink->send_message(MAVLINK_MSG_ID_CHARGER_INFO, &ch_msg);
-    }
   }
 };
 

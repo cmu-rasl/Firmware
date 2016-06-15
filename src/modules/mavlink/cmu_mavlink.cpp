@@ -341,9 +341,9 @@ void CMUMavlink::handle_message_charger_gpio(const mavlink_message_t *msg)
 {
   mavlink_charger_gpio_t mc;
   mavlink_msg_charger_gpio_decode(msg, &mc);
-
+  /*
   if (mc.target_system != system_id)
-    return;
+    return;*/
 
   struct charger_gpio_s cg;
   memset(&cg, 0, sizeof(cg));
@@ -353,5 +353,6 @@ void CMUMavlink::handle_message_charger_gpio(const mavlink_message_t *msg)
   int inst; // Not used
   orb_publish_auto(ORB_ID(charger_gpio), &charger_gpio_pub, 
                     &cg, &inst, ORB_PRIO_HIGH);
+  printf("yay2\n");
 
 }
