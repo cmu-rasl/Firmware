@@ -60,6 +60,7 @@
 #include <uORB/topics/charger_ups.h>
 #include <uORB/topics/charger_gpio_status.h>
 #include <uORB/topics/charger_gpio.h>
+#include <uORB/topics/battery_status.h>
 
 
 static const float MAX_CELL_VOLTAGE	= 4.3f;
@@ -88,6 +89,7 @@ private:
 	orb_advert_t charger_ups_pub;
 	orb_advert_t charger_hss_pub;
 	orb_advert_t charger_gpio_status_pub;
+	orb_advert_t battery_status_pub;
 
 	static void		monitor_trampoline(void *arg);
 	void			monitor();
@@ -265,11 +267,13 @@ charger::monitor()
 	struct charger_hss_s ch;
 	struct charger_ups_s cu;
 	struct charger_gpio_status_s cg;
+	struct battery_status_s bs;
 
 	if (!topic_initialized) {
 		charger_ups_pub = orb_advertise(ORB_ID(charger_ups), &cu);
 		charger_hss_pub = orb_advertise(ORB_ID(charger_hss), &ch);
 		charger_gpio_status_pub = orb_advertise(ORB_ID(charger_gpio_status), &cg);
+		battery_status_pub = orb_advertise(ORB_ID(battery_status), &bs);
 		charger_gpio_sub_fd = orb_subscribe(ORB_ID(charger_gpio));
 		orb_set_interval(charger_gpio_sub_fd, 250);
 		topic_initialized = true;
@@ -292,9 +296,11 @@ charger::monitor()
 		}
 		cu.voltage=voltage;
 		cu.ups_current=ups_current;
+		bs.voltage_filtered_v=(float)voltage/1000.f;
 		if (voltage!=VOLTAGE_ERR && ups_current!=UPS_CURRENT_ERR) {
 			orb_publish(ORB_ID(charger_ups), charger_ups_pub, &cu);
 			//printf("voltage: %d, current: %d\n", voltage, ups_current);
+			orb_publish(ORB_ID(battery_status), battery_status_pub, &bs);
 		}
 	}
 
