@@ -297,6 +297,7 @@ charger::monitor()
 		cu.voltage=voltage;
 		cu.ups_current=ups_current;
 		bs.voltage_filtered_v=(float)voltage/1000.f;
+		bs.voltage_v=(float)voltage/1000.f;
 		if (voltage!=VOLTAGE_ERR && ups_current!=UPS_CURRENT_ERR) {
 			orb_publish(ORB_ID(charger_ups), charger_ups_pub, &cu);
 			//printf("voltage: %d, current: %d\n", voltage, ups_current);
