@@ -100,7 +100,7 @@ set(config_module_list
 	#modules/ekf_att_pos_estimator
 	modules/position_estimator_inav
 	modules/local_position_estimator
-	modules/ekf2
+	#modules/ekf2
 
 	#
 	# Vehicle Control
@@ -110,6 +110,13 @@ set(config_module_list
 	modules/mc_att_control
 	modules/mc_pos_control
 	modules/vtol_att_control
+
+	# Moses ANU stuff
+	modules/mc_quat_control
+
+	# CMU stuff
+	modules/mocap_control
+	modules/mocap_status_monitor
 
 	#
 	# Logging

@@ -1,6 +1,6 @@
 ############################################################################
 #
-#   Copyright (c) 2015 PX4 Development Team. All rights reserved.
+#   Copyright (c) 2013, 2014 PX4 Development Team. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -30,28 +30,12 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 ############################################################################
-px4_add_module(
-	MODULE modules__mavlink
-	MAIN mavlink
-	STACK_MAIN 1200
-	STACK_MAX 1500
-	COMPILE_FLAGS
-		-Os
-	SRCS
-		mavlink.c
-		mavlink_main.cpp
-		mavlink_mission.cpp
-		mavlink_parameters.cpp
-		mavlink_orb_subscription.cpp
-		mavlink_messages.cpp
-		mavlink_stream.cpp
-		mavlink_rate_limiter.cpp
-		mavlink_receiver.cpp
-		mavlink_ftp.cpp
-		mavlink_log_handler.cpp
-		mavlink_shell.cpp
-		cmu_mavlink.cpp
-	DEPENDS
-		platforms__common
-	)
-# vim: set noet ft=cmake fenc=utf-8 ff=unix : 
+
+#
+# Multirotor attitude controller (vector based, no Euler singularities)
+#
+
+MODULE_COMMAND	= mc_quat_control
+
+SRCS		= mc_quat_control_main.cpp \
+			  mc_quat_control_params.c

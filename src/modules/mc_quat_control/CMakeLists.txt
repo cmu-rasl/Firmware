@@ -31,26 +31,14 @@
 #
 ############################################################################
 px4_add_module(
-	MODULE modules__mavlink
-	MAIN mavlink
+	MODULE modules__mc_quat_control
+	MAIN mc_quat_control
 	STACK_MAIN 1200
-	STACK_MAX 1500
-	COMPILE_FLAGS
-		-Os
+	STACK_MAX 3500
+	COMPILE_FLAGS -Os
 	SRCS
-		mavlink.c
-		mavlink_main.cpp
-		mavlink_mission.cpp
-		mavlink_parameters.cpp
-		mavlink_orb_subscription.cpp
-		mavlink_messages.cpp
-		mavlink_stream.cpp
-		mavlink_rate_limiter.cpp
-		mavlink_receiver.cpp
-		mavlink_ftp.cpp
-		mavlink_log_handler.cpp
-		mavlink_shell.cpp
-		cmu_mavlink.cpp
+		mc_quat_control_main.cpp
+		mc_quat_control_params.c
 	DEPENDS
 		platforms__common
 	)

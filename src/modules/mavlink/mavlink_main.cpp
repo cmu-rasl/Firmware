@@ -251,7 +251,10 @@ Mavlink::Mavlink() :
 
 	/* performance counters */
 	_loop_perf(perf_alloc(PC_ELAPSED, "mavlink_el")),
-	_txerr_perf(perf_alloc(PC_COUNT, "mavlink_txe"))
+	_txerr_perf(perf_alloc(PC_COUNT, "mavlink_txe")),
+
+        /* custom message handler */
+        _cmu_mavlink(nullptr)
 {
 	_instance_id = Mavlink::instance_count();
 
@@ -1887,6 +1890,9 @@ Mavlink::task_main(int argc, char *argv[])
 	_mission_manager->set_interval(interval_from_rate(10.0f));
 	_mission_manager->set_verbose(_verbose);
 	LL_APPEND(_streams, _mission_manager);
+
+	_cmu_mavlink = (CMUMavlink *) CMUMavlink::new_instance(this);
+        _cmu_mavlink->set_system_id(mavlink_system.sysid);
 
 	switch (_mode) {
 	case MAVLINK_MODE_NORMAL:
