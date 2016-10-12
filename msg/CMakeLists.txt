@@ -98,6 +98,7 @@ set(msg_file_names
 	test_motor.msg
 	time_offset.msg
 	transponder_report.msg
+	trtower.msg
 	uavcan_parameter_request.msg
 	uavcan_parameter_value.msg
 	vehicle_attitude.msg
