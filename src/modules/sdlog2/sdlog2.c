@@ -112,6 +112,8 @@
 #include <uORB/topics/commander_state.h>
 #include <uORB/topics/cpuload.h>
 
+#include <uORB/topics/trtower.h>
+
 #include <systemlib/systemlib.h>
 #include <systemlib/param/param.h>
 #include <systemlib/perf_counter.h>
@@ -1218,6 +1220,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 		struct vehicle_land_detected_s land_detected;
 		struct cpuload_s cpuload;
 		struct vehicle_gps_position_s dual_gps_pos;
+		struct trtower_s trt_report;
 	} buf;
 
 	memset(&buf, 0, sizeof(buf));
@@ -1279,6 +1282,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 			struct log_LAND_s log_LAND;
 			struct log_RPL6_s log_RPL6;
 			struct log_LOAD_s log_LOAD;
+			struct log_TRT_s log_TRT;
 		} body;
 	} log_msg = {
 		LOG_PACKET_HEADER_INIT(0)
@@ -1328,6 +1332,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 		int land_detected_sub;
 		int commander_state_sub;
 		int cpuload_sub;
+		int trt_sub;
 	} subs;
 
 	subs.cmd_sub = -1;
@@ -1370,6 +1375,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 	subs.land_detected_sub = -1;
 	subs.commander_state_sub = -1;
 	subs.cpuload_sub = -1;
+	subs.trt_sub = -1;
 
 	/* add new topics HERE */
 
@@ -2294,6 +2300,16 @@ int sdlog2_thread_main(int argc, char *argv[])
 			log_msg.body.log_LOAD.cpu_load = buf.cpuload.load;
 			LOGBUFFER_WRITE_AND_COUNT(LOAD);
 
+		}
+
+		/* --- TERARANGER TOWER --- */
+		if (copy_if_updated(ORB_ID(trtower), &subs.trt_sub, &buf.trt_report)) {
+			log_msg.msg_type = LOG_TRT_MSG;
+			for (int i=0; i<8; i++)
+			{
+				log_msg.body.log_TRT.ranges[i] = buf.trt_report.ranges[i];
+			}
+			LOGBUFFER_WRITE_AND_COUNT(TRT);
 		}
 
 		pthread_mutex_lock(&logbuffer_mutex);

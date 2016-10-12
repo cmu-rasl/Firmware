@@ -625,6 +625,12 @@ struct log_LOAD_s {
 	float cpu_load;
 };
 
+/* -- TERARNGER -- */
+#define LOG_TRT_MSG 70 
+struct log_TRT_s {
+	float ranges[8];
+};
+
 /********** SYSTEM MESSAGES, ID > 0x80 **********/
 
 /* --- TIME - TIME STAMP --- */
@@ -714,6 +720,7 @@ static const struct log_format_s log_formats[] = {
 	LOG_FORMAT(RPL6, "Qff", "Tasp,inAsp,trAsp"),
 	LOG_FORMAT(LAND, "B", "Landed"),
 	LOG_FORMAT(LOAD, "f", "CPU"),
+	LOG_FORMAT(TRT, "ffffffff","1,2,3,4,5,6,7,8"),
 	/* system-level messages, ID >= 0x80 */
 	/* FMT: don't write format of format message, it's useless */
 	LOG_FORMAT(TIME, "Q", "StartTime"),

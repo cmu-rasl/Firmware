@@ -267,6 +267,7 @@ static int trtower_thread_main(int argc, char *argv[])
                             trt_report.ranges[i] = ranges[i]*0.001 + DistanceToCenter;
                         }
                     }
+		    trt_report.timestamp = hrt_absolute_time();
                     if (_trtower_topic != NULL) {
                         orb_publish(ORB_ID(trtower), _trtower_topic, &trt_report);
                     }
