@@ -113,6 +113,9 @@ set(config_module_list
 	modules/mc_pos_control
 	modules/vtol_att_control
 
+	# Moses ANU stuff
+	modules/mc_quat_control
+
 	#
 	# Logging
 	#

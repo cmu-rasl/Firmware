@@ -49,7 +49,8 @@ private:
     time_offset =
       (time_offset_avg_alpha*offset_ns) + (1.0 - time_offset_avg_alpha)*time_offset;
   }
-
+//Moses
+  //uint64_t prev_time = 0;
   Mavlink* mavlink;
   int system_id;
   double time_offset_avg_alpha;

@@ -235,6 +235,7 @@ void CMUMavlink::handle_message_mocap_multi_pose(const mavlink_message_t *msg)
   att_pos_mocap.id = msg->compid;
 
   att_pos_mocap.timestamp = hrt_absolute_time(); // Monotonic time
+  att_pos_mocap.timestamp = mpose.time_usec; // Monotonic time
   att_pos_mocap.timestamp_computer = sync_stamp(mpose.time_usec); // Synced time
 
   unsigned int k = 4*indx;
@@ -263,6 +264,10 @@ void CMUMavlink::handle_message_mocap_multi_pose(const mavlink_message_t *msg)
   int inst; // Not used
   orb_publish_auto(ORB_ID(att_pos_mocap), &att_pos_mocap_pub,
                    &att_pos_mocap, &inst, ORB_PRIO_HIGH);
+
+  //float dt = (mpose.time_usec - prev_time)*0.000001;
+  //prev_time = mpose.time_usec;
+  //printf("xyz %3.3f %3.3f %3.3f %3.3f %3.3f\n", double(dt), double(1/dt), double(mpose.pose[0]/1000.0f), double(mpose.pose[1]/1000.0f), double(mpose.pose[2]/1000.0f));
 }
 
 void CMUMavlink::handle_message_mocap_position_cmd(const mavlink_message_t *msg)
