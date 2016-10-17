@@ -183,12 +183,13 @@ void CMUMavlink::handle_message_mocap_timesync(const mavlink_message_t *msg)
 
   if (tsync.tc1 == 0)
   {
-    //mavlink_timesync_t rsync; // return timestamped sync message
+    mavlink_timesync_t rsync; // return timestamped sync message
 
-    //rsync.tc1 = now_ns;
-    //rsync.ts1 = tsync.ts1;
+    rsync.tc1 = now_ns;
+    rsync.ts1 = tsync.ts1;
 
     //mavlink->send_message(MAVLINK_MSG_ID_TIMESYNC, &rsync);
+    mavlink_msg_timesync_send_struct(mavlink->get_channel(), &rsync);
     return;
   }
   else if (tsync.tc1 > 0)
