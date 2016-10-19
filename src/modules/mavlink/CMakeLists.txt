@@ -50,6 +50,7 @@ px4_add_module(
 		mavlink_ftp.cpp
 		mavlink_log_handler.cpp
 		mavlink_shell.cpp
+		cmu_mavlink.cpp
 	DEPENDS
 		platforms__common
 	)
