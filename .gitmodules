@@ -45,15 +45,7 @@
 [submodule "src/drivers/gps/devices"]
 	path = src/drivers/gps/devices
 	url = https://github.com/PX4/GpsDrivers.git
-[submodule "src/modules/mocap_control"]
-	path = src/modules/mocap_control
-	url = http://gitlab.rasl.ri.cmu.edu/nmichael/mocap_control.git
-[submodule "src/modules/mocap_status_monitor"]
-	path = src/modules/mocap_status_monitor
-	url = http://gitlab.rasl.ri.cmu.edu/nmichael/mocap_status_monitor.git
-[submodule "quadrotor_msgs"]
-	path = quadrotor_msgs
-	url = http://gitlab.rasl.ri.cmu.edu/msgs/quadrotor_msgs.git
-[submodule "mc_quat_control"]
+[submodule "src/modules/mc_quat_control"]
 	path = src/modules/mc_quat_control
-	url = https://github.com/cmu-rasl/mc_quat_control.git
+	url = git@github.com:cmu-rasl/mc_quat_control.git
+	branch = master
