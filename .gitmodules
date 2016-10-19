@@ -1,9 +1,11 @@
 [submodule "mavlink/include/mavlink/v1.0"]
 	path = mavlink/include/mavlink/v1.0
-	url = https://github.com/mavlink/c_library_v1.git
+	url = https://github.com/cmu-rasl/c_library.git
+	branch = master
 [submodule "mavlink/include/mavlink/v2.0"]
 	path = mavlink/include/mavlink/v2.0
-	url = https://github.com/mavlink/c_library_v2.git
+	url = https://github.com/cmu-rasl/c_library_v2.git
+	branch = master
 [submodule "NuttX"]
 	path = NuttX
 	url = https://github.com/PX4/NuttX.git
@@ -13,9 +15,11 @@
 [submodule "Tools/genmsg"]
 	path = Tools/genmsg
 	url = https://github.com/ros/genmsg.git
+	branch = indigo-devel
 [submodule "Tools/gencpp"]
 	path = Tools/gencpp
 	url = https://github.com/ros/gencpp.git
+	branch = indigo-devel
 [submodule "Tools/jMAVSim"]
 	path = Tools/jMAVSim
 	url = https://github.com/PX4/jMAVSim.git
@@ -41,3 +45,15 @@
 [submodule "src/drivers/gps/devices"]
 	path = src/drivers/gps/devices
 	url = https://github.com/PX4/GpsDrivers.git
+[submodule "src/modules/mocap_control"]
+	path = src/modules/mocap_control
+	url = http://gitlab.rasl.ri.cmu.edu/nmichael/mocap_control.git
+[submodule "src/modules/mocap_status_monitor"]
+	path = src/modules/mocap_status_monitor
+	url = http://gitlab.rasl.ri.cmu.edu/nmichael/mocap_status_monitor.git
+[submodule "quadrotor_msgs"]
+	path = quadrotor_msgs
+	url = http://gitlab.rasl.ri.cmu.edu/msgs/quadrotor_msgs.git
+[submodule "mc_quat_control"]
+	path = src/modules/mc_quat_control
+	url = https://github.com/cmu-rasl/mc_quat_control.git
