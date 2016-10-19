@@ -159,6 +159,9 @@ px4fmu-v1_default:
 px4fmu-v2_default:
 	$(call cmake-build,nuttx_px4fmu-v2_default)
 
+px4fmu-v2_cmu:
+	$(call cmake-build,nuttx_px4fmu-v2_cmu)
+
 px4fmu-v2_test:
 	$(call cmake-build,nuttx_px4fmu-v2_test)
 
