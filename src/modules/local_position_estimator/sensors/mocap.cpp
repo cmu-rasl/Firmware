@@ -7,7 +7,7 @@ extern orb_advert_t mavlink_log_pub;
 // required number of samples for sensor
 // to initialize
 static const uint32_t 		REQ_MOCAP_INIT_COUNT = 20;
-static const uint32_t 		MOCAP_TIMEOUT =     200000;	// 0.2 s
+static const uint32_t 		MOCAP_TIMEOUT =     1200000;	// 0.2 s
 
 void BlockLocalPositionEstimator::mocapInit()
 {
@@ -21,7 +21,8 @@ void BlockLocalPositionEstimator::mocapInit()
 
 	// if finished
 	if (_mocapStats.getCount() > REQ_MOCAP_INIT_COUNT) {
-		_mocapOrigin = _mocapStats.getMean();
+		//_mocapOrigin = _mocapStats.getMean();
+		_mocapOrigin.setZero();
 		mavlink_and_console_log_info(&mavlink_log_pub, "[lpe] mocap position init: "
 					     "%5.2f, %5.2f, %5.2f m std %5.2f, %5.2f, %5.2f m",
 					     double(_mocapStats.getMean()(0)),
