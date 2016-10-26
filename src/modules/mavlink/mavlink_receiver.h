@@ -245,8 +245,4 @@ private:
 	/* do not allow copying this class */
 	MavlinkReceiver(const MavlinkReceiver &);
 	MavlinkReceiver operator=(const MavlinkReceiver &);
-
-	//moses
-	uint64_t prev_time = 0;
-	uint64_t prev_time_on = 0;
 };

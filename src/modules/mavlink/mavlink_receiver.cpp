@@ -889,14 +889,6 @@ MavlinkReceiver::handle_message_set_actuator_control_target(mavlink_message_t *m
 	mavlink_msg_set_actuator_control_target_decode(msg, &set_actuator_control_target);
 
 	struct offboard_control_mode_s offboard_control_mode = {};
-//moses
-	uint64_t curt = set_actuator_control_target.time_usec;
-	uint64_t curt_on = hrt_absolute_time();
-	float dt = (curt - prev_time)*0.000001;
-	float dt_on = (curt_on - prev_time_on)*0.000001;
-  prev_time = curt;
-  prev_time_on = curt_on;
-  printf("%3.5f, %3.5f, %3.5f, %3.5f\n", double(dt_on), double(1/dt_on), double(dt), double(1/dt));
 	struct actuator_controls_s actuator_controls = {};
 
 	bool values_finite =
