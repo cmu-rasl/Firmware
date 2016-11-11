@@ -28,20 +28,20 @@ else
     fi
 fi
 
-echo "[init] starting FMU with PWM output"
-fmu mode_pwm4
 
 set SET_RC_PARAMS yes
 
 if [ $SET_RC_PARAMS == yes ]
 then
-   echo "RC is on"
+   echo "[init] RC is on"
    param set MCC_RC_ON 1
    px4io start
    #param save
 else
-   echo "RC is disabled"
+   echo "[init] RC is disabled"
    param set MCC_RC_ON 0
+   echo "[init] starting FMU with PWM output"
+   fmu mode_pwm4
    #param save
 fi
 unset SET_RC_PARAMS
@@ -52,10 +52,9 @@ set SET_LOCAL_PARAMS no
 
 if [ $SET_LOCAL_PARAMS == yes ]
 then
-    # MAVlink Setup
-    echo "[init] MAVlink Parameters Setup"
+echo "[init] MAVlink Parameters Setup"
     param set MAV_BASE_ID 66
-    param set MAV_SYS_ID  201
+    param set MAV_SYS_ID  216
     param set MAV_COMP_ID 1
     param set MAV_FWDEXTSP 1
     param set MAV_RADIO_ID    0
@@ -67,6 +66,7 @@ then
     echo "[init] LED RGB Parameters Setup"
     param set LED_RGB_MAXBRT  1
     param set MBM_COLOR 1
+
 
     # PWM AUX Setup
     echo "[init] PWM AUX Parameters Setup"
@@ -83,7 +83,7 @@ then
     # Physical Parameters
     echo "[init] Physical Parameters Setup"
     param set MCC_ARM_LENGTH 0.1103
-    param set MCC_CT 1e-8 #8.65e-9
+    param set MCC_CT 8.65e-9
     param set MCC_GRAVITY 9.80665
     param set MCC_INERTIA_XX  0.0032765
     param set MCC_INERTIA_XY  0.0000009
@@ -91,12 +91,12 @@ then
     param set MCC_INERTIA_YY  0.0029039
     param set MCC_INERTIA_YZ -0.0000054
     param set MCC_INERTIA_ZZ  0.0053983
-    param set MCC_MOMENT_SCALE 0.0183 #0.017
+    param set MCC_MOMENT_SCALE 0.017
     param set MCC_MOTOR_CONST 36.5
-    param set MCC_TOTAL_MASS 0.800 #0.775
+    param set MCC_TOTAL_MASS 0.775
     param set MCC_MOTOR_SPREAD 0.925
     param set MCC_RPM_MIN 3850.0
-    param set MCC_RPM_MAX 21350.0 #20000.0
+    param set MCC_RPM_MAX 20000.0
     param set MCC_RPM_START 5000.0
     param set MCC_MOT_START_DT 0.4
 
@@ -177,6 +177,16 @@ then
 
     # Attitude Estimator
     echo "[init] Attitude Estimator Parameters Setup"
+    param set ATT_ACC_COMP    2
+    param set ATT_BIAS_MAX    0.050
+    param set ATT_EXT_HDG_M   2
+    param set ATT_MAG_DECL    0.00
+    param set ATT_MAG_DECL_A  1
+    param set ATT_VIBE_THRESH 0.20
+    param set ATT_W_ACC   0.20
+    param set ATT_W_EXT_HDG   1.000
+    param set ATT_W_GYRO_BIAS 0.10
+    param set ATT_W_MAG   0.10
 
     # Sensors
     echo "[init] Battery Parameters Setup"
@@ -248,24 +258,26 @@ local_position_estimator start
 # Start PWM actuators
 #
 
-#
-echo "[init] starting mocap control"
-mocap_control start
 
-echo "[init] starting mocap status monitor"
-mocap_status_monitor start
-
+usleep 2500
 #
 # Start mavlink
 #
 #mavlink start -d /dev/ttyS1 -b 921600 -m custom -r 80000 -x
 
 #mavlink stream -s BATTERY_STATUS -r 1 -d /dev/ttyS1
-mavlink start 
+mavlink start #-b 921600 #115200
 
 #
 # Logging
 #
-#sdlog2 start -r 200 -e -b 32 -t
+usleep 2500
+#sdlog2 start r 20 -e 
+
+echo "[init] starting mocap control"
+mocap_control start
+
+echo "[init] starting mocap status monitor"
+mocap_status_monitor start
 
 echo "[init] Init complete"

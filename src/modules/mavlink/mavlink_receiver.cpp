@@ -161,7 +161,7 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
 			_mavlink->set_config_link_on(true);
 		}
 	}
-
+printf("msg rcvd %d\n", msg->msgid);
 	switch (msg->msgid) {
 	case MAVLINK_MSG_ID_COMMAND_LONG:
 		if (_mavlink->accepting_commands()) {
@@ -969,11 +969,27 @@ MavlinkReceiver::handle_message_vision_position_estimate(mavlink_message_t *msg)
 	vision_position.x = pos.x;
 	vision_position.y = pos.y;
 	vision_position.z = pos.z;
+//	uint64_t curt = vision_position.timestamp;
+//	float dt = (curt - prev)*0.000001f;
+//	prev = curt;
+//printf("Position %3.3f %3.3f %3.3f\n", double(pos.x), double(pos.y), double(pos.z));
 
 	// XXX fix this
 	vision_position.vx = 0.0f;
 	vision_position.vy = 0.0f;
 	vision_position.vz = 0.0f;
+
+	float roll = -pos.pitch;
+	float pitch = -pos.roll;
+	roll += 3.142f;
+	if (roll > 3.142f)
+		roll = -3.142f*2.0f + roll;
+	if (roll < -3.142f)
+		roll = 3.142f*2.0f - roll;
+	pos.roll = -roll;
+	pos.pitch = pitch;
+	pos.yaw = -pos.yaw - 3.142f/2.0f;
+	printf("Orientation %3.3f %3.3f %3.3f\n", double(-pos.roll*180.0f/3.142f), double(-pos.pitch*180.0f/3.142f), double((pos.yaw)*180.0f/3.142f));
 
 	math::Quaternion q;
 	q.from_euler(pos.roll, pos.pitch, pos.yaw);

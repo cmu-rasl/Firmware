@@ -41,6 +41,7 @@ void CMUMavlink::handle_message(const mavlink_message_t *msg)
 {
   switch (msg->msgid)
   {
+    printf("Mav msg received cmu %d\n", msg->msgid);
     case MAVLINK_MSG_ID_CASCADED_CMD:
       handle_message_cascaded_cmd(msg);
       break;

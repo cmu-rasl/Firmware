@@ -7,7 +7,7 @@ extern orb_advert_t mavlink_log_pub;
 // required number of samples for sensor
 // to initialize
 static const uint32_t 		REQ_MOCAP_INIT_COUNT = 20;
-static const uint32_t 		MOCAP_TIMEOUT =     1200000;	// 0.2 s
+static const uint32_t 		MOCAP_TIMEOUT =     200000;	// 0.2 s
 
 void BlockLocalPositionEstimator::mocapInit()
 {

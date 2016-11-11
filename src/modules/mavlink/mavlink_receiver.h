@@ -245,4 +245,5 @@ private:
 	/* do not allow copying this class */
 	MavlinkReceiver(const MavlinkReceiver &);
 	MavlinkReceiver operator=(const MavlinkReceiver &);
+	//uint64_t prev;
 };
