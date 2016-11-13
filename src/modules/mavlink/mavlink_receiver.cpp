@@ -140,6 +140,7 @@ MavlinkReceiver::MavlinkReceiver(Mavlink *parent) :
 	_time_offset_avg_alpha(0.6),
 	_time_offset(0),
 	_orb_class_instance(-1),
+	_v_att_sub(orb_subscribe(ORB_ID(vehicle_attitude))),
 	_mom_switch_pos{},
 	_mom_switch_state(0)
 {
@@ -693,6 +694,7 @@ MavlinkReceiver::handle_message_att_pos_mocap(mavlink_message_t *msg)
 	att_pos_mocap.q[1] = mocap.q[1];
 	att_pos_mocap.q[2] = mocap.q[2];
 	att_pos_mocap.q[3] = mocap.q[3];
+	printf("mocap %3.3f %3.3f %3.3f %3.3f\n", double(mocap.q[0]), double(mocap.q[1]), double(mocap.q[2]), double(mocap.q[3]));
 
 	att_pos_mocap.x = mocap.x;
 	att_pos_mocap.y = mocap.y;
@@ -969,28 +971,63 @@ MavlinkReceiver::handle_message_vision_position_estimate(mavlink_message_t *msg)
 	vision_position.x = pos.x;
 	vision_position.y = pos.y;
 	vision_position.z = pos.z;
+
+	bool updated;
+	orb_check(_v_att_sub, &updated);
+
+	if (updated) {
+		orb_copy(ORB_ID(vehicle_attitude), _v_att_sub, &_v_att);
+	}
 //	uint64_t curt = vision_position.timestamp;
 //	float dt = (curt - prev)*0.000001f;
 //	prev = curt;
-//printf("Position %3.3f %3.3f %3.3f\n", double(pos.x), double(pos.y), double(pos.z));
 
+	printf("Position %3.3f %3.3f %3.3f\n", double(pos.x), double(pos.y), double(pos.z));
 	// XXX fix this
 	vision_position.vx = 0.0f;
 	vision_position.vy = 0.0f;
 	vision_position.vz = 0.0f;
 
-	float roll = -pos.pitch;
-	float pitch = -pos.roll;
-	roll += 3.142f;
-	if (roll > 3.142f)
-		roll = -3.142f*2.0f + roll;
-	if (roll < -3.142f)
-		roll = 3.142f*2.0f - roll;
+	float roll = pos.pitch;
+	float pitch = pos.roll;
+	pitch += 3.142f;
+	if (pitch > 3.142f)
+		pitch = -3.142f*2.0f + pitch;
+	if (pitch < -3.142f)
+		pitch = 3.142f*2.0f - pitch;
+
+	// The filter acts stupid
+	if (roll < -M_PI_F/2.0f)
+	{
+		roll += M_PI_F;
+	} else if (roll > M_PI_F/2.0f)
+	{
+		roll -= M_PI_F;
+	}
+
+	if (pitch < -M_PI_F/2.0f)
+	{
+		pitch += M_PI_F;
+	} else if (pitch > M_PI_F/2.0f)
+	{
+		pitch -= M_PI_F;
+	}
+
 	pos.roll = -roll;
 	pos.pitch = pitch;
 	pos.yaw = -pos.yaw - 3.142f/2.0f;
-	printf("Orientation %3.3f %3.3f %3.3f\n", double(-pos.roll*180.0f/3.142f), double(-pos.pitch*180.0f/3.142f), double((pos.yaw)*180.0f/3.142f));
+	//printf("Orientation %3.3f %3.3f %3.3f\n", double(pos.roll*180.0f/3.142f), double(pos.pitch*180.0f/3.142f), double((pos.yaw)*180.0f/3.142f));
 
+	math::Matrix<3, 3> R;
+	math::Quaternion qq(math::Quaternion(_v_att.q));
+	R = qq.to_dcm();
+	math::Vector<3> posp(pos.x, pos.y, pos.z);
+	math::Vector<3> p2 = R*posp;
+	pos.x = p2(0);
+	pos.y = p2(1);
+	pos.z = p2(2);
+	//printf("Att %3.3f %3.3f %3.3f\n", double(_v_att.roll), double(_v_att.pitch), double(_v_att.yaw));
+	//printf("Position2 %3.3f %3.3f %3.3f\n", double(pos.x), double(pos.y), double(pos.z));
 	math::Quaternion q;
 	q.from_euler(pos.roll, pos.pitch, pos.yaw);
 
