@@ -247,5 +247,5 @@ private:
 	MavlinkReceiver operator=(const MavlinkReceiver &);
 	uint64_t prev;
 	struct vehicle_attitude_s	_v_att;
-	float  global_pos[3] = {0.0f, 0.0f, 0.0f};
+	math::Vector<3>  global_pos;
 };

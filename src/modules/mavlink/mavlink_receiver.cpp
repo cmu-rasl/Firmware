@@ -1014,40 +1014,29 @@ MavlinkReceiver::handle_message_vision_position_estimate(mavlink_message_t *msg)
 	pos.pitch = pitch;
 	pos.yaw = -pos.yaw - 3.142f/2.0f;
 
+	if (dt > 1.0f)
+	{
+		global_pos.zero();
+	}
+
 	// Rotate flow vectors from body/camera to inertia
 	math::Matrix<3, 3> R;
 	math::Quaternion qq(math::Quaternion(_v_att.q));
 	R = qq.to_dcm();
-	math::Vector<3> posp(pos.x, pos.y, 0.0f);
-	math::Vector<3> pxy_delta = R*posp;
+	math::Vector<3> posp(pos.x, pos.y, 0.0f); //should have a --minus in y
+	math::Vector<3> pos_body = R.transposed()*global_pos + posp;
+	pos_body(2) = pos.z;
+	math::Vector<3> global_pos = R*pos_body;
 
-	// Rotate z 
-	math::Vector<3> pos_temp = R.transposed()*global_pos;
-	posp(0) = pos_temp(0) + pos.x;
-	posp(1) = pos_temp(1) + pos.y;
-	posp(2) = pos.z;
-	math::Vector<3> pz_delta = R*posp;
-	pos.z = pz_delta(2);
+	printf("Position2 %3.3f %3.3f %3.3f\n", double(global_pos[0]), double(global_pos[1]), double(global_pos[2]));
+
 
 	math::Quaternion q;
 	q.from_euler(pos.roll, pos.pitch, pos.yaw);
 
-	if (dt > 1.0f)
-	{
-		global_pos[0] = 0.0f;
-		global_pos[1] = 0.0f;
-		global_pos[2] = 0.0f;
-	}
-
-	global_pos[0] += pxy_delta(0);
-	global_pos[1] += pxy_delta(1);
-	global_pos[2] = pos.z;
-	printf("Position2 %3.3f %3.3f %3.3f\n", double(global_pos[0]), double(global_pos[1]), double(global_pos[2]));
-
-
-	vision_position.x = global_pos[0];
-	vision_position.y = global_pos[1];
-	vision_position.z = global_pos[2];
+	vision_position.x = global_pos(0);
+	vision_position.y = global_pos(1);
+	vision_position.z = global_pos(2);
 	vision_position.q[0] = q(0);
 	vision_position.q[1] = q(1);
 	vision_position.q[2] = q(2);
