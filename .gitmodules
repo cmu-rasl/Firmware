@@ -52,3 +52,6 @@
 [submodule "quadrotor_msgs"]
 	path = quadrotor_msgs
 	url = http://gitlab.rasl.ri.cmu.edu/msgs/quadrotor_msgs.git
+[submodule "src/modules/av_estimator"]
+	path = src/modules/av_estimator
+	url = https://github.com/dnovichman/av_estimator

@@ -114,6 +114,7 @@ set(config_module_list
 
 	# Moses ANU stuff
 	modules/mc_quat_control
+	modules/av_estimator
 
 	# CMU stuff
 	modules/mocap_control

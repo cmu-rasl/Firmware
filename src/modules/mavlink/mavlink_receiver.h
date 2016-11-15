@@ -236,7 +236,7 @@ private:
 	double _time_offset_avg_alpha;
 	int64_t _time_offset;
 	int	_orb_class_instance;
-int	_v_att_sub = -1;
+	int	_v_att_sub = -1;
 	static constexpr unsigned MOM_SWITCH_COUNT = 8;
 
 	uint8_t _mom_switch_pos[MOM_SWITCH_COUNT];
@@ -245,6 +245,7 @@ int	_v_att_sub = -1;
 	/* do not allow copying this class */
 	MavlinkReceiver(const MavlinkReceiver &);
 	MavlinkReceiver operator=(const MavlinkReceiver &);
-	//uint64_t prev;
+	uint64_t prev;
 	struct vehicle_attitude_s	_v_att;
+	float  global_pos[3] = {0.0f, 0.0f, 0.0f};
 };

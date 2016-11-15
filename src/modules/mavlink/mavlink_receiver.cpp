@@ -968,9 +968,6 @@ MavlinkReceiver::handle_message_vision_position_estimate(mavlink_message_t *msg)
 
 	vision_position.timestamp = sync_stamp(pos.usec);
 	vision_position.timestamp_received = hrt_absolute_time();
-	vision_position.x = pos.x;
-	vision_position.y = pos.y;
-	vision_position.z = pos.z;
 
 	bool updated;
 	orb_check(_v_att_sub, &updated);
@@ -978,9 +975,9 @@ MavlinkReceiver::handle_message_vision_position_estimate(mavlink_message_t *msg)
 	if (updated) {
 		orb_copy(ORB_ID(vehicle_attitude), _v_att_sub, &_v_att);
 	}
-//	uint64_t curt = vision_position.timestamp;
-//	float dt = (curt - prev)*0.000001f;
-//	prev = curt;
+	uint64_t curt = vision_position.timestamp;
+	float dt = (curt - prev)*0.000001f;
+	prev = curt;
 
 	printf("Position %3.3f %3.3f %3.3f\n", double(pos.x), double(pos.y), double(pos.z));
 	// XXX fix this
@@ -996,7 +993,7 @@ MavlinkReceiver::handle_message_vision_position_estimate(mavlink_message_t *msg)
 	if (pitch < -3.142f)
 		pitch = 3.142f*2.0f - pitch;
 
-	// The filter acts stupid
+	// The filter acts weird
 	if (roll < -M_PI_F/2.0f)
 	{
 		roll += M_PI_F;
@@ -1016,21 +1013,41 @@ MavlinkReceiver::handle_message_vision_position_estimate(mavlink_message_t *msg)
 	pos.roll = -roll;
 	pos.pitch = pitch;
 	pos.yaw = -pos.yaw - 3.142f/2.0f;
-	//printf("Orientation %3.3f %3.3f %3.3f\n", double(pos.roll*180.0f/3.142f), double(pos.pitch*180.0f/3.142f), double((pos.yaw)*180.0f/3.142f));
 
+	// Rotate flow vectors from body/camera to inertia
 	math::Matrix<3, 3> R;
 	math::Quaternion qq(math::Quaternion(_v_att.q));
 	R = qq.to_dcm();
-	math::Vector<3> posp(pos.x, pos.y, pos.z);
-	math::Vector<3> p2 = R*posp;
-	pos.x = p2(0);
-	pos.y = p2(1);
-	pos.z = p2(2);
-	//printf("Att %3.3f %3.3f %3.3f\n", double(_v_att.roll), double(_v_att.pitch), double(_v_att.yaw));
-	//printf("Position2 %3.3f %3.3f %3.3f\n", double(pos.x), double(pos.y), double(pos.z));
+	math::Vector<3> posp(pos.x, pos.y, 0.0f);
+	math::Vector<3> pxy_delta = R*posp;
+
+	// Rotate z 
+	math::Vector<3> pos_temp = R.transposed()*global_pos;
+	posp(0) = pos_temp(0) + pos.x;
+	posp(1) = pos_temp(1) + pos.y;
+	posp(2) = pos.z;
+	math::Vector<3> pz_delta = R*posp;
+	pos.z = pz_delta(2);
+
 	math::Quaternion q;
 	q.from_euler(pos.roll, pos.pitch, pos.yaw);
 
+	if (dt > 1.0f)
+	{
+		global_pos[0] = 0.0f;
+		global_pos[1] = 0.0f;
+		global_pos[2] = 0.0f;
+	}
+
+	global_pos[0] += pxy_delta(0);
+	global_pos[1] += pxy_delta(1);
+	global_pos[2] = pos.z;
+	printf("Position2 %3.3f %3.3f %3.3f\n", double(global_pos[0]), double(global_pos[1]), double(global_pos[2]));
+
+
+	vision_position.x = global_pos[0];
+	vision_position.y = global_pos[1];
+	vision_position.z = global_pos[2];
 	vision_position.q[0] = q(0);
 	vision_position.q[1] = q(1);
 	vision_position.q[2] = q(2);
