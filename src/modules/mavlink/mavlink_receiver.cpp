@@ -979,6 +979,8 @@ MavlinkReceiver::handle_message_vision_position_estimate(mavlink_message_t *msg)
 	float dt = (curt - prev)*0.000001f;
 	prev = curt;
 
+	pos.x = pos.x/1000.0f;
+	pos.y = pos.y/1000.0f;
 	printf("Position %3.3f %3.3f %3.3f\n", double(pos.x), double(pos.y), double(pos.z));
 	// XXX fix this
 	vision_position.vx = 0.0f;
@@ -1023,10 +1025,17 @@ MavlinkReceiver::handle_message_vision_position_estimate(mavlink_message_t *msg)
 	math::Matrix<3, 3> R;
 	math::Quaternion qq(math::Quaternion(_v_att.q));
 	R = qq.to_dcm();
-	math::Vector<3> posp(pos.x, pos.y, 0.0f); //should have a --minus in y
+	math::Vector<3> posp(-pos.x, -pos.y, 0.0f); //should have a --minus in y
+	math::Vector<3> delta_xy = R*posp;
+
+	// Rotate to get z
 	math::Vector<3> pos_body = R.transposed()*global_pos + posp;
 	pos_body(2) = pos.z;
-	math::Vector<3> global_pos = R*pos_body;
+	math::Vector<3> global_pos_tmp = R*pos_body;
+	// = R*pos_body;
+	global_pos(0) -= delta_xy(1);
+	global_pos(1) += delta_xy(0);
+	global_pos(2) = global_pos_tmp(2);
 
 	printf("Position2 %3.3f %3.3f %3.3f\n", double(global_pos[0]), double(global_pos[1]), double(global_pos[2]));
 

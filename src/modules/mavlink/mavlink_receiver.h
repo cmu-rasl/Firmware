@@ -78,6 +78,8 @@
 #include <uORB/topics/transponder_report.h>
 #include <uORB/topics/gps_inject_data.h>
 
+#include <mathlib/mathlib.h>
+
 #include "mavlink_ftp.h"
 
 #define PX4_EPOCH_SECS 1234567890ULL
