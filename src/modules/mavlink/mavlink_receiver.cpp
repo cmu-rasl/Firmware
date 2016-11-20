@@ -694,11 +694,19 @@ MavlinkReceiver::handle_message_att_pos_mocap(mavlink_message_t *msg)
 	att_pos_mocap.q[1] = mocap.q[1];
 	att_pos_mocap.q[2] = mocap.q[2];
 	att_pos_mocap.q[3] = mocap.q[3];
-	printf("mocap %3.3f %3.3f %3.3f %3.3f\n", double(mocap.q[0]), double(mocap.q[1]), double(mocap.q[2]), double(mocap.q[3]));
 
 	att_pos_mocap.x = mocap.x;
 	att_pos_mocap.y = mocap.y;
 	att_pos_mocap.z = mocap.z;
+
+	#if 0
+	  // Hack to address NuttX printf issue re: handling of float/double
+	  char buf[128];
+	  sprintf(buf, "position = %0.5f, %0.5f, %0.5f",
+	          (double)att_pos_mocap.x, (double)att_pos_mocap.y,
+	          (double)att_pos_mocap.z);
+	  printf("%s\n", buf);
+	#endif
 
 	if (_att_pos_mocap_pub == nullptr) {
 		_att_pos_mocap_pub = orb_advertise(ORB_ID(att_pos_mocap), &att_pos_mocap);
@@ -981,7 +989,7 @@ MavlinkReceiver::handle_message_vision_position_estimate(mavlink_message_t *msg)
 
 	pos.x = pos.x/1000.0f;
 	pos.y = pos.y/1000.0f;
-	printf("Position %3.3f %3.3f %3.3f\n", double(pos.x), double(pos.y), double(pos.z));
+
 	// XXX fix this
 	vision_position.vx = 0.0f;
 	vision_position.vy = 0.0f;
@@ -1036,8 +1044,14 @@ MavlinkReceiver::handle_message_vision_position_estimate(mavlink_message_t *msg)
 	global_pos(0) -= delta_xy(1);
 	global_pos(1) += delta_xy(0);
 	global_pos(2) = global_pos_tmp(2);
-
-	printf("Position2 %3.3f %3.3f %3.3f\n", double(global_pos[0]), double(global_pos[1]), double(global_pos[2]));
+	#if 0
+		// Hack to address NuttX printf issue re: handling of float/double
+		char buf[128];
+		sprintf(buf, "Vision position = %0.5f, %0.5f, %0.5f",
+					double(global_pos(0)), double(global_pos(1)),
+					double(global_pos(2)));
+		printf("%s\n", buf);
+	#endif
 
 
 	math::Quaternion q;

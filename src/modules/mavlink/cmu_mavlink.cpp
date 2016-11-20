@@ -265,13 +265,6 @@ void CMUMavlink::handle_message_mocap_multi_pose(const mavlink_message_t *msg)
   int inst; // Not used
   orb_publish_auto(ORB_ID(att_pos_mocap), &att_pos_mocap_pub,
                    &att_pos_mocap, &inst, ORB_PRIO_HIGH);
-
-  //uint64_t curt_on = hrt_absolute_time();
-  //float dt_on = (curt_on - prev_time_on)*0.000001;
-  //float dt = (mpose.time_usec - prev_time)*0.000001;
-  //prev_time = mpose.time_usec;
-  //prev_time_on = curt_on;
-  //printf("%3.5f, %3.5f, %3.5f, %3.5f\n", double(dt_on), double(1/dt_on), double(dt), double(1/dt));
 }
 
 void CMUMavlink::handle_message_mocap_position_cmd(const mavlink_message_t *msg)
