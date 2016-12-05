@@ -247,7 +247,7 @@ private:
 	/* do not allow copying this class */
 	MavlinkReceiver(const MavlinkReceiver &);
 	MavlinkReceiver operator=(const MavlinkReceiver &);
-	uint64_t prev;
+	uint64_t prev, prev2;
 	struct vehicle_attitude_s	_v_att;
 	math::Vector<3>  global_pos;
 };

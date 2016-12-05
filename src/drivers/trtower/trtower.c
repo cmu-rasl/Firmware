@@ -189,7 +189,7 @@ static uint8_t crc8(uint8_t *p, uint8_t len)
 static int trtower_thread_main(int argc, char *argv[])
 {
     /* Default values for arguments */
-    char *device_name = "/dev/ttyS2"; /* USART8 */
+    char *device_name = "/dev/ttyS1"; /* USART8 /dev/ttyS2 for v2*/
 
     /* Work around some stupidity in task_create's argv handling */
     argc -= 2;

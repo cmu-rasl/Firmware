@@ -50,6 +50,7 @@ set(config_module_list
 	drivers/bma180
 	drivers/bmi160
 	drivers/tap_esc
+	drivers/trtower
 
 	#
 	# System commands
@@ -115,6 +116,10 @@ set(config_module_list
 
 	# Moses ANU stuff
 	modules/mc_quat_control
+
+	# CMU stuff
+	modules/mocap_control
+	modules/mocap_status_monitor
 
 	#
 	# Logging

@@ -35,7 +35,7 @@ BlockLocalPositionEstimator::BlockLocalPositionEstimator() :
 	// gps 10 hz
 	_sub_gps(ORB_ID(vehicle_gps_position), 1000 / 10, 0, &getSubscriptions()),
 	// vision 5 hz
-	_sub_vision_pos(ORB_ID(vision_position_estimate), 1000 / 5, 0, &getSubscriptions()),
+	_sub_vision_pos(ORB_ID(vision_position_estimate), 1000 / 100, 0, &getSubscriptions()), //5 to 100Hz
 	// all distance sensors, 10 hz
 	_sub_mocap(ORB_ID(att_pos_mocap), 1000 / 100, 0, &getSubscriptions()), //mocap is 100Hz MBangura
 	_sub_dist0(ORB_ID(distance_sensor), 1000 / 10, 0, &getSubscriptions()),
