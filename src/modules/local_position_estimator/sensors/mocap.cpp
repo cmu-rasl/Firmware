@@ -48,7 +48,8 @@ int BlockLocalPositionEstimator::mocapMeasure(Vector<float, n_y_mocap> &y)
 	y(Y_mocap_y) = _sub_mocap.get().y;
 	y(Y_mocap_z) = _sub_mocap.get().z;
 	_mocapStats.update(y);
-	_time_last_mocap = _sub_mocap.get().timestamp;
+	//_time_last_mocap = _sub_mocap.get().timestamp;
+  _time_last_mocap = hrt_absolute_time();
 	return OK;
 }
 

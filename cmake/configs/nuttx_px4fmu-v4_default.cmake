@@ -94,6 +94,8 @@ set(config_module_list
 	modules/uavcan
 	modules/land_detector
 
+        modules/mocap_status_monitor
+
 	#
 	# Estimation modules (EKF/ SO3 / other filters)
 	#
@@ -115,6 +117,8 @@ set(config_module_list
 
 	# Moses ANU stuff
 	modules/mc_quat_control
+
+	modules/mocap_control
 
 	#
 	# Logging

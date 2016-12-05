@@ -1037,7 +1037,7 @@ MavlinkReceiver::handle_message_vision_position_estimate(mavlink_message_t *msg)
 	global_pos(1) += delta_xy(0);
 	global_pos(2) = global_pos_tmp(2);
 
-	printf("Position2 %3.3f %3.3f %3.3f\n", double(global_pos[0]), double(global_pos[1]), double(global_pos[2]));
+	printf("Position2 %3.3f %3.3f %3.3f\n", double(global_pos(0)), double(global_pos(1)), double(global_pos(2)));
 
 
 	math::Quaternion q;

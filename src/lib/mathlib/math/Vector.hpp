@@ -530,6 +530,60 @@ public:
 	}
 };
 
+template <>
+class __EXPORT Vector<6> : public VectorBase<6>
+{
+public:
+	Vector() : VectorBase<6>() {}
+
+	// simple copy is 1.6 times faster than memcpy
+	Vector(const Vector<6> &v) : VectorBase<6>() {
+		for (unsigned int i = 0; i < 6; i++)
+			data[i] = v.data[i];
+	}
+
+	Vector(const float d[6]) : VectorBase<6>() {
+		for (unsigned int i = 0; i < 6; i++)
+			data[i] = d[i];
+	}
+
+	Vector(const float x0, const float x1, const float x2, const float x3, const float x4, const float x5) : VectorBase<6>() {
+		data[0] = x0;
+		data[1] = x1;
+		data[2] = x2;
+		data[3] = x3;
+		data[4] = x4;
+		data[5] = x5;
+	}
+#if defined(__PX4_ROS)
+	/**
+	 * set data from boost::array
+	 */
+	void set(const boost::array<float, 6ul> d) {
+	set(static_cast<const float*>(d.data()));
+	}
+#endif
+
+	/**
+	 * set data
+	 */
+	void set(const float d[6]) {
+		for (unsigned int i = 0; i < 6; i++)
+			data[i] = d[i];
+	}
+
+	/**
+	 * set to value
+	 */
+	const Vector<6> &operator =(const Vector<6> &v) {
+		for (unsigned int i = 0; i < 6; i++)
+			data[i] = v.data[i];
+
+		return *this;
+	}
+};
+
+
 }
 
 #endif // VECTOR_HPP

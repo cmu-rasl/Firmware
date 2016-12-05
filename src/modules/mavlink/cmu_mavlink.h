@@ -30,6 +30,7 @@ private:
   void handle_message_mocap_position_cmd(const mavlink_message_t *msg);
   void handle_message_mocap_position_cmd_gains(const mavlink_message_t *msg);
   void handle_message_blinkm_control(const mavlink_message_t *msg);
+  void handle_message_mocap_pose(const mavlink_message_t *msg);
 
   // Copied from MavlinkReceiver
   uint64_t sync_stamp(uint64_t usec)
