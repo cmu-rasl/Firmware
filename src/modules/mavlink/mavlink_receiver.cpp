@@ -138,6 +138,7 @@ MavlinkReceiver::MavlinkReceiver(Mavlink *parent) :
 	_att_sp{},
 	_rates_sp{},
 	_time_offset_avg_alpha(0.6),
+	_local_pos_sp_pub(nullptr),
 	_time_offset(0),
 	_orb_class_instance(-1),
 	_v_att_sub(orb_subscribe(ORB_ID(vehicle_attitude))),
@@ -162,7 +163,7 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
 			_mavlink->set_config_link_on(true);
 		}
 	}
-printf("msg rcvd %d\n", msg->msgid);
+//printf("msg rcvd %d\n", msg->msgid);
 	switch (msg->msgid) {
 	case MAVLINK_MSG_ID_COMMAND_LONG:
 		if (_mavlink->accepting_commands()) {
@@ -699,6 +700,10 @@ MavlinkReceiver::handle_message_att_pos_mocap(mavlink_message_t *msg)
 	att_pos_mocap.y = mocap.y;
 	att_pos_mocap.z = mocap.z;
 
+	uint64_t curt2 =  att_pos_mocap.timestamp;
+	float dt = (curt2 - prev2)*0.000001f;
+	prev2 = curt2;		
+
 	#if 0
 	  // Hack to address NuttX printf issue re: handling of float/double
 	  char buf[128];
@@ -708,11 +713,20 @@ MavlinkReceiver::handle_message_att_pos_mocap(mavlink_message_t *msg)
 	  printf("%s\n", buf);
 	#endif
 
-	if (_att_pos_mocap_pub == nullptr) {
-		_att_pos_mocap_pub = orb_advertise(ORB_ID(att_pos_mocap), &att_pos_mocap);
+	//Temporary Hack until fix gs to 60Hz pls see mavros end for the hack
 
-	} else {
-		orb_publish(ORB_ID(att_pos_mocap), _att_pos_mocap_pub, &att_pos_mocap);
+	if (dt > 0.0167f)
+	{
+	#if 0
+		printf("Mocap freq %3.3f\n", double (1/dt));
+		//printf("mocap pos %3.3f %3.3f %3.3f\n",(double)att_pos_mocap.x, (double)att_pos_mocap.y,(double)att_pos_mocap.z);
+	#endif
+		if (_att_pos_mocap_pub == nullptr) {
+			_att_pos_mocap_pub = orb_advertise(ORB_ID(att_pos_mocap), &att_pos_mocap);
+
+		} else {
+			orb_publish(ORB_ID(att_pos_mocap), _att_pos_mocap_pub, &att_pos_mocap);
+		} 
 	}
 }
 
@@ -721,6 +735,28 @@ MavlinkReceiver::handle_message_set_position_target_local_ned(mavlink_message_t 
 {
 	mavlink_set_position_target_local_ned_t set_position_target_local_ned;
 	mavlink_msg_set_position_target_local_ned_decode(msg, &set_position_target_local_ned);
+
+	// Irrespective of what PX4 wants, we will ignore and follow my structure and use local position setpoint
+	struct vehicle_local_position_setpoint_s pos_sp;
+	pos_sp.x = set_position_target_local_ned.x;
+	pos_sp.y = set_position_target_local_ned.y;
+	pos_sp.z = set_position_target_local_ned.z;
+	pos_sp.vx = set_position_target_local_ned.vx;
+	pos_sp.vy = set_position_target_local_ned.vy;
+	pos_sp.vz = set_position_target_local_ned.vz;
+	pos_sp.acc_x = set_position_target_local_ned.afx;
+	pos_sp.acc_y = set_position_target_local_ned.afy;
+	pos_sp.acc_z = set_position_target_local_ned.afz;
+	pos_sp.yaw = set_position_target_local_ned.yaw;
+	pos_sp.timestamp = (uint64_t)set_position_target_local_ned.time_boot_ms;
+	printf("des stp is %3.3f %3.3f %3.3f %3.3f\n", double (pos_sp.x), double (pos_sp.y), double(pos_sp.vy), double(pos_sp.acc_y));
+
+	if (_local_pos_sp_pub != nullptr) {
+		orb_advertise(ORB_ID(vehicle_local_position_setpoint), &pos_sp); 
+	} else {
+		orb_advertise(ORB_ID(vehicle_local_position_setpoint),
+				&pos_sp);
+	}
 
 	struct offboard_control_mode_s offboard_control_mode = {};
 
@@ -974,7 +1010,7 @@ MavlinkReceiver::handle_message_vision_position_estimate(mavlink_message_t *msg)
 	// Use the component ID to identify the vision sensor
 	vision_position.id = msg->compid;
 
-	vision_position.timestamp = sync_stamp(pos.usec);
+	vision_position.timestamp = hrt_absolute_time(); //sync_stamp(pos.usec);
 	vision_position.timestamp_received = hrt_absolute_time();
 
 	bool updated;
