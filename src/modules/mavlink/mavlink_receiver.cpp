@@ -719,6 +719,7 @@ MavlinkReceiver::handle_message_att_pos_mocap(mavlink_message_t *msg)
 	{
 	#if 0
 		printf("Mocap freq %3.3f\n", double (1/dt));
+		printf("time %d\n",int (mocap.time_usec /1000000l));
 		//printf("mocap pos %3.3f %3.3f %3.3f\n",(double)att_pos_mocap.x, (double)att_pos_mocap.y,(double)att_pos_mocap.z);
 	#endif
 		if (_att_pos_mocap_pub == nullptr) {
@@ -749,8 +750,10 @@ MavlinkReceiver::handle_message_set_position_target_local_ned(mavlink_message_t 
 	pos_sp.acc_z = set_position_target_local_ned.afz;
 	pos_sp.yaw = set_position_target_local_ned.yaw;
 	pos_sp.timestamp = (uint64_t)set_position_target_local_ned.time_boot_ms;
+#if 0
 	printf("des stp is %3.3f %3.3f %3.3f %3.3f\n", double (pos_sp.x), double (pos_sp.y), double(pos_sp.vy), double(pos_sp.acc_y));
-
+	printf("sys %d %d %d %d\n", mavlink_system.sysid, set_position_target_local_ned.target_system, mavlink_system.compid, set_position_target_local_ned.target_component);
+#endif
 	if (_local_pos_sp_pub != nullptr) {
 		orb_advertise(ORB_ID(vehicle_local_position_setpoint), &pos_sp); 
 	} else {
@@ -1010,92 +1013,27 @@ MavlinkReceiver::handle_message_vision_position_estimate(mavlink_message_t *msg)
 	// Use the component ID to identify the vision sensor
 	vision_position.id = msg->compid;
 
-	vision_position.timestamp = hrt_absolute_time(); //sync_stamp(pos.usec);
+	vision_position.timestamp = sync_stamp(pos.usec);
 	vision_position.timestamp_received = hrt_absolute_time();
-
-	bool updated;
-	orb_check(_v_att_sub, &updated);
-
-	if (updated) {
-		orb_copy(ORB_ID(vehicle_attitude), _v_att_sub, &_v_att);
-	}
-	uint64_t curt = vision_position.timestamp;
-	float dt = (curt - prev)*0.000001f;
-	prev = curt;
-
-	pos.x = pos.x/1000.0f;
-	pos.y = pos.y/1000.0f;
+	vision_position.x = pos.x;
+	vision_position.y = pos.y;
+	vision_position.z = pos.z;
 
 	// XXX fix this
 	vision_position.vx = 0.0f;
 	vision_position.vy = 0.0f;
 	vision_position.vz = 0.0f;
 
-	float roll = pos.pitch;
-	float pitch = pos.roll;
-	pitch += 3.142f;
-	if (pitch > 3.142f)
-		pitch = -3.142f*2.0f + pitch;
-	if (pitch < -3.142f)
-		pitch = 3.142f*2.0f - pitch;
+	//math::Quaternion q;
+	//q.from_euler(pos.roll, pos.pitch, pos.yaw);
+	bool updated;
+	orb_check(_v_att_sub, &updated);
 
-	// The filter acts weird
-	if (roll < -M_PI_F/2.0f)
-	{
-		roll += M_PI_F;
-	} else if (roll > M_PI_F/2.0f)
-	{
-		roll -= M_PI_F;
+	if (updated) {
+		orb_copy(ORB_ID(vehicle_attitude), _v_att_sub, &_v_att);
 	}
+	math::Quaternion q(math::Quaternion(_v_att.q));
 
-	if (pitch < -M_PI_F/2.0f)
-	{
-		pitch += M_PI_F;
-	} else if (pitch > M_PI_F/2.0f)
-	{
-		pitch -= M_PI_F;
-	}
-
-	pos.roll = -roll;
-	pos.pitch = pitch;
-	pos.yaw = -pos.yaw - 3.142f/2.0f;
-
-	if (dt > 1.0f)
-	{
-		global_pos.zero();
-	}
-
-	// Rotate flow vectors from body/camera to inertia
-	math::Matrix<3, 3> R;
-	math::Quaternion qq(math::Quaternion(_v_att.q));
-	R = qq.to_dcm();
-	math::Vector<3> posp(-pos.x, -pos.y, 0.0f); //should have a --minus in y
-	math::Vector<3> delta_xy = R*posp;
-
-	// Rotate to get z
-	math::Vector<3> pos_body = R.transposed()*global_pos + posp;
-	pos_body(2) = pos.z;
-	math::Vector<3> global_pos_tmp = R*pos_body;
-	// = R*pos_body;
-	global_pos(0) -= delta_xy(1);
-	global_pos(1) += delta_xy(0);
-	global_pos(2) = global_pos_tmp(2);
-	#if 0
-		// Hack to address NuttX printf issue re: handling of float/double
-		char buf[128];
-		sprintf(buf, "Vision position = %0.5f, %0.5f, %0.5f",
-					double(global_pos(0)), double(global_pos(1)),
-					double(global_pos(2)));
-		printf("%s\n", buf);
-	#endif
-
-
-	math::Quaternion q;
-	q.from_euler(pos.roll, pos.pitch, pos.yaw);
-
-	vision_position.x = global_pos(0);
-	vision_position.y = global_pos(1);
-	vision_position.z = global_pos(2);
 	vision_position.q[0] = q(0);
 	vision_position.q[1] = q(1);
 	vision_position.q[2] = q(2);
@@ -1110,7 +1048,7 @@ MavlinkReceiver::handle_message_vision_position_estimate(mavlink_message_t *msg)
 
 	} else {
 		orb_publish(ORB_ID(vision_position_estimate), _vision_position_pub, &vision_position);
-	}
+}
 }
 
 void

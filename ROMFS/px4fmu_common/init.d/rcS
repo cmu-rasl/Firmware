@@ -13,7 +13,10 @@ sercon
 #
 # Default to auto-start mode.
 #
-set MODE autostart
+#set MODE autostart
+
+# CMU Custom mode
+set MODE cmu
 
 set TUNE_ERR ML<<CP4CP4CP4CP4CP4
 set LOG_FILE /fs/microsd/bootlog.txt
@@ -55,6 +58,12 @@ then
 	set MODE custom
 fi
 unset FRC
+
+if [ $MODE == cmu ]
+then
+	echo "INFO  [init] CMU"
+	sh /etc/init.d/rc_cmu.txt
+fi
 
 if [ $MODE == autostart ]
 then
