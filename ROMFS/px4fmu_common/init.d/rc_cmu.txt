@@ -1,0 +1,281 @@
+# rc.txt for danaus01
+#!nsh
+
+echo "[init] Pixhawk Quad startup ..."
+
+#
+# Start the ORB (first app to start)
+#
+uorb start
+
+#
+# Load parameters
+#
+set PARAM_FILE /fs/microsd/params
+if mtd start
+then
+    set PARAM_FILE /fs/mtd_params
+fi
+
+param select $PARAM_FILE
+if param load
+then
+    echo "[param] Loaded: $PARAM_FILE"
+else
+    echo "[param] FAILED loading $PARAM_FILE"
+    if param reset
+    then
+    fi
+fi
+
+set SET_RC_PARAMS yes
+
+if [ $SET_RC_PARAMS == yes ]
+then
+   echo "[init] RC is on"
+   param set MCC_RC_ON 1
+   fmu mode_pwm4
+   px4io start
+   #param save
+else
+   echo "[init] RC is disabled"
+   param set MCC_RC_ON 0
+   echo "[init] starting FMU with PWM output"
+   fmu mode_pwm4
+   #param save
+fi
+
+
+# Each time the above params change, you have to save and restart
+
+set SET_LOCAL_PARAMS no
+
+if [ $SET_LOCAL_PARAMS == yes ]
+then
+    # MAVlink Setup
+    echo "[init] MAVlink Parameters Setup"
+    param set MAV_BASE_ID 66
+    param set MAV_SYS_ID  218
+    param set MAV_COMP_ID 1
+    param set MAV_FWDEXTSP 1
+    param set MAV_RADIO_ID    0
+    param set MAV_TEST_PAR    1
+    param set MAV_TYPE    2
+    param set MAV_USEHILGPS   0
+
+    # LED RGB
+    echo "[init] LED RGB Parameters Setup"
+    param set LED_RGB_MAXBRT  1
+    param set MBM_COLOR 1
+
+    # PWM AUX Setup
+    echo "[init] PWM AUX Parameters Setup"
+    param set PWM_AUX_DISARMED 800
+    param set PWM_AUX_MIN 1060
+    param set PWM_AUX_MAX 1860
+    param set PWM_AUX_REV1 0
+    param set PWM_AUX_REV2 0
+    param set PWM_AUX_REV3 0
+    param set PWM_AUX_REV4 0
+    param set PWM_AUX_REV5 0
+    param set PWM_AUX_REV6 0
+
+    # Physical Parameters
+    echo "[init] Physical Parameters Setup"
+    param set MCC_ARM_LENGTH 0.1103
+    param set MCC_CT 1e-8 #8.65e-9
+    param set MCC_GRAVITY 9.80665
+    param set MCC_INERTIA_XX  0.0032765
+    param set MCC_INERTIA_XY  0.0000009
+    param set MCC_INERTIA_XZ -0.0000098
+    param set MCC_INERTIA_YY  0.0029039
+    param set MCC_INERTIA_YZ -0.0000054
+    param set MCC_INERTIA_ZZ  0.0053983
+    param set MCC_MOMENT_SCALE 0.0183 #0.017
+    param set MCC_MOTOR_CONST 36.5
+    param set MCC_TOTAL_MASS 0.593 #0.775
+    param set MCC_MOTOR_SPREAD 0.925
+    param set MCC_RPM_MIN 3850.0
+    param set MCC_RPM_MAX 21350.0 #20000.0
+    param set MCC_RPM_START 5000.0
+    param set MCC_MOT_START_DT 0.4
+
+    # Voltage Compensation Parameters
+    echo "[init] Voltage compensation parameters"
+    param set MCC_RPM_PER_PWM 20.425
+    param set MCC_RPM_PER_VOLT 915.399
+    param set MCC_RPM_V_ZERO -27662.660
+    param set MCC_RPM2PWM_00 1458.00
+    param set MCC_RPM2PWM_10 261.9
+    param set MCC_RPM2PWM_01 -25.78
+    param set MCC_RPM2PWM_20 18.41
+    param set MCC_RPM2PWM_11 -10.17
+    param set MCC_RPM2PWM_02 1.302
+    param set MCC_RPM2PWM_30 -15.04
+    param set MCC_RPM2PWM_21 1.938
+    param set MCC_RPM2PWM_12 0.9195
+    param set MCC_RPM2PWM_03 0.685
+    param set MCC_RPM2PWM_40 1.045
+    param set MCC_RPM2PWM_31 -0.8566
+    param set MCC_RPM2PWM_22 0.2561
+    param set MCC_RPM2PWM_13 -0.2399
+    param set MCC_RPM2PWM_04 -0.1383 
+    param set MCC_RPM2PWM_50 3.516
+    param set MCC_RPM2PWM_41 -1.034
+    param set MCC_RPM2PWM_32 0.2573
+    param set MCC_RPM2PWM_23 -0.1273
+    param set MCC_RPM2PWM_14 -0.3576
+    param set MCC_RPM2PWM_05 -0.273
+    param set MCC_RPM_M 1.258e+04
+    param set MCC_RPM_SD 5259
+    param set MCC_V_M 11.38
+    param set MCC_V_SD 0.5762
+    param set MCC_VOLT_COMP 1
+
+    # Mocap Attitude Control
+    echo "[init] Mocap Attitude Control Parameters Setup"
+    param set MCC_CMD_TTL 0.3
+    param set MCC_ENABLE_L1 1
+    param set MCC_ENABLE_L1P 1
+
+    # PWM - Mixer Map
+    param set MCC_PWM_MAP1 1
+    param set MCC_PWM_MAP2 2
+    param set MCC_PWM_MAP3 3
+    param set MCC_PWM_MAP4 4
+
+    # PWM Output Rate
+    param set MCC_PWM_RATE 500
+
+    #L1 Attitude Adaptive Control
+    echo "[init] L1 Adaptive Control Parameters Setup"
+    param set L1C_BW_X 5.0
+    param set L1C_BW_Y 5.0
+    param set L1C_BW_Z 3.0
+    param set L1C_KSP_X 400.0
+    param set L1C_KSP_Y 400.0
+    param set L1C_KSP_Z 400.0
+    param set L1C_ADAPT_GAIN 5000.0
+    param set L1C_INIT_DIST_X 0.0
+    param set L1C_INIT_DIST_Y 0.0
+    param set L1C_INIT_DIST_Z 0.0
+    param set L1C_ENGAGE_LEVEL 0.3
+
+    # L1 Position Adaptive Control
+    echo "[init] L1 Position Adaptive Control Parameters Setup"
+    param set L1P_ACTIVE 1
+    param set L1P_BW_X 5.0
+    param set L1P_BW_Y 5.0
+    param set L1P_BW_Z 5.0
+    param set L1P_OBS_GAIN_X 100.0
+    param set L1P_OBS_GAIN_Y 100.0
+    param set L1P_OBS_GAIN_Z 100.0
+    param set L1P_ADAPT_GAIN 3000.0
+    param set L1P_INIT_DIST_X 0.0
+    param set L1P_INIT_DIST_Y 0.0
+    param set L1P_INIT_DIST_Z 0.0
+    param set L1P_ENGAGE_LEVEL 0.37
+
+    # Attitude Estimator
+    echo "[init] Attitude Estimator Parameters Setup"
+
+    # Sensors
+    echo "[init] Battery Parameters Setup"
+    param set BAT_CAPACITY    -1.000
+    param set BAT_C_SCALING   -1.000
+    param set BAT_N_CELLS 3
+    param set BAT_V_CHARGED   4.200
+    param set BAT_V_EMPTY 3.400
+    param set BAT_V_LOAD_DROP 0.070
+    param set BAT_V_SCALE_IO  10000
+    param set BAT_V_SCALING   -1.000
+
+    # Mocap Status Monitor
+    echo "[init] Mocap Status Monitor Parameters Setup"
+    param set MSM_IGN_THRESH 7.0f
+    param set MSM_LOW_THRESH 10.9f
+    param set MSM_CRIT_THRESH 9.8f
+    param set MSM_BOARD_VER 2
+
+    # Local Position Estimator
+    echo "[init] Local Position Estimator Parameters Setup"
+    param set LPE_ENABLED 1
+    param set LPE_INTEGRATE 1
+    param set LPE_NO_VISION 0
+    param set LPE_ACC_XY 0.050
+    param set LPE_ACC_Z 0.050
+    param set LPE_BAR_Z 1.000
+    param set LPE_BETA_MAX 1000.000
+    param set LPE_EPH_MAX 3.000
+    param set LPE_FLW_XY 0.010
+    param set LPE_GPS_VXY 0.275
+    param set LPE_GPS_VZ 0.237
+    param set LPE_GPS_XY 2.000
+    param set LPE_GPS_Z 10.000
+    param set LPE_LDR_Z 0.030
+    param set LPE_PN_B 0.000001
+    param set LPE_PN_P 0.000
+    param set LPE_PN_V 0.000
+    param set LPE_SNR_Z 0.200
+    param set LPE_VIC_P 0.005
+    param set LPE_VIS_XY 0.500
+    param set LPE_VIS_Z 0.500
+    # Save to the default parameter file
+    param save
+fi
+
+unset SET_LOCAL_PARAMS
+
+#
+# Start system state indicator
+#
+rgbled start
+
+#
+# Sensors System (start before Commander so Preflight checks are properly run)
+#
+set BOARD fmuv2
+echo "[init] Starting the sensors system"
+sh /etc/init.d/rc.sensors
+
+# Only start commander if rc is on #TODO
+
+if [ $SET_RC_PARAMS == yes ]
+then
+    commander start
+fi
+
+unset SET_RC_PARAMS
+
+echo "[init] Starting the attitude estimator"
+attitude_estimator_q start
+
+echo "[init] Starting the local position estimator"
+local_position_estimator start
+#
+# Start PWM actuators
+#
+
+#
+echo "[init] starting mocap control"
+mocap_control start
+
+echo "[init] starting mocap status monitor"
+mocap_status_monitor start
+
+#
+# Start mavlink
+#
+usleep 2500
+mavlink start -b 921600 -d /dev/ttyS1
+
+usleep 2500
+mavlink start -d /dev/ttyS2
+
+#
+# Logging
+#
+usleep 2500
+#sdlog2 start -r 200 -a
+
+echo "[init] Init complete"
