@@ -165,7 +165,7 @@ void CMUMavlink::handle_message_mocap_rpm_cmd(const mavlink_message_t *msg)
 
   int inst; // Not used
   orb_publish_auto(ORB_ID(mocap_rpm_command), &mocap_rpm_cmd_pub,
-                   &mocap_rpm_cmd, &inst, ORB_PRIO_HIGH);
+                   &mocap_rpm_cmd, &inst, ORB_PRIO_HIGH);  
 }
 
 void CMUMavlink::handle_message_mocap_timesync(const mavlink_message_t *msg)

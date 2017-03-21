@@ -16,7 +16,7 @@ sercon
 #set MODE autostart
 
 # CMU Custom mode
-set MODE cmu
+set MODE autostart # cmu was here
 
 set TUNE_ERR ML<<CP4CP4CP4CP4CP4
 set LOG_FILE /fs/microsd/bootlog.txt
