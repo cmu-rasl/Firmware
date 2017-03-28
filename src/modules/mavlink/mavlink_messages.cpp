@@ -2493,6 +2493,85 @@ protected:
 	}
 };
 
+class MavlinkStreamRCChannelsScaled : public MavlinkStream
+{
+public:
+  const char *get_name() const
+  {
+    return MavlinkStreamRCChannelsScaled::get_name_static();
+  }
+
+  static const char *get_name_static()
+  {
+    return "RC_CHANNELS_SCALED";
+  }
+
+  static uint8_t get_id_static()
+  {
+    return MAVLINK_MSG_ID_RC_CHANNELS_SCALED;
+  }
+
+  uint8_t get_id()
+  {
+    return get_id_static();
+  }
+
+
+  static MavlinkStream *new_instance(Mavlink *mavlink)
+  {
+    return new MavlinkStreamRCChannelsScaled(mavlink);
+  }
+
+  unsigned get_size()
+  {
+    return _rc_scaled_sub->is_published() ? (MAVLINK_MSG_ID_RC_CHANNELS_SCALED_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES) : 0;
+  }
+
+private:
+  MavlinkOrbSubscription *_rc_scaled_sub;
+  uint64_t _rc_time;
+
+  /* do not allow top copying this class */
+  MavlinkStreamRCChannelsScaled(MavlinkStreamRCChannelsScaled &);
+  MavlinkStreamRCChannelsScaled& operator = (const MavlinkStreamRCChannelsScaled &);
+
+protected:
+  explicit MavlinkStreamRCChannelsScaled(Mavlink *mavlink) :
+    MavlinkStream(mavlink),
+    _rc_scaled_sub(_mavlink->add_orb_subscription(ORB_ID(rc_channels))),
+    _rc_time(0) { }
+
+  void send(const hrt_abstime t)
+  {
+    struct rc_channels_s rc_scaled;
+
+    if (_rc_scaled_sub->update(&_rc_time, &rc_scaled))
+    {
+      mavlink_rc_channels_scaled_t msg;
+
+      msg.time_boot_ms = rc_scaled.timestamp_last_valid / 1000;
+      msg.chan1_scaled =
+        (rc_scaled.channel_count > 0) ? rc_scaled.channels[0] * 10000 : INT16_MAX;
+      msg.chan2_scaled =
+        (rc_scaled.channel_count > 1) ? rc_scaled.channels[1] * 10000 : INT16_MAX;
+      msg.chan3_scaled =
+        (rc_scaled.channel_count > 2) ? rc_scaled.channels[2] * 10000 : INT16_MAX;
+      msg.chan4_scaled =
+        (rc_scaled.channel_count > 3) ? rc_scaled.channels[3] * 10000 : INT16_MAX;
+      msg.chan5_scaled =
+        (rc_scaled.channel_count > 4) ? rc_scaled.channels[4] * 10000 : INT16_MAX;
+      msg.chan6_scaled =
+        (rc_scaled.channel_count > 5) ? rc_scaled.channels[5] * 10000 : INT16_MAX;
+      msg.chan7_scaled =
+        (rc_scaled.channel_count > 6) ? rc_scaled.channels[6] * 10000 : INT16_MAX;
+      msg.chan8_scaled =
+        (rc_scaled.channel_count > 7) ? rc_scaled.channels[7] * 10000 : INT16_MAX;
+      msg.rssi = rc_scaled.rssi;
+
+      mavlink_msg_rc_channels_scaled_send_struct(_mavlink->get_channel(), &msg);
+    }
+  }
+};
 
 class MavlinkStreamManualControl : public MavlinkStream
 {
@@ -3246,6 +3325,7 @@ const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamLocalPositionSetpoint::new_instance, &MavlinkStreamLocalPositionSetpoint::get_name_static, &MavlinkStreamLocalPositionSetpoint::get_id_static),
 	new StreamListItem(&MavlinkStreamAttitudeTarget::new_instance, &MavlinkStreamAttitudeTarget::get_name_static, &MavlinkStreamAttitudeTarget::get_id_static),
 	new StreamListItem(&MavlinkStreamRCChannels::new_instance, &MavlinkStreamRCChannels::get_name_static, &MavlinkStreamRCChannels::get_id_static),
+	new StreamListItem(&MavlinkStreamRCChannelsScaled::new_instance, &MavlinkStreamRCChannelsScaled::get_name_static, &MavlinkStreamRCChannelsScaled::get_id_static),
 	new StreamListItem(&MavlinkStreamManualControl::new_instance, &MavlinkStreamManualControl::get_name_static, &MavlinkStreamManualControl::get_id_static),
 	new StreamListItem(&MavlinkStreamOpticalFlowRad::new_instance, &MavlinkStreamOpticalFlowRad::get_name_static, &MavlinkStreamOpticalFlowRad::get_id_static),
 	new StreamListItem(&MavlinkStreamActuatorControlTarget<0>::new_instance, &MavlinkStreamActuatorControlTarget<0>::get_name_static, &MavlinkStreamActuatorControlTarget<0>::get_id_static),
