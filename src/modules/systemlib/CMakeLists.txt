@@ -45,7 +45,6 @@ set(SRCS
 	otp.c
 	board_serial.c
 	pwm_limit/pwm_limit.c
-	mcu_version.c
 	bson/tinybson.c
 	circuit_breaker.cpp
 	battery.cpp
@@ -83,7 +82,6 @@ px4_add_module(
 	MODULE modules__systemlib
 	COMPILE_FLAGS
 		-Wno-sign-compare
-		-Os
 	SRCS ${SRCS}
 	DEPENDS
 		platforms__common

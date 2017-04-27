@@ -44,27 +44,19 @@
  * @author Sander Smeets <sander@droneslab.com>
  */
 
-#include <sys/types.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <float.h>
+#include "mission.h"
+#include "navigator.h"
 
 #include <drivers/drv_hrt.h>
-
 #include <dataman/dataman.h>
 #include <systemlib/mavlink_log.h>
 #include <systemlib/err.h>
 #include <geo/geo.h>
 #include <lib/mathlib/mathlib.h>
 #include <navigator/navigation.h>
-
 #include <uORB/uORB.h>
 #include <uORB/topics/mission.h>
 #include <uORB/topics/mission_result.h>
-
-#include "mission.h"
-#include "navigator.h"
 
 Mission::Mission(Navigator *navigator, const char *name) :
 	MissionBlock(navigator, name),
@@ -73,34 +65,21 @@ Mission::Mission(Navigator *navigator, const char *name) :
 	_param_dist_1wp(this, "MIS_DIST_1WP", false),
 	_param_altmode(this, "MIS_ALTMODE", false),
 	_param_yawmode(this, "MIS_YAWMODE", false),
-	_param_force_vtol(this, "VT_NAV_FORCE_VT", false),
+	_param_force_vtol(this, "NAV_FORCE_VT", false),
 	_param_fw_climbout_diff(this, "FW_CLMBOUT_DIFF", false),
-	_onboard_mission{},
-	_offboard_mission{},
-	_current_onboard_mission_index(-1),
-	_current_offboard_mission_index(-1),
-	_need_takeoff(true),
-	_mission_type(MISSION_TYPE_NONE),
-	_inited(false),
-	_home_inited(false),
-	_need_mission_reset(false),
-	_missionFeasibilityChecker(),
-	_min_current_sp_distance_xy(FLT_MAX),
-	_mission_item_previous_alt(NAN),
-	_distance_current_previous(0.0f),
-	_work_item_type(WORK_ITEM_TYPE_DEFAULT)
+	_missionFeasibilityChecker(navigator)
 {
-	/* load initial params */
 	updateParams();
-}
-
-Mission::~Mission()
-{
 }
 
 void
 Mission::on_inactive()
 {
+	/* We need to reset the mission cruising speed, otherwise the
+	 * mission velocity which might have been set using mission items
+	 * is used for missions such as RTL. */
+	_navigator->set_cruising_speed();
+
 	/* Without home a mission can't be valid yet anyway, let's wait. */
 	if (!_navigator->home_position_valid()) {
 		return;
@@ -126,12 +105,13 @@ Mission::on_inactive()
 		if (need_to_reset_mission(false)) {
 			reset_offboard_mission(_offboard_mission);
 			update_offboard_mission();
+			_navigator->reset_cruising_speed();
 		}
 
 	} else {
 
 		/* load missions from storage */
-		mission_s mission_state;
+		mission_s mission_state = {};
 
 		dm_lock(DM_KEY_MISSION_STATE);
 
@@ -155,13 +135,10 @@ Mission::on_inactive()
 	/* require takeoff after non-loiter or landing */
 	if (!_navigator->get_can_loiter_at_sp() || _navigator->get_land_detected()->landed) {
 		_need_takeoff = true;
-
-		/* Reset work item type to default if auto take-off has been paused or aborted,
-		   and we landed in manual mode. */
-		if (_work_item_type == WORK_ITEM_TYPE_TAKEOFF) {
-			_work_item_type = WORK_ITEM_TYPE_DEFAULT;
-		}
 	}
+
+	/* reset so current mission item gets restarted if mission was paused */
+	_work_item_type = WORK_ITEM_TYPE_DEFAULT;
 }
 
 void
@@ -194,6 +171,7 @@ Mission::on_active()
 	if (need_to_reset_mission(true)) {
 		reset_offboard_mission(_offboard_mission);
 		update_offboard_mission();
+		_navigator->reset_cruising_speed();
 		offboard_updated = true;
 	}
 
@@ -204,7 +182,12 @@ Mission::on_active()
 
 	/* lets check if we reached the current mission item */
 	if (_mission_type != MISSION_TYPE_NONE && is_mission_item_reached()) {
-		set_mission_item_reached();
+
+		/* If we just completed a takeoff which was inserted before the right waypoint,
+		   there is no need to report that we reached it because we didn't. */
+		if (_work_item_type != WORK_ITEM_TYPE_TAKEOFF) {
+			set_mission_item_reached();
+		}
 
 		if (_mission_item.autocontinue) {
 			/* switch to next waypoint if 'autocontinue' flag set */
@@ -213,6 +196,7 @@ Mission::on_active()
 		}
 
 	} else if (_mission_type != MISSION_TYPE_NONE && _param_altmode.get() == MISSION_ALTMODE_FOH) {
+
 		altitude_sp_foh_update();
 
 	} else {
@@ -220,6 +204,11 @@ Mission::on_active()
 		if (_waypoint_position_reached && _mission_item.nav_cmd != NAV_CMD_IDLE) {
 			_navigator->set_can_loiter_at_sp(true);
 		}
+	}
+
+	/* check if a cruise speed change has been commanded */
+	if (_mission_type != MISSION_TYPE_NONE) {
+		cruising_speed_sp_update();
 	}
 
 	/* see if we need to update the current yaw heading */
@@ -237,7 +226,56 @@ Mission::on_active()
 
 		do_abort_landing();
 	}
+}
 
+bool
+Mission::set_current_offboard_mission_index(unsigned index)
+{
+	if (index < _offboard_mission.count) {
+
+		_current_offboard_mission_index = index;
+		set_current_offboard_mission_item();
+
+		// update mission items if already in active mission
+		if (_navigator->is_planned_mission()) {
+			// prevent following "previous - current" line
+			_navigator->get_position_setpoint_triplet()->previous.valid = false;
+			_navigator->get_position_setpoint_triplet()->current.valid = false;
+			set_mission_items();
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
+int
+Mission::find_offboard_land_start()
+{
+	/* find the first MAV_CMD_DO_LAND_START and return the index
+	 *  return -1 if not found
+	 *
+	 * TODO: implement full spec and find closest landing point geographically
+	 */
+
+	dm_item_t dm_current = DM_KEY_WAYPOINTS_OFFBOARD(_offboard_mission.dataman_id);
+
+	for (size_t i = 0; i < _offboard_mission.count; i++) {
+		struct mission_item_s missionitem;
+		const ssize_t len = sizeof(missionitem);
+
+		if (dm_read(dm_current, i, &missionitem, len) != len) {
+			/* not supposed to happen unless the datamanager can't access the SD card, etc. */
+			return -1;
+		}
+
+		if (missionitem.nav_cmd == NAV_CMD_DO_LAND_START) {
+			return i;
+		}
+	}
+
+	return -1;
 }
 
 void
@@ -247,6 +285,7 @@ Mission::update_onboard_mission()
 		/* accept the current index set by the onboard mission if it is within bounds */
 		if (_onboard_mission.current_seq >= 0
 		    && _onboard_mission.current_seq < (int)_onboard_mission.count) {
+
 			_current_onboard_mission_index = _onboard_mission.current_seq;
 
 		} else {
@@ -265,7 +304,15 @@ Mission::update_onboard_mission()
 		// XXX check validity here as well
 		_navigator->get_mission_result()->valid = true;
 		/* reset mission failure if we have an updated valid mission */
-		_navigator->get_mission_result()->mission_failure = false;
+		_navigator->get_mission_result()->failure = false;
+
+		/* reset reached info as well */
+		_navigator->get_mission_result()->reached = false;
+		_navigator->get_mission_result()->seq_reached = 0;
+		_navigator->get_mission_result()->seq_total = _onboard_mission.count;
+
+		/* reset work item if new mission has been accepted */
+		_work_item_type = WORK_ITEM_TYPE_DEFAULT;
 		_navigator->increment_mission_instance_count();
 		_navigator->set_mission_result_updated();
 
@@ -294,9 +341,8 @@ Mission::update_offboard_mission()
 			if (_current_offboard_mission_index >= (int)_offboard_mission.count) {
 				_current_offboard_mission_index = 0;
 
-				/* if not initialized, set it to 0 */
-
 			} else if (_current_offboard_mission_index < 0) {
+				/* if not initialized, set it to 0 */
 				_current_offboard_mission_index = 0;
 			}
 
@@ -309,7 +355,15 @@ Mission::update_offboard_mission()
 
 		if (!failed) {
 			/* reset mission failure if we have an updated valid mission */
-			_navigator->get_mission_result()->mission_failure = false;
+			_navigator->get_mission_result()->failure = false;
+
+			/* reset reached info as well */
+			_navigator->get_mission_result()->reached = false;
+			_navigator->get_mission_result()->seq_reached = 0;
+			_navigator->get_mission_result()->seq_total = _offboard_mission.count;
+
+			/* reset work item if new mission has been accepted */
+			_work_item_type = WORK_ITEM_TYPE_DEFAULT;
 		}
 
 	} else {
@@ -354,20 +408,17 @@ Mission::advance_mission()
 float
 Mission::get_absolute_altitude_for_item(struct mission_item_s &mission_item)
 {
-	if (_mission_item.altitude_is_relative) {
-		return _mission_item.altitude + _navigator->get_home_position()->alt;
+	if (mission_item.altitude_is_relative) {
+		return mission_item.altitude + _navigator->get_home_position()->alt;
 
 	} else {
-		return _mission_item.altitude;
+		return mission_item.altitude;
 	}
 }
 
 void
 Mission::set_mission_items()
 {
-	/* make sure param is up to date */
-	updateParams();
-
 	/* reset the altitude foh (first order hold) logic, if altitude foh is enabled (param) a new foh element starts now */
 	altitude_sp_foh_reset();
 
@@ -381,12 +432,6 @@ Mission::set_mission_items()
 	bool has_next_position_item = false;
 
 	work_item_type new_work_item_type = WORK_ITEM_TYPE_DEFAULT;
-
-	/* copy information about the previous mission item */
-	if (item_contains_position(&_mission_item) && pos_sp_triplet->current.valid) {
-		/* Copy previous mission item altitude */
-		_mission_item_previous_alt = get_absolute_altitude_for_item(_mission_item);
-	}
 
 	/* try setting onboard mission item */
 	if (_param_onboard_enabled.get()
@@ -452,7 +497,6 @@ Mission::set_mission_items()
 
 			if (_navigator->get_land_detected()->landed) {
 				/* landed, refusing to take off without a mission */
-
 				mavlink_log_critical(_navigator->get_mavlink_log_pub(), "no valid mission available, refusing takeoff");
 
 			} else {
@@ -460,7 +504,6 @@ Mission::set_mission_items()
 			}
 
 			user_feedback_done = true;
-
 		}
 
 		_navigator->set_position_setpoint_triplet_updated();
@@ -470,13 +513,12 @@ Mission::set_mission_items()
 	/*********************************** handle mission item *********************************************/
 
 	/* handle position mission items */
-
-
 	if (item_contains_position(&_mission_item)) {
 
 		/* force vtol land */
-		if (_mission_item.nav_cmd == NAV_CMD_LAND && _navigator->get_vstatus()->is_vtol
-		    && _param_force_vtol.get() && !_navigator->get_vstatus()->is_rotary_wing) {
+		if (_mission_item.nav_cmd == NAV_CMD_LAND && _param_force_vtol.get() == 1
+		    && !_navigator->get_vstatus()->is_rotary_wing
+		    && _navigator->get_vstatus()->is_vtol) {
 
 			_mission_item.nav_cmd = NAV_CMD_VTOL_LAND;
 		}
@@ -485,7 +527,10 @@ Mission::set_mission_items()
 		set_previous_pos_setpoint();
 
 		/* do takeoff before going to setpoint if needed and not already in takeoff */
-		if (do_need_takeoff() && _work_item_type != WORK_ITEM_TYPE_TAKEOFF) {
+		/* in fixed-wing this whole block will be ignored and a takeoff item is always propagated */
+		if (do_need_vertical_takeoff() &&
+		    _work_item_type == WORK_ITEM_TYPE_DEFAULT &&
+		    new_work_item_type == WORK_ITEM_TYPE_DEFAULT) {
 
 			new_work_item_type = WORK_ITEM_TYPE_TAKEOFF;
 
@@ -496,53 +541,90 @@ Mission::set_mission_items()
 
 			float takeoff_alt = calculate_takeoff_altitude(&_mission_item);
 
-			mavlink_log_info(_navigator->get_mavlink_log_pub(), "takeoff to %.1f meters above home",
+			mavlink_log_info(_navigator->get_mavlink_log_pub(), "Takeoff to %.1f meters above home",
 					 (double)(takeoff_alt - _navigator->get_home_position()->alt));
 
 			_mission_item.nav_cmd = NAV_CMD_TAKEOFF;
 			_mission_item.lat = _navigator->get_global_position()->lat;
 			_mission_item.lon = _navigator->get_global_position()->lon;
-			/* ignore yaw for takeoff items */
-			_mission_item.yaw = NAN;
+			/* hold heading for takeoff items */
+			_mission_item.yaw = _navigator->get_global_position()->yaw;
 			_mission_item.altitude = takeoff_alt;
 			_mission_item.altitude_is_relative = false;
 			_mission_item.autocontinue = true;
-			_mission_item.time_inside = 0;
-		}
+			_mission_item.time_inside = 0.0f;
 
-		/* if we just did a takeoff navigate to the actual waypoint now */
-		if (_work_item_type == WORK_ITEM_TYPE_TAKEOFF) {
+		} else if (_mission_item.nav_cmd == NAV_CMD_TAKEOFF
+			   && _work_item_type == WORK_ITEM_TYPE_DEFAULT
+			   && new_work_item_type == WORK_ITEM_TYPE_DEFAULT
+			   && _navigator->get_vstatus()->is_rotary_wing) {
 
-			if (_mission_item.nav_cmd == NAV_CMD_VTOL_TAKEOFF
-			    && _navigator->get_vstatus()->is_rotary_wing
-			    && !_navigator->get_land_detected()->landed
-			    && has_next_position_item) {
+			/* if there is no need to do a takeoff but we have a takeoff item, treat is as waypoint */
+			_mission_item.nav_cmd = NAV_CMD_WAYPOINT;
+			/* ignore yaw here, otherwise it might yaw before heading_sp_update takes over */
+			_mission_item.yaw = NAN;
+			/* since _mission_item.time_inside and and _mission_item.pitch_min build a union, we need to set time_inside to zero
+			 * since in NAV_CMD_TAKEOFF mode there is currently no time_inside.
+			 * Note also that resetting time_inside to zero will cause pitch_min to be zero as well.
+			 */
+			_mission_item.time_inside = 0.0f;
 
-				/* check if the vtol_takeoff command is on top of us */
-				if (do_need_move_to_takeoff()) {
-					new_work_item_type = WORK_ITEM_TYPE_TRANSITON_AFTER_TAKEOFF;
+		} else if (_mission_item.nav_cmd == NAV_CMD_VTOL_TAKEOFF
+			   && _work_item_type == WORK_ITEM_TYPE_DEFAULT
+			   && new_work_item_type == WORK_ITEM_TYPE_DEFAULT) {
 
-				} else {
-					new_work_item_type = WORK_ITEM_TYPE_DEFAULT;
-				}
-
-
-				_mission_item.nav_cmd = NAV_CMD_DO_VTOL_TRANSITION;
-				_mission_item.params[0] = vtol_vehicle_status_s::VEHICLE_VTOL_STATE_FW;
-				_mission_item.yaw = _navigator->get_global_position()->yaw;
+			if (_navigator->get_vstatus()->is_rotary_wing) {
+				/* haven't transitioned yet, trigger vtol takeoff logic below */
+				_work_item_type = WORK_ITEM_TYPE_TAKEOFF;
 
 			} else {
-				new_work_item_type = WORK_ITEM_TYPE_DEFAULT;
+				/* already in fixed-wing, go to waypoint */
 				_mission_item.nav_cmd = NAV_CMD_WAYPOINT;
-				/* ignore yaw here, otherwise it might yaw before heading_sp_update takes over */
-				_mission_item.yaw = NAN;
 			}
 
+			/* ignore yaw here, otherwise it might yaw before heading_sp_update takes over */
+			_mission_item.yaw = NAN;
+		}
+
+		/* if we just did a normal takeoff navigate to the actual waypoint now */
+		if (_mission_item.nav_cmd == NAV_CMD_TAKEOFF &&
+		    _work_item_type == WORK_ITEM_TYPE_TAKEOFF &&
+		    new_work_item_type == WORK_ITEM_TYPE_DEFAULT) {
+
+			_mission_item.nav_cmd = NAV_CMD_WAYPOINT;
+			/* ignore yaw here, otherwise it might yaw before heading_sp_update takes over */
+			_mission_item.yaw = NAN;
+			/* since _mission_item.time_inside and and _mission_item.pitch_min build a union, we need to set time_inside to zero
+			 * since in NAV_CMD_TAKEOFF mode there is currently no time_inside.
+			 */
+			_mission_item.time_inside = 0.0f;
+		}
+
+		/* if we just did a VTOL takeoff, prepare transition */
+		if (_mission_item.nav_cmd == NAV_CMD_VTOL_TAKEOFF &&
+		    _work_item_type == WORK_ITEM_TYPE_TAKEOFF &&
+		    new_work_item_type == WORK_ITEM_TYPE_DEFAULT &&
+		    _navigator->get_vstatus()->is_rotary_wing &&
+		    !_navigator->get_land_detected()->landed) {
+
+			/* check if the vtol_takeoff waypoint is on top of us */
+			if (do_need_move_to_takeoff()) {
+				new_work_item_type = WORK_ITEM_TYPE_TRANSITON_AFTER_TAKEOFF;
+			}
+
+			_mission_item.nav_cmd = NAV_CMD_DO_VTOL_TRANSITION;
+			_mission_item.params[0] = vtol_vehicle_status_s::VEHICLE_VTOL_STATE_FW;
+			_mission_item.yaw = _navigator->get_global_position()->yaw;
+
+			/* set position setpoint to target during the transition */
+			// TODO: if has_next_position_item and use_next set next, or if use_heading set generated
+			generate_waypoint_from_heading(&pos_sp_triplet->current, _mission_item.yaw);
 		}
 
 		/* takeoff completed and transitioned, move to takeoff wp as fixed wing */
 		if (_mission_item.nav_cmd == NAV_CMD_VTOL_TAKEOFF
-		    && _work_item_type == WORK_ITEM_TYPE_TRANSITON_AFTER_TAKEOFF) {
+		    && _work_item_type == WORK_ITEM_TYPE_TRANSITON_AFTER_TAKEOFF
+		    && new_work_item_type == WORK_ITEM_TYPE_DEFAULT) {
 
 			new_work_item_type = WORK_ITEM_TYPE_DEFAULT;
 			_mission_item.nav_cmd = NAV_CMD_WAYPOINT;
@@ -553,15 +635,19 @@ Mission::set_mission_items()
 		/* move to land wp as fixed wing */
 		if (_mission_item.nav_cmd == NAV_CMD_VTOL_LAND
 		    && _work_item_type == WORK_ITEM_TYPE_DEFAULT
+		    && new_work_item_type == WORK_ITEM_TYPE_DEFAULT
 		    && !_navigator->get_land_detected()->landed) {
 
 			new_work_item_type = WORK_ITEM_TYPE_MOVE_TO_LAND;
+
 			/* use current mission item as next position item */
 			memcpy(&mission_item_next_position, &_mission_item, sizeof(struct mission_item_s));
 			has_next_position_item = true;
+
 			float altitude = _navigator->get_global_position()->alt;
 
-			if (pos_sp_triplet->current.valid) {
+			if (pos_sp_triplet->current.valid
+			    && pos_sp_triplet->current.type == position_setpoint_s::SETPOINT_TYPE_POSITION) {
 				altitude = pos_sp_triplet->current.alt;
 			}
 
@@ -569,12 +655,14 @@ Mission::set_mission_items()
 			_mission_item.altitude_is_relative = false;
 			_mission_item.nav_cmd = NAV_CMD_WAYPOINT;
 			_mission_item.autocontinue = true;
-			_mission_item.time_inside = 0;
+			_mission_item.time_inside = 0.0f;
+			_mission_item.vtol_back_transition = true;
 		}
 
 		/* transition to MC */
 		if (_mission_item.nav_cmd == NAV_CMD_VTOL_LAND
 		    && _work_item_type == WORK_ITEM_TYPE_MOVE_TO_LAND
+		    && new_work_item_type == WORK_ITEM_TYPE_DEFAULT
 		    && !_navigator->get_vstatus()->is_rotary_wing
 		    && !_navigator->get_land_detected()->landed) {
 
@@ -587,7 +675,8 @@ Mission::set_mission_items()
 		/* move to landing waypoint before descent if necessary */
 		if (do_need_move_to_land() &&
 		    (_work_item_type == WORK_ITEM_TYPE_DEFAULT ||
-		     _work_item_type == WORK_ITEM_TYPE_MOVE_TO_LAND_AFTER_TRANSITION)) {
+		     _work_item_type == WORK_ITEM_TYPE_MOVE_TO_LAND_AFTER_TRANSITION) &&
+		    new_work_item_type == WORK_ITEM_TYPE_DEFAULT) {
 
 			new_work_item_type = WORK_ITEM_TYPE_MOVE_TO_LAND;
 
@@ -604,21 +693,26 @@ Mission::set_mission_items()
 			 */
 			float altitude = _navigator->get_global_position()->alt;
 
+			if (pos_sp_triplet->current.valid
+			    && pos_sp_triplet->current.type == position_setpoint_s::SETPOINT_TYPE_POSITION) {
+				altitude = pos_sp_triplet->current.alt;
+			}
+
 			_mission_item.altitude = altitude;
 			_mission_item.altitude_is_relative = false;
 			_mission_item.nav_cmd = NAV_CMD_WAYPOINT;
 			_mission_item.autocontinue = true;
-			_mission_item.time_inside = 0;
+			_mission_item.time_inside = 0.0f;
+			_mission_item.disable_mc_yaw = true;
 		}
 
 		/* we just moved to the landing waypoint, now descend */
-		if (_work_item_type == WORK_ITEM_TYPE_MOVE_TO_LAND
-		    && _navigator->get_vstatus()->is_rotary_wing) {
+		if (_work_item_type == WORK_ITEM_TYPE_MOVE_TO_LAND &&
+		    new_work_item_type == WORK_ITEM_TYPE_DEFAULT) {
 
 			new_work_item_type = WORK_ITEM_TYPE_DEFAULT;
+			/* XXX: noop */
 		}
-
-
 
 		/* ignore yaw for landing items */
 		/* XXX: if specified heading for landing is desired we could add another step before the descent
@@ -627,27 +721,59 @@ Mission::set_mission_items()
 			_mission_item.yaw = NAN;
 		}
 
-		/* handle non-position mission items such as commands */
-
 	} else {
+		/* handle non-position mission items such as commands */
 
 		/* turn towards next waypoint before MC to FW transition */
 		if (_mission_item.nav_cmd == NAV_CMD_DO_VTOL_TRANSITION
-		    && _work_item_type != WORK_ITEM_TYPE_ALIGN
+		    && _work_item_type == WORK_ITEM_TYPE_DEFAULT
+		    && new_work_item_type == WORK_ITEM_TYPE_DEFAULT
 		    && _navigator->get_vstatus()->is_rotary_wing
 		    && !_navigator->get_land_detected()->landed
 		    && has_next_position_item) {
 
 			new_work_item_type = WORK_ITEM_TYPE_ALIGN;
+
 			set_align_mission_item(&_mission_item, &mission_item_next_position);
+
+			/* set position setpoint to target during the transition */
+			mission_item_to_position_setpoint(&mission_item_next_position, &pos_sp_triplet->current);
 		}
 
 		/* yaw is aligned now */
-		if (_work_item_type == WORK_ITEM_TYPE_ALIGN) {
+		if (_work_item_type == WORK_ITEM_TYPE_ALIGN &&
+		    new_work_item_type == WORK_ITEM_TYPE_DEFAULT) {
+
 			new_work_item_type = WORK_ITEM_TYPE_DEFAULT;
+
+			/* set position setpoint to target during the transition */
 			set_previous_pos_setpoint();
+			generate_waypoint_from_heading(&pos_sp_triplet->current, pos_sp_triplet->current.yaw);
 		}
 
+		/* don't advance mission after FW to MC command */
+		if (_mission_item.nav_cmd == NAV_CMD_DO_VTOL_TRANSITION
+		    && _work_item_type == WORK_ITEM_TYPE_DEFAULT
+		    && new_work_item_type == WORK_ITEM_TYPE_DEFAULT
+		    && !_navigator->get_vstatus()->is_rotary_wing
+		    && !_navigator->get_land_detected()->landed
+		    && pos_sp_triplet->current.valid) {
+
+			new_work_item_type = WORK_ITEM_TYPE_CMD_BEFORE_MOVE;
+		}
+
+		/* after FW to MC transition finish moving to the waypoint */
+		if (_work_item_type == WORK_ITEM_TYPE_CMD_BEFORE_MOVE &&
+		    new_work_item_type == WORK_ITEM_TYPE_DEFAULT
+		    && pos_sp_triplet->current.valid) {
+
+			new_work_item_type = WORK_ITEM_TYPE_DEFAULT;
+
+			_mission_item.nav_cmd = NAV_CMD_WAYPOINT;
+			copy_positon_if_valid(&_mission_item, &pos_sp_triplet->current);
+			_mission_item.autocontinue = true;
+			_mission_item.time_inside = 0;
+		}
 	}
 
 	/*********************************** set setpoints and check next *********************************************/
@@ -675,11 +801,8 @@ Mission::set_mission_items()
 		set_current_offboard_mission_item();
 	}
 
-	// TODO: report onboard mission item somehow
-
-	if (_mission_item.autocontinue && _mission_item.time_inside <= 0.001f) {
+	if (_mission_item.autocontinue && get_time_inside(_mission_item) < FLT_EPSILON) {
 		/* try to process next mission item */
-
 		if (has_next_position_item) {
 			/* got next mission item, update setpoint triplet */
 			mission_item_to_position_setpoint(&mission_item_next_position, &pos_sp_triplet->next);
@@ -708,30 +831,35 @@ Mission::set_mission_items()
 }
 
 bool
-Mission::do_need_takeoff()
+Mission::do_need_vertical_takeoff()
 {
 	if (_navigator->get_vstatus()->is_rotary_wing) {
 
 		float takeoff_alt = calculate_takeoff_altitude(&_mission_item);
 
-		/* force takeoff if landed (additional protection) */
 		if (_navigator->get_land_detected()->landed) {
+			/* force takeoff if landed (additional protection) */
 			_need_takeoff = true;
 
+		} else if (_navigator->get_global_position()->alt > takeoff_alt - _navigator->get_acceptance_radius()) {
 			/* if in-air and already above takeoff height, don't do takeoff */
-
-		} else if (_navigator->get_global_position()->alt > takeoff_alt) {
 			_need_takeoff = false;
+
+		} else if (_navigator->get_global_position()->alt <= takeoff_alt - _navigator->get_acceptance_radius()
+			   && (_mission_item.nav_cmd == NAV_CMD_TAKEOFF
+			       || _mission_item.nav_cmd == NAV_CMD_VTOL_TAKEOFF)) {
+			/* if in-air but below takeoff height and we have a takeoff item */
+			_need_takeoff = true;
 		}
 
 		/* check if current mission item is one that requires takeoff before */
 		if (_need_takeoff && (
-			    _mission_item.nav_cmd == NAV_CMD_WAYPOINT ||
-			    _mission_item.nav_cmd == NAV_CMD_LOITER_UNLIMITED ||
-			    _mission_item.nav_cmd == NAV_CMD_LOITER_TIME_LIMIT ||
 			    _mission_item.nav_cmd == NAV_CMD_TAKEOFF ||
-			    _mission_item.nav_cmd == NAV_CMD_LOITER_TO_ALT ||
-			    _mission_item.nav_cmd == NAV_CMD_VTOL_TAKEOFF)) {
+			    _mission_item.nav_cmd == NAV_CMD_WAYPOINT ||
+			    _mission_item.nav_cmd == NAV_CMD_VTOL_TAKEOFF ||
+			    _mission_item.nav_cmd == NAV_CMD_LOITER_TIME_LIMIT ||
+			    _mission_item.nav_cmd == NAV_CMD_LOITER_UNLIMITED ||
+			    _mission_item.nav_cmd == NAV_CMD_RETURN_TO_LAUNCH)) {
 
 			_need_takeoff = false;
 			return true;
@@ -773,7 +901,7 @@ Mission::do_need_move_to_takeoff()
 void
 Mission::copy_positon_if_valid(struct mission_item_s *mission_item, struct position_setpoint_s *setpoint)
 {
-	if (setpoint->valid) {
+	if (setpoint->valid && setpoint->type == position_setpoint_s::SETPOINT_TYPE_POSITION) {
 		mission_item->lat = setpoint->lat;
 		mission_item->lon = setpoint->lon;
 		mission_item->altitude = setpoint->alt;
@@ -794,7 +922,7 @@ Mission::set_align_mission_item(struct mission_item_s *mission_item, struct miss
 	copy_positon_if_valid(mission_item, &(_navigator->get_position_setpoint_triplet()->current));
 	mission_item->altitude_is_relative = false;
 	mission_item->autocontinue = true;
-	mission_item->time_inside = 0;
+	mission_item->time_inside = 0.0f;
 	mission_item->yaw = get_bearing_to_next_waypoint(
 				    _navigator->get_global_position()->lat,
 				    _navigator->get_global_position()->lon,
@@ -837,12 +965,12 @@ Mission::heading_sp_update()
 	struct position_setpoint_triplet_s *pos_sp_triplet = _navigator->get_position_setpoint_triplet();
 
 	/* Don't change setpoint if last and current waypoint are not valid */
-	if (!pos_sp_triplet->previous.valid || !pos_sp_triplet->current.valid) {
+	if (!pos_sp_triplet->current.valid) {
 		return;
 	}
 
 	/* set yaw angle for the waypoint if a loiter time has been specified */
-	if (_waypoint_position_reached && _mission_item.time_inside > 0.0f) {
+	if (_waypoint_position_reached && get_time_inside(_mission_item) > FLT_EPSILON) {
 		// XXX: should actually be param4 from mission item
 		// at the moment it will just keep the heading it has
 		//_mission_item.yaw = _on_arrival_yaw;
@@ -868,9 +996,8 @@ Mission::heading_sp_update()
 			point_to_latlon[0] = _navigator->get_home_position()->lat;
 			point_to_latlon[1] = _navigator->get_home_position()->lon;
 
-			/* target location is next (current) waypoint */
-
 		} else {
+			/* target location is next (current) waypoint */
 			point_to_latlon[0] = pos_sp_triplet->current.lat;
 			point_to_latlon[1] = pos_sp_triplet->current.lon;
 		}
@@ -903,15 +1030,18 @@ Mission::heading_sp_update()
 	_navigator->set_position_setpoint_triplet_updated();
 }
 
-
 void
 Mission::altitude_sp_foh_update()
 {
 	struct position_setpoint_triplet_s *pos_sp_triplet = _navigator->get_position_setpoint_triplet();
 
-	/* Don't change setpoint if last and current waypoint are not valid */
-	if (!pos_sp_triplet->previous.valid || !pos_sp_triplet->current.valid ||
-	    !PX4_ISFINITE(_mission_item_previous_alt)) {
+	/* Don't change setpoint if last and current waypoint are not valid
+	 * or if the previous altitude isn't from a position or loiter setpoint
+	 */
+	if (!pos_sp_triplet->previous.valid || !pos_sp_triplet->current.valid || !PX4_ISFINITE(pos_sp_triplet->previous.alt)
+	    || !(pos_sp_triplet->previous.type == position_setpoint_s::SETPOINT_TYPE_POSITION ||
+		 pos_sp_triplet->previous.type == position_setpoint_s::SETPOINT_TYPE_LOITER)) {
+
 		return;
 	}
 
@@ -930,6 +1060,7 @@ Mission::altitude_sp_foh_update()
 	    || _mission_item.nav_cmd == NAV_CMD_TAKEOFF
 	    || _mission_item.nav_cmd == NAV_CMD_LOITER_TO_ALT
 	    || !_navigator->is_planned_mission()) {
+
 		return;
 	}
 
@@ -949,14 +1080,14 @@ Mission::altitude_sp_foh_update()
 
 	} else {
 		/* update the altitude sp of the 'current' item in the sp triplet, but do not update the altitude sp
-		* of the mission item as it is used to check if the mission item is reached
-		* The setpoint is set linearly and such that the system reaches the current altitude at the acceptance
-		* radius around the current waypoint
-		**/
-		float delta_alt = (get_absolute_altitude_for_item(_mission_item) - _mission_item_previous_alt);
+		 * of the mission item as it is used to check if the mission item is reached
+		 * The setpoint is set linearly and such that the system reaches the current altitude at the acceptance
+		 * radius around the current waypoint
+		 **/
+		float delta_alt = (get_absolute_altitude_for_item(_mission_item) - pos_sp_triplet->previous.alt);
 		float grad = -delta_alt / (_distance_current_previous - _navigator->get_acceptance_radius(
 						   _mission_item.acceptance_radius));
-		float a = _mission_item_previous_alt - grad * _distance_current_previous;
+		float a = pos_sp_triplet->previous.alt - grad * _distance_current_previous;
 		pos_sp_triplet->current.alt = a + grad * _min_current_sp_distance_xy;
 	}
 
@@ -968,6 +1099,24 @@ void
 Mission::altitude_sp_foh_reset()
 {
 	_min_current_sp_distance_xy = FLT_MAX;
+}
+
+void
+Mission::cruising_speed_sp_update()
+{
+	struct position_setpoint_triplet_s *pos_sp_triplet = _navigator->get_position_setpoint_triplet();
+
+	const float cruising_speed = _navigator->get_cruising_speed();
+
+	/* Don't change setpoint if the current waypoint is not valid */
+	if (!pos_sp_triplet->current.valid ||
+	    fabsf(pos_sp_triplet->current.cruising_speed - cruising_speed) < FLT_EPSILON) {
+		return;
+	}
+
+	pos_sp_triplet->current.cruising_speed = cruising_speed;
+
+	_navigator->set_position_setpoint_triplet_updated();
 }
 
 void
@@ -983,15 +1132,14 @@ Mission::do_abort_landing()
 	// loiter at the larger of MIS_LTRMIN_ALT above the landing point
 	//  or 2 * FW_CLMBOUT_DIFF above the current altitude
 	float alt_landing = get_absolute_altitude_for_item(_mission_item);
-	float alt_sp =  math::max(alt_landing + _param_loiter_min_alt.get(),
-				  _navigator->get_global_position()->alt + (2 * _param_fw_climbout_diff.get()));
+	float alt_sp = math::max(alt_landing + _param_loiter_min_alt.get(),
+				 _navigator->get_global_position()->alt + (2 * _param_fw_climbout_diff.get()));
 
 	_mission_item.nav_cmd = NAV_CMD_LOITER_UNLIMITED;
 	_mission_item.altitude_is_relative = false;
 	_mission_item.altitude = alt_sp;
 	_mission_item.yaw = NAN;
 	_mission_item.loiter_radius = _navigator->get_loiter_radius();
-	_mission_item.loiter_direction = 1;
 	_mission_item.nav_cmd = NAV_CMD_LOITER_UNLIMITED;
 	_mission_item.acceptance_radius = _navigator->get_acceptance_radius();
 	_mission_item.autocontinue = false;
@@ -1002,8 +1150,7 @@ Mission::do_abort_landing()
 
 	_navigator->set_position_setpoint_triplet_updated();
 
-	mavlink_log_info(_navigator->get_mavlink_log_pub(), "Holding at %dm above landing)",
-			 (int)(alt_sp - alt_landing));
+	mavlink_log_info(_navigator->get_mavlink_log_pub(), "Holding at %dm above landing)", (int)(alt_sp - alt_landing));
 
 	// move mission index back 1 (landing approach point) so that re-entering
 	//  the mission doesn't try to land from the loiter above land
@@ -1071,8 +1218,8 @@ Mission::read_mission_item(bool onboard, int offset, struct mission_item_s *miss
 		if (*mission_index_ptr < 0 || *mission_index_ptr >= (int)mission->count) {
 			/* mission item index out of bounds - if they are equal, we just reached the end */
 			if (*mission_index_ptr != (int)mission->count) {
-				mavlink_and_console_log_critical(_navigator->get_mavlink_log_pub(), "[wpm] err: index: %d, max: %d", *mission_index_ptr,
-								 (int)mission->count);
+				mavlink_log_critical(_navigator->get_mavlink_log_pub(), "[wpm] err: index: %d, max: %d", *mission_index_ptr,
+						     (int)mission->count);
 			}
 
 			return false;
@@ -1086,7 +1233,7 @@ Mission::read_mission_item(bool onboard, int offset, struct mission_item_s *miss
 		/* read mission item from datamanager */
 		if (dm_read(dm_item, *mission_index_ptr, &mission_item_tmp, len) != len) {
 			/* not supposed to happen unless the datamanager can't access the SD card, etc. */
-			mavlink_and_console_log_critical(_navigator->get_mavlink_log_pub(), "ERROR waypoint could not be read");
+			mavlink_log_critical(_navigator->get_mavlink_log_pub(), "ERROR waypoint could not be read");
 			return false;
 		}
 
@@ -1097,7 +1244,7 @@ Mission::read_mission_item(bool onboard, int offset, struct mission_item_s *miss
 			if (mission_item_tmp.do_jump_current_count < mission_item_tmp.do_jump_repeat_count) {
 
 				/* only raise the repeat count if this is for the current mission item
-				* but not for the read ahead mission item */
+				 * but not for the read ahead mission item */
 				if (offset == 0) {
 					(mission_item_tmp.do_jump_current_count)++;
 
@@ -1110,12 +1257,11 @@ Mission::read_mission_item(bool onboard, int offset, struct mission_item_s *miss
 						return false;
 					}
 
-					report_do_jump_mission_changed(*mission_index_ptr,
-								       mission_item_tmp.do_jump_repeat_count);
+					report_do_jump_mission_changed(*mission_index_ptr, mission_item_tmp.do_jump_repeat_count);
 				}
 
 				/* set new mission item index and repeat
-				* we don't have to validate here, if it's invalid, we should realize this later .*/
+				 * we don't have to validate here, if it's invalid, we should realize this later .*/
 				*mission_index_ptr = mission_item_tmp.do_jump_mission_index;
 
 			} else {
@@ -1142,7 +1288,7 @@ Mission::read_mission_item(bool onboard, int offset, struct mission_item_s *miss
 void
 Mission::save_offboard_mission_state()
 {
-	mission_s mission_state;
+	mission_s mission_state = {};
 
 	/* lock MISSION_STATE item */
 	dm_lock(DM_KEY_MISSION_STATE);
@@ -1157,6 +1303,7 @@ Mission::save_offboard_mission_state()
 			if (mission_state.current_seq != _current_offboard_mission_index) {
 				if (dm_write(DM_KEY_MISSION_STATE, 0, DM_PERSIST_POWER_ON_RESET, &mission_state,
 					     sizeof(mission_s)) != sizeof(mission_s)) {
+
 					warnx("ERROR: can't save mission state");
 					mavlink_log_critical(_navigator->get_mavlink_log_pub(), "ERROR: can't save mission state");
 				}
@@ -1175,6 +1322,7 @@ Mission::save_offboard_mission_state()
 		/* write modified state only if changed */
 		if (dm_write(DM_KEY_MISSION_STATE, 0, DM_PERSIST_POWER_ON_RESET, &mission_state,
 			     sizeof(mission_s)) != sizeof(mission_s)) {
+
 			warnx("ERROR: can't save mission state");
 			mavlink_log_critical(_navigator->get_mavlink_log_pub(), "ERROR: can't save mission state");
 		}
@@ -1224,25 +1372,12 @@ Mission::set_mission_finished()
 void
 Mission::check_mission_valid(bool force)
 {
-
 	if ((!_home_inited && _navigator->home_position_valid()) || force) {
 
-		dm_item_t dm_current = DM_KEY_WAYPOINTS_OFFBOARD(_offboard_mission.dataman_id);
-
 		_navigator->get_mission_result()->valid =
-			_missionFeasibilityChecker.checkMissionFeasible(
-				_navigator->get_mavlink_log_pub(),
-				(_navigator->get_vstatus()->is_rotary_wing || _navigator->get_vstatus()->is_vtol),
-				dm_current, (size_t) _offboard_mission.count, _navigator->get_geofence(),
-				_navigator->get_home_position()->alt,
-				_navigator->home_position_valid(),
-				_navigator->get_global_position()->lat,
-				_navigator->get_global_position()->lon,
-				_param_dist_1wp.get(),
-				_navigator->get_mission_result()->warning,
-				_navigator->get_default_acceptance_radius(),
-				_navigator->get_land_detected()->landed);
+			_missionFeasibilityChecker.checkMissionFeasible(_offboard_mission, _param_dist_1wp.get(), false);
 
+		_navigator->get_mission_result()->seq_total = _offboard_mission.count;
 		_navigator->increment_mission_instance_count();
 		_navigator->set_mission_result_updated();
 		_home_inited = _navigator->home_position_valid();
@@ -1275,8 +1410,7 @@ Mission::reset_offboard_mission(struct mission_s &mission)
 					if (item.nav_cmd == NAV_CMD_DO_JUMP) {
 						item.do_jump_current_count = 0;
 
-						if (dm_write(dm_current, index, DM_PERSIST_POWER_ON_RESET,
-							     &item, len) != len) {
+						if (dm_write(dm_current, index, DM_PERSIST_POWER_ON_RESET, &item, len) != len) {
 							PX4_WARN("could not save mission item during reset");
 							break;
 						}
@@ -1285,7 +1419,7 @@ Mission::reset_offboard_mission(struct mission_s &mission)
 			}
 
 		} else {
-			mavlink_and_console_log_critical(_navigator->get_mavlink_log_pub(), "ERROR: could not read mission");
+			mavlink_log_critical(_navigator->get_mavlink_log_pub(), "ERROR: could not read mission");
 
 			/* initialize mission state in dataman */
 			mission.dataman_id = 0;
@@ -1313,4 +1447,18 @@ Mission::need_to_reset_mission(bool active)
 	}
 
 	return false;
+}
+
+void
+Mission::generate_waypoint_from_heading(struct position_setpoint_s *setpoint, float yaw)
+{
+	waypoint_from_heading_and_distance(
+		_navigator->get_global_position()->lat,
+		_navigator->get_global_position()->lon,
+		yaw,
+		1000000.0f,
+		&(setpoint->lat),
+		&(setpoint->lon));
+	setpoint->type = position_setpoint_s::SETPOINT_TYPE_POSITION;
+	setpoint->yaw = yaw;
 }

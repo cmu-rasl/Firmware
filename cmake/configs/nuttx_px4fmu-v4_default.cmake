@@ -1,5 +1,7 @@
 include(nuttx/px4_impl_nuttx)
 
+px4_nuttx_configure(HWCLASS m4 CONFIG nsh ROMFS y ROMFSROOT px4fmu_common)
+
 set(CMAKE_TOOLCHAIN_FILE ${PX4_SOURCE_DIR}/cmake/toolchains/Toolchain-arm-none-eabi.cmake)
 
 set(config_uavcan_num_ifaces 1)
@@ -40,7 +42,7 @@ set(config_module_list
 	drivers/mkblctrl
 	drivers/px4flow
 	drivers/oreoled
-	drivers/gimbal
+	drivers/vmount
 	drivers/pwm_input
 	drivers/camera_trigger
 	drivers/bst
@@ -49,17 +51,22 @@ set(config_module_list
 	drivers/bmp280
 	drivers/bma180
 	drivers/bmi160
+	drivers/bmi055
+	drivers/bmm150
 	drivers/tap_esc
+	drivers/iridiumsbd
 
 	#
 	# System commands
 	#
 	systemcmds/bl_update
+	systemcmds/led_control
 	systemcmds/mixer
 	systemcmds/param
 	systemcmds/perf
 	systemcmds/pwm
 	systemcmds/esc_calib
+	systemcmds/hardfault_log
 	systemcmds/reboot
 	systemcmds/topic_listener
 	systemcmds/top
@@ -77,6 +84,7 @@ set(config_module_list
 	drivers/sf0x/sf0x_tests
 	drivers/test_ppm
 	modules/commander/commander_tests
+	modules/mc_pos_control/mc_pos_control_tests
 	modules/controllib_test
 	modules/mavlink/mavlink_tests
 	modules/unit_test
@@ -87,6 +95,7 @@ set(config_module_list
 	# General system control
 	#
 	modules/commander
+	modules/events
 	modules/load_mon
 	modules/navigator
 	modules/mavlink
@@ -140,9 +149,11 @@ set(config_module_list
 	lib/geo_lookup
 	lib/conversion
 	lib/launchdetection
+	lib/led
 	lib/terrain_estimation
 	lib/runway_takeoff
 	lib/tailsitter_recovery
+	lib/version
 	lib/DriverFramework/framework
 	platforms/nuttx
 
@@ -178,7 +189,7 @@ set(config_module_list
 
 	# Tutorial code from
 	# https://px4.io/dev/example_fixedwing_control
-	#examples/fixedwing_control
+	examples/fixedwing_control
 
 	# Hardware test
 	#examples/hwtest
@@ -204,10 +215,12 @@ add_custom_target(sercon)
 set_target_properties(sercon PROPERTIES
 	PRIORITY "SCHED_PRIORITY_DEFAULT"
 	MAIN "sercon"
-	STACK_MAIN "2048")
+	STACK_MAIN "2048"
+	COMPILE_FLAGS "-Os")
 
 add_custom_target(serdis)
 set_target_properties(serdis PROPERTIES
 	PRIORITY "SCHED_PRIORITY_DEFAULT"
 	MAIN "serdis"
-	STACK_MAIN "2048")
+	STACK_MAIN "2048"
+	COMPILE_FLAGS "-Os")

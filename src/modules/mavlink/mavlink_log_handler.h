@@ -40,6 +40,7 @@
 #include <queue.h>
 #include <time.h>
 #include <stdio.h>
+#include <cstdbool>
 #include <v2.0/mavlink_types.h>
 #include "mavlink_stream.h"
 
@@ -57,7 +58,7 @@ public:
 
 public:
 
-	bool        get_entry(int idx, uint32_t &size, uint32_t &date, char *filename = 0);
+	bool        get_entry(int idx, uint32_t &size, uint32_t &date, char *filename = 0, int filename_len = 0);
 	bool        open_for_transmit();
 	size_t      get_log_data(uint8_t len, uint8_t *buffer);
 
@@ -99,7 +100,7 @@ public:
 
 	// Overrides from MavlinkStream
 	const char     *get_name(void) const;
-	uint8_t         get_id(void);
+	uint16_t        get_id(void);
 	unsigned        get_size(void);
 	void            send(const hrt_abstime t);
 

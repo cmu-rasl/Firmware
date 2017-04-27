@@ -35,11 +35,9 @@ px4_add_module(
 	MAIN meas_airspeed
 	STACK_MAIN 1200
 	COMPILE_FLAGS
-		-Weffc++
-		-Os
 	SRCS
 		meas_airspeed.cpp
 	DEPENDS
 		platforms__common
 	)
-# vim: set noet ft=cmake fenc=utf-8 ff=unix : 
+# vim: set noet ft=cmake fenc=utf-8 ff=unix :

@@ -121,7 +121,7 @@ AttitudePositionEstimatorEKF	*g_estimator = nullptr;
 }
 
 AttitudePositionEstimatorEKF::AttitudePositionEstimatorEKF() :
-	SuperBlock(NULL, "PE"),
+	SuperBlock(nullptr, "PE"),
 	_task_should_exit(false),
 	_task_running(false),
 	_estimator_task(-1),
@@ -136,7 +136,6 @@ AttitudePositionEstimatorEKF::AttitudePositionEstimatorEKF() :
 	_vehicle_land_detected_sub(-1),
 	_params_sub(-1),
 	_manual_control_sub(-1),
-	_mission_sub(-1),
 	_home_sub(-1),
 	_armedSub(-1),
 
@@ -396,7 +395,7 @@ int AttitudePositionEstimatorEKF::check_filter_state()
 
 	int check = _ekf->CheckAndBound(&ekf_report);
 
-	const char *const feedback[] = { 0,
+	const char *const feedback[] = { nullptr,
 					 "NaN in states, resetting",
 					 "stale sensor data, resetting",
 					 "got initial position lock",
@@ -417,7 +416,7 @@ int AttitudePositionEstimatorEKF::check_filter_state()
 
 		// Do not warn about accel offset if we have no position updates
 		if (!(warn_index == 5 && _ekf->staticMode)) {
-			mavlink_and_console_log_critical(&_mavlink_log_pub, "[ekf check] %s", feedback[warn_index]);
+			mavlink_log_critical(&_mavlink_log_pub, "[ekf check] %s", feedback[warn_index]);
 		}
 	}
 
@@ -740,7 +739,6 @@ void AttitudePositionEstimatorEKF::task_main()
 	_task_running = false;
 
 	_estimator_task = -1;
-	return;
 }
 
 void AttitudePositionEstimatorEKF::initReferencePosition(hrt_abstime timestamp,
@@ -820,37 +818,16 @@ void AttitudePositionEstimatorEKF::initializeGPS()
 void AttitudePositionEstimatorEKF::publishAttitude()
 {
 	// Output results
-	math::Quaternion q(_ekf->states[0], _ekf->states[1], _ekf->states[2], _ekf->states[3]);
-	math::Matrix<3, 3> R = q.to_dcm();
-	math::Vector<3> euler = R.to_euler();
-
-	for (int i = 0; i < 3; i++) {
-		for (int j = 0; j < 3; j++) {
-			PX4_R(_att.R, i, j) = R(i, j);
-		}
-	}
 
 	_att.timestamp = _last_sensor_timestamp;
 	_att.q[0] = _ekf->states[0];
 	_att.q[1] = _ekf->states[1];
 	_att.q[2] = _ekf->states[2];
 	_att.q[3] = _ekf->states[3];
-	_att.q_valid = true;
-	_att.R_valid = true;
-
-	_att.timestamp = _last_sensor_timestamp;
-	_att.roll = euler(0);
-	_att.pitch = euler(1);
-	_att.yaw = euler(2);
 
 	_att.rollspeed = _ekf->dAngIMU.x / _ekf->dtIMU - _ekf->states[10] / _ekf->dtIMUfilt;
 	_att.pitchspeed = _ekf->dAngIMU.y / _ekf->dtIMU - _ekf->states[11] / _ekf->dtIMUfilt;
 	_att.yawspeed = _ekf->dAngIMU.z / _ekf->dtIMU - _ekf->states[12] / _ekf->dtIMUfilt;
-
-	// gyro offsets
-	_att.rate_offsets[0] = _ekf->states[10] / _ekf->dtIMUfilt;
-	_att.rate_offsets[1] = _ekf->states[11] / _ekf->dtIMUfilt;
-	_att.rate_offsets[2] = _ekf->states[12] / _ekf->dtIMUfilt;
 
 	/* lazily publish the attitude only once available */
 	if (_att_pub != nullptr) {
@@ -930,6 +907,11 @@ void AttitudePositionEstimatorEKF::publishControlState()
 	_ctrl_state.pitch_rate = _LP_att_Q.apply(_ekf->dAngIMU.y / _ekf->dtIMU) - _ekf->states[11] / _ekf->dtIMUfilt;
 	_ctrl_state.yaw_rate = _LP_att_R.apply(_ekf->dAngIMU.z / _ekf->dtIMU) - _ekf->states[12] / _ekf->dtIMUfilt;
 
+	/* Gyro bias estimates */
+	_ctrl_state.roll_rate_bias = _ekf->states[10] / _ekf->dtIMUfilt;
+	_ctrl_state.pitch_rate_bias = _ekf->states[11] / _ekf->dtIMUfilt;
+	_ctrl_state.yaw_rate_bias = _ekf->states[12] / _ekf->dtIMUfilt;
+
 	/* Guard from bad data */
 	if (!PX4_ISFINITE(_ctrl_state.x_vel) ||
 	    !PX4_ISFINITE(_ctrl_state.y_vel) ||
@@ -973,7 +955,8 @@ void AttitudePositionEstimatorEKF::publishLocalPosition()
 	_local_pos.xy_global = _gps_initialized; //TODO: Handle optical flow mode here
 
 	_local_pos.z_global = false;
-	_local_pos.yaw = _att.yaw;
+	matrix::Eulerf euler = matrix::Quatf(_ekf->states[0], _ekf->states[1], _ekf->states[2], _ekf->states[3]);
+	_local_pos.yaw = euler.psi();
 
 	if (!PX4_ISFINITE(_local_pos.x) ||
 	    !PX4_ISFINITE(_local_pos.y) ||
@@ -1736,7 +1719,7 @@ int ekf_att_pos_estimator_main(int argc, char *argv[])
 	}
 
 	if (!strcmp(argv[1], "debug")) {
-		int debug = strtoul(argv[2], NULL, 10);
+		int debug = strtoul(argv[2], nullptr, 10);
 		int ret = estimator::g_estimator->set_debuglevel(debug);
 
 		return ret;

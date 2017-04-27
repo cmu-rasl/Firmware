@@ -58,8 +58,7 @@
 #include <drivers/drv_hrt.h>
 #include <drivers/drv_adc.h>
 
-#include <arch/stm32/chip.h>
-#include <stm32.h>
+#include <stm32_adc.h>
 #include <stm32_gpio.h>
 
 #include <systemlib/err.h>
@@ -67,6 +66,8 @@
 
 #include <uORB/topics/system_power.h>
 #include <uORB/topics/adc_report.h>
+
+#if defined(ADC_CHANNELS)
 
 /*
  * Register accessors.
@@ -347,22 +348,26 @@ ADC::update_system_power(hrt_abstime now)
 
 	system_power.voltage5V_v = 0;
 
-#if defined(ADC_5V_RAIL_SENSE)
+	/* HW provides ADC_SCALED_V5_SENSE */
+
+#  if defined(ADC_SCALED_V5_SENSE)
 
 	for (unsigned i = 0; i < _channel_count; i++) {
-		if (_samples[i].am_channel == ADC_5V_RAIL_SENSE) {
+		if (_samples[i].am_channel == ADC_SCALED_V5_SENSE) {
 			// it is 2:1 scaled
-			system_power.voltage5V_v = _samples[i].am_data * (6.6f / 4096);
+			system_power.voltage5V_v = _samples[i].am_data * (ADC_V5_V_FULL_SCALE / 4096);
+			break;
 		}
 	}
 
-#endif
+#  endif
 
 	/* Note once the board_config.h provides BOARD_ADC_USB_CONNECTED,
 	 * It must provide the true logic GPIO BOARD_ADC_xxxx macros.
 	 */
 	// these are not ADC related, but it is convenient to
 	// publish these to the same topic
+
 	system_power.usb_connected = BOARD_ADC_USB_CONNECTED;
 
 	system_power.brick_valid   = BOARD_ADC_BRICK_VALID;
@@ -482,3 +487,4 @@ adc_main(int argc, char *argv[])
 
 	exit(0);
 }
+#endif

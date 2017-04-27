@@ -35,16 +35,15 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 px4_generate_parameters_source(OUT param_files
 	XML ${PX4_BINARY_DIR}/parameters.xml
-	SCOPE ${PX4_SOURCE_DIR}/cmake/configs/${OS}_${BOARD}_${LABEL}.cmake
+	MODULES ${config_module_list}
 	DEPS xml_gen
 	)
 
 px4_add_module(
 	MODULE modules__param
 	COMPILE_FLAGS
-		-Os
 	SRCS ${param_files}
 	DEPENDS
 		platforms__common
 	)
-# vim: set noet ft=cmake fenc=utf-8 ff=unix : 
+# vim: set noet ft=cmake fenc=utf-8 ff=unix :

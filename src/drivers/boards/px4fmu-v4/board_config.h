@@ -47,14 +47,6 @@
 #include <nuttx/compiler.h>
 #include <stdint.h>
 
-__BEGIN_DECLS
-
-/* these headers are not C++ safe */
-#include <stm32.h>
-#include <arch/board/board.h>
-
-#define UDID_START		0x1FFF7A10
-
 /****************************************************************************************************
  * Definitions
  ****************************************************************************************************/
@@ -86,16 +78,28 @@ __BEGIN_DECLS
 #define GPIO_SPI_CS_HMC5983		(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTE|GPIO_PIN15)
 #define GPIO_SPI_CS_LIS3MDL		(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTE|GPIO_PIN15)
 #define GPIO_SPI_CS_MS5611		(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTD|GPIO_PIN7)
-#define GPIO_SPI_CS_ICM_20608_G (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTC|GPIO_PIN15)
+#define GPIO_SPI_CS_ICM_2060X 		(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTC|GPIO_PIN15)
+
+/* The BMI160 sensor replaces the MPU9250 on some boards. Only one is actually present and connected
+ * to the second GPIO pin on port C. The wrong driver will fail during start becaus of an incorrect WHO_AM_I register.*/
+#define GPIO_SPI1_CS_PORTC_PIN2		(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTC|GPIO_PIN2)
 
 #define GPIO_SPI_CS_FRAM		(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTD|GPIO_PIN10)
+
+/* The BMI055 acceleration sensor replaces the ICM20608G on some boards. Only one is actually present and connected
+ * to the second GPIO pin on port C. The wrong driver will fail during start becaus of an incorrect WHO_AM_I register.*/
+#define GPIO_SPI1_CS_PORTC_PIN15  (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTC|GPIO_PIN15)
+
+/* The BMI055 gyroscope sensor replaces the LIS3MDL, HMC5983 on some boards. Only one is actually present and connected
+ * to the second GPIO pin on port E. The wrong driver will fail during start becaus of an incorrect WHO_AM_I register.*/
+#define GPIO_SPI1_CS_PORTE_PIN15  (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTE|GPIO_PIN15)
+
 
 /*  Define the Ready interrupts */
 
 #define GPIO_DRDY_MPU9250		(GPIO_INPUT|GPIO_FLOAT|GPIO_EXTI|GPIO_PORTD|GPIO_PIN15)
 #define GPIO_DRDY_HMC5983		(GPIO_INPUT|GPIO_FLOAT|GPIO_EXTI|GPIO_PORTE|GPIO_PIN12)
-#define GPIO_DRDY_ICM_20608_G	(GPIO_INPUT|GPIO_FLOAT|GPIO_EXTI|GPIO_PORTC|GPIO_PIN14)
-
+#define GPIO_DRDY_ICM_2060X		(GPIO_INPUT|GPIO_FLOAT|GPIO_EXTI|GPIO_PORTC|GPIO_PIN14)
 
 /*
  *  Define the ability to shut off off the sensor signals
@@ -108,12 +112,13 @@ __BEGIN_DECLS
 #define GPIO_SPI_CS_OFF_HMC5983		_PIN_OFF(GPIO_SPI_CS_HMC5983)
 #define GPIO_SPI_CS_OFF_LIS3MDL		_PIN_OFF(GPIO_SPI_CS_LIS3MDL)
 #define GPIO_SPI_CS_OFF_MS5611		_PIN_OFF(GPIO_SPI_CS_MS5611)
-#define GPIO_SPI_CS_OFF_ICM_20608_G _PIN_OFF(GPIO_SPI_CS_ICM_20608_G)
+#define GPIO_SPI_CS_OFF_ICM_2060X 	_PIN_OFF(GPIO_SPI_CS_ICM_2060X)
+#define GPIO_SPI_CS_OFF_BMI160		_PIN_OFF(GPIO_SPI1_CS_PORTC_PIN2)
+#define GPIO_SPI_CS_OFF_BMI055_ACC _PIN_OFF(GPIO_SPI1_CS_PORTC_PIN15)
+#define GPIO_SPI_CS_OFF_BMI055_GYR _PIN_OFF(GPIO_SPI1_CS_PORTE_PIN15)
 
 #define GPIO_DRDY_OFF_MPU9250		_PIN_OFF(GPIO_DRDY_MPU9250)
-#define GPIO_DRDY_OFF_HMC5983		_PIN_OFF(GPIO_DRDY_HMC5983)
-#define GPIO_DRDY_OFF_ICM_20608_G	_PIN_OFF(GPIO_DRDY_ICM_20608_G)
-
+#define GPIO_DRDY_OFF_ICM_2060X	_PIN_OFF(GPIO_DRDY_ICM_2060X)
 
 /* SPI1 off */
 #define GPIO_SPI1_SCK_OFF	_PIN_OFF(GPIO_SPI1_SCK)
@@ -133,6 +138,10 @@ __BEGIN_DECLS
 #define PX4_SPIDEV_LIS			7
 #define PX4_SPIDEV_BMI			8
 #define PX4_SPIDEV_BMA			9
+#define PX4_SPIDEV_ICM_20608		10
+#define PX4_SPIDEV_ICM_20602		11
+#define PX4_SPIDEV_BMI055_ACC   	12
+#define PX4_SPIDEV_BMI055_GYR   	13
 
 /* onboard MS5611 and FRAM are both on bus SPI2
  * spi_dev_e:SPIDEV_FLASH has the value 2 and is used in the NuttX ramtron driver
@@ -146,6 +155,7 @@ __BEGIN_DECLS
 /* I2C busses */
 #define PX4_I2C_BUS_EXPANSION	1
 #define PX4_I2C_BUS_LED			PX4_I2C_BUS_EXPANSION
+#define PX4_I2C_BUS_BMM150 		PX4_I2C_BUS_EXPANSION
 
 /* Devices on the external bus.
  *
@@ -154,6 +164,8 @@ __BEGIN_DECLS
 #define PX4_I2C_OBDEV_LED	0x55
 #define PX4_I2C_OBDEV_HMC5883	0x1e
 #define PX4_I2C_OBDEV_LIS3MDL	0x1e
+#define PX4_I2C_OBDEV_BMM150	0x10
+#define PX4_I2C_OBDEV_BMP280	0x76
 
 /*
  * ADC channels
@@ -166,7 +178,14 @@ __BEGIN_DECLS
 #define ADC_BATTERY_VOLTAGE_CHANNEL		2
 #define ADC_BATTERY_CURRENT_CHANNEL		3
 #define ADC_5V_RAIL_SENSE				4
-#define ADC_RC_RSSI_CHANNEL			11
+#define ADC_RC_RSSI_CHANNEL				11
+
+/* Define Battery 1 Voltage Divider and A per V
+ */
+
+#define BOARD_BATTERY1_V_DIV (13.653333333f)
+#define BOARD_BATTERY1_A_PER_V (36.367515152f)
+
 
 /* User GPIOs
  *
@@ -232,10 +251,10 @@ __BEGIN_DECLS
 #define GPIO_OTGFS_VBUS		(GPIO_INPUT|GPIO_FLOAT|GPIO_SPEED_100MHz|GPIO_OPENDRAIN|GPIO_PORTA|GPIO_PIN9)
 
 /* High-resolution timer */
-#define HRT_TIMER		3	/* use timer8 for the HRT */
-#define HRT_TIMER_CHANNEL	4	/* use capture/compare channel */
+#define HRT_TIMER           3   /* use timer 3 for the HRT */
+#define HRT_TIMER_CHANNEL	4   /* use capture/compare channel 4 */
 
-#define HRT_PPM_CHANNEL		3	/* use capture/compare channel 2 */
+#define HRT_PPM_CHANNEL		3	/* use capture/compare channel 3 */
 #define GPIO_PPM_IN			(GPIO_ALT|GPIO_AF2|GPIO_PULLUP|GPIO_PORTB|GPIO_PIN0)
 
 #define RC_SERIAL_PORT		"/dev/ttyS4"
@@ -249,12 +268,9 @@ __BEGIN_DECLS
 #define GPIO_LED_SAFETY			(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTC|GPIO_PIN3)
 #define GPIO_BTN_SAFETY			(GPIO_INPUT|GPIO_PULLUP|GPIO_PORTC|GPIO_PIN4)
 #define GPIO_PERIPH_3V3_EN		(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTC|GPIO_PIN5)
-/* for R07, this signal is active low */
-//#define GPIO_SBUS_INV			(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_CLEAR|GPIO_PORTC|GPIO_PIN13)
-//#define INVERT_RC_INPUT(_s)		px4_arch_gpiowrite(GPIO_SBUS_INV, 1-_s);
 /* for R12, this signal is active high */
 #define GPIO_SBUS_INV			(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTC|GPIO_PIN13)
-#define INVERT_RC_INPUT(_s)		px4_arch_gpiowrite(GPIO_SBUS_INV, _s)
+#define INVERT_RC_INPUT(_invert_true) px4_arch_gpiowrite(GPIO_SBUS_INV, _invert_true)
 
 #define GPIO_8266_GPIO0			(GPIO_INPUT|GPIO_PULLUP|GPIO_PORTE|GPIO_PIN2)
 #define GPIO_SPEKTRUM_PWR_EN		(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_CLEAR|GPIO_PORTE|GPIO_PIN4)
@@ -263,21 +279,27 @@ __BEGIN_DECLS
 
 /* Power switch controls ******************************************************/
 
-#define POWER_SPEKTRUM(_s)			px4_arch_gpiowrite(GPIO_SPEKTRUM_PWR_EN, (1-_s))
-//#define GPIO_USART1_RX_SPEKTRUM		(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTC|GPIO_PIN7)
-#define SPEKTRUM_RX_AS_UART()		px4_arch_configgpio(GPIO_USART1_RX)
+#define SPEKTRUM_POWER(_on_true)    px4_arch_gpiowrite(GPIO_SPEKTRUM_PWR_EN, (!_on_true))
 
-// FMUv4 has a separate GPIO for serial RC output
-#define GPIO_RC_OUT			(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTB|GPIO_PIN0)
-#define SPEKTRUM_RX_AS_GPIO()		px4_arch_configgpio(GPIO_RC_OUT)
-#define SPEKTRUM_RX_HIGH(_s)		px4_arch_gpiowrite(GPIO_RC_OUT, (_s))
+/*
+ * FMUv4 has separate RC_IN
+ *
+ * GPIO PPM_IN on PB0 T3C3
+ * SPEKTRUM_RX (it's TX or RX in Bind) on UART6 PC7
+ * Inversion is possible via the 74LVC2G86 controlled by the FMU
+ * The FMU can drive  GPIO PPM_IN as an output
+ */
 
+#define GPIO_PPM_IN_AS_OUT             (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTB|GPIO_PIN0)
+#define SPEKTRUM_RX_AS_GPIO_OUTPUT()   px4_arch_configgpio(GPIO_PPM_IN_AS_OUT)
+#define SPEKTRUM_RX_AS_UART()          /* Can be left as uart */
+#define SPEKTRUM_OUT(_one_true)        px4_arch_gpiowrite(GPIO_PPM_IN_AS_OUT, (_one_true))
 
 #define	BOARD_NAME "PX4FMU_V4"
 
-/* By Providing BOARD_ADC_USB_CONNECTED this board support the ADC
- * system_power interface, and herefore provides the true logic
- * GPIO BOARD_ADC_xxxx macros.
+/* By Providing BOARD_ADC_USB_CONNECTED (using the px4_arch abstraction)
+ * this board support the ADC system_power interface, and therefore
+ * provides the true logic GPIO BOARD_ADC_xxxx macros.
  */
 #define BOARD_ADC_USB_CONNECTED (px4_arch_gpioread(GPIO_OTGFS_VBUS))
 #define BOARD_ADC_BRICK_VALID   (px4_arch_gpioread(GPIO_VDD_BRICK_VALID))
@@ -297,9 +319,25 @@ __BEGIN_DECLS
 		{0,                      GPIO_VDD_3V3_SENSORS_EN, 0}, \
 		{GPIO_VDD_BRICK_VALID,   0,                       0}, }
 
-/* This board provides a DMA pool and APIs */
+/*
+ * PX4FMUv4 GPIO numbers.
+ *
+ * There are no alternate functions on this board.
+ */
+#define GPIO_SERVO_1           (1<<0)  /**< servo 1 output */
+#define GPIO_SERVO_2           (1<<1)  /**< servo 2 output */
+#define GPIO_SERVO_3           (1<<2)  /**< servo 3 output */
+#define GPIO_SERVO_4           (1<<3)  /**< servo 4 output */
+#define GPIO_SERVO_5           (1<<4)  /**< servo 5 output */
+#define GPIO_SERVO_6           (1<<5)  /**< servo 6 output */
 
+#define GPIO_3V3_SENSORS_EN    (1<<7)  /**< PE3 - VDD_3V3_SENSORS_EN */
+#define GPIO_BRICK_VALID       (1<<8)  /**< PB5 - !VDD_BRICK_VALID */
+
+/* This board provides a DMA pool and APIs */
 #define BOARD_DMA_ALLOC_POOL_SIZE 5120
+
+__BEGIN_DECLS
 
 /****************************************************************************************************
  * Public Types
@@ -329,26 +367,6 @@ void board_spi_reset(int ms);
 extern void stm32_usbinitialize(void);
 
 extern void board_peripheral_reset(int ms);
-
-
-/****************************************************************************
- * Name: nsh_archinitialize
- *
- * Description:
- *   Perform architecture specific initialization for NSH.
- *
- *   CONFIG_NSH_ARCHINIT=y :
- *     Called from the NSH library
- *
- *   CONFIG_BOARD_INITIALIZE=y, CONFIG_NSH_LIBRARY=y, &&
- *   CONFIG_NSH_ARCHINIT=n :
- *     Called from board_initialize().
- *
- ****************************************************************************/
-
-#ifdef CONFIG_NSH_LIBRARY
-int nsh_archinitialize(void);
-#endif
 
 #include "../common/board_common.h"
 

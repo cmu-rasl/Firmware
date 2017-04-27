@@ -34,7 +34,7 @@
 /**
  * @file mpu9250.cpp
  *
- * Driver for the Invensense MPU9250 connected via SPI.
+ * Driver for the Invensense MPU9250 connected via I2C or SPI.
  *
  * @author Andrew Tridgell
  *
@@ -61,6 +61,7 @@
 #include <systemlib/perf_counter.h>
 #include <systemlib/err.h>
 #include <systemlib/conversions.h>
+#include <systemlib/px4_macros.h>
 
 #include <nuttx/arch.h>
 #include <nuttx/clock.h>
@@ -80,113 +81,6 @@
 #include "mag.h"
 #include "gyro.h"
 #include "mpu9250.h"
-
-#define DIR_READ			0x80
-#define DIR_WRITE			0x00
-
-// MPU 9250 registers
-#define MPUREG_WHOAMI			0x75
-#define MPUREG_SMPLRT_DIV		0x19
-#define MPUREG_CONFIG			0x1A
-#define MPUREG_GYRO_CONFIG		0x1B
-#define MPUREG_ACCEL_CONFIG		0x1C
-#define MPUREG_ACCEL_CONFIG2		0x1D
-#define MPUREG_LPACCEL_ODR		0x1E
-#define MPUREG_WOM_THRESH		0x1F
-#define MPUREG_FIFO_EN			0x23
-#define MPUREG_I2C_MST_CTRL		0x24
-#define MPUREG_I2C_SLV0_ADDR		0x25
-#define MPUREG_I2C_SLV0_REG		0x26
-#define MPUREG_I2C_SLV0_CTRL		0x27
-#define MPUREG_I2C_SLV1_ADDR		0x28
-#define MPUREG_I2C_SLV1_REG		0x29
-#define MPUREG_I2C_SLV1_CTRL		0x2A
-#define MPUREG_I2C_SLV2_ADDR		0x2B
-#define MPUREG_I2C_SLV2_REG		0x2C
-#define MPUREG_I2C_SLV2_CTRL		0x2D
-#define MPUREG_I2C_SLV3_ADDR		0x2E
-#define MPUREG_I2C_SLV3_REG		0x2F
-#define MPUREG_I2C_SLV3_CTRL		0x30
-#define MPUREG_I2C_SLV4_ADDR		0x31
-#define MPUREG_I2C_SLV4_REG		0x32
-#define MPUREG_I2C_SLV4_DO		0x33
-#define MPUREG_I2C_SLV4_CTRL		0x34
-#define MPUREG_I2C_SLV4_DI		0x35
-#define MPUREG_I2C_MST_STATUS		0x36
-#define MPUREG_INT_PIN_CFG		0x37
-#define MPUREG_INT_ENABLE		0x38
-#define MPUREG_INT_STATUS		0x3A
-#define MPUREG_ACCEL_XOUT_H		0x3B
-#define MPUREG_ACCEL_XOUT_L		0x3C
-#define MPUREG_ACCEL_YOUT_H		0x3D
-#define MPUREG_ACCEL_YOUT_L		0x3E
-#define MPUREG_ACCEL_ZOUT_H		0x3F
-#define MPUREG_ACCEL_ZOUT_L		0x40
-#define MPUREG_TEMP_OUT_H		0x41
-#define MPUREG_TEMP_OUT_L		0x42
-#define MPUREG_GYRO_XOUT_H		0x43
-#define MPUREG_GYRO_XOUT_L		0x44
-#define MPUREG_GYRO_YOUT_H		0x45
-#define MPUREG_GYRO_YOUT_L		0x46
-#define MPUREG_GYRO_ZOUT_H		0x47
-#define MPUREG_GYRO_ZOUT_L		0x48
-#define MPUREG_EXT_SENS_DATA_00		0x49
-#define MPUREG_I2C_SLV0_D0		0x63
-#define MPUREG_I2C_SLV1_D0		0x64
-#define MPUREG_I2C_SLV2_D0		0x65
-#define MPUREG_I2C_SLV3_D0		0x66
-#define MPUREG_I2C_MST_DELAY_CTRL	0x67
-#define MPUREG_SIGNAL_PATH_RESET	0x68
-#define MPUREG_MOT_DETECT_CTRL		0x69
-#define MPUREG_USER_CTRL		0x6A
-#define MPUREG_PWR_MGMT_1		0x6B
-#define MPUREG_PWR_MGMT_2		0x6C
-#define MPUREG_FIFO_COUNTH		0x72
-#define MPUREG_FIFO_COUNTL		0x73
-#define MPUREG_FIFO_R_W			0x74
-
-// Configuration bits MPU 9250
-#define BIT_SLEEP			0x40
-#define BIT_H_RESET			0x80
-#define MPU_CLK_SEL_AUTO		0x01
-
-#define BITS_GYRO_ST_X			0x80
-#define BITS_GYRO_ST_Y			0x40
-#define BITS_GYRO_ST_Z			0x20
-#define BITS_FS_250DPS			0x00
-#define BITS_FS_500DPS			0x08
-#define BITS_FS_1000DPS			0x10
-#define BITS_FS_2000DPS			0x18
-#define BITS_FS_MASK			0x18
-
-#define BITS_DLPF_CFG_250HZ		0x00
-#define BITS_DLPF_CFG_184HZ		0x01
-#define BITS_DLPF_CFG_92HZ		0x02
-#define BITS_DLPF_CFG_41HZ		0x03
-#define BITS_DLPF_CFG_20HZ		0x04
-#define BITS_DLPF_CFG_10HZ		0x05
-#define BITS_DLPF_CFG_5HZ		0x06
-#define BITS_DLPF_CFG_3600HZ		0x07
-#define BITS_DLPF_CFG_MASK		0x07
-
-#define BITS_ACCEL_CONFIG2_41HZ		0x03
-
-#define BIT_RAW_RDY_EN			0x01
-#define BIT_INT_ANYRD_2CLEAR		0x10
-
-#define MPU_WHOAMI_9250			0x71
-
-#define MPU9250_ACCEL_DEFAULT_RATE	1000
-#define MPU9250_ACCEL_MAX_OUTPUT_RATE			280
-#define MPU9250_ACCEL_DEFAULT_DRIVER_FILTER_FREQ 30
-#define MPU9250_GYRO_DEFAULT_RATE	1000
-/* rates need to be the same between accel and gyro */
-#define MPU9250_GYRO_MAX_OUTPUT_RATE			MPU9250_ACCEL_MAX_OUTPUT_RATE
-#define MPU9250_GYRO_DEFAULT_DRIVER_FILTER_FREQ 30
-
-#define MPU9250_DEFAULT_ONCHIP_FILTER_FREQ	41
-
-#define MPU9250_ONE_G					9.80665f
 
 /*
   we set the timer interrupt to run a bit faster than the desired
@@ -215,13 +109,21 @@ const uint8_t MPU9250::_checked_registers[MPU9250_NUM_CHECKED_REGISTERS] = { MPU
 									   };
 
 
-MPU9250::MPU9250(int bus, const char *path_accel, const char *path_gyro, const char *path_mag, spi_dev_e device,
+MPU9250::MPU9250(device::Device *interface, device::Device *mag_interface, const char *path_accel,
+		 const char *path_gyro, const char *path_mag,
 		 enum Rotation rotation) :
-	SPI("MPU9250", path_accel, bus, device, SPIDEV_MODE3, MPU9250_LOW_BUS_SPEED),
+	CDev("MPU9250", path_accel),
+	_interface(interface),
 	_gyro(new MPU9250_gyro(this, path_gyro)),
-	_mag(new MPU9250_mag(this, path_mag)),
+	_mag(new MPU9250_mag(this, mag_interface, path_mag)),
 	_whoami(0),
-	_call{},
+#if defined(USE_I2C)
+	_work {},
+	_use_hrt(false),
+#else
+	_use_hrt(true),
+#endif
+	_call {},
 	_call_interval(0),
 	_accel_reports(nullptr),
 	_accel_scale{},
@@ -264,15 +166,29 @@ MPU9250::MPU9250(int bus, const char *path_accel, const char *path_gyro, const c
 	// disable debug() calls
 	_debug_enabled = false;
 
+	/* Set device parameters and make sure parameters of the bus device are adopted */
 	_device_id.devid_s.devtype = DRV_ACC_DEVTYPE_MPU9250;
+	_device_id.devid_s.bus_type = (device::Device::DeviceBusType)_interface->get_device_bus_type();
+	_device_id.devid_s.bus = _interface->get_device_bus();
+	_device_id.devid_s.address = _interface->get_device_address();
 
 	/* Prime _gyro with parents devid. */
+	/* Set device parameters and make sure parameters of the bus device are adopted */
 	_gyro->_device_id.devid = _device_id.devid;
 	_gyro->_device_id.devid_s.devtype = DRV_GYR_DEVTYPE_MPU9250;
+	_gyro->_device_id.devid_s.bus_type = _interface->get_device_bus_type();
+	_gyro->_device_id.devid_s.bus = _interface->get_device_bus();
+	_gyro->_device_id.devid_s.address = _interface->get_device_address();
 
 	/* Prime _mag with parents devid. */
 	_mag->_device_id.devid = _device_id.devid;
 	_mag->_device_id.devid_s.devtype = DRV_MAG_DEVTYPE_MPU9250;
+	_mag->_device_id.devid_s.bus_type = _interface->get_device_bus_type();
+	_mag->_device_id.devid_s.bus = _interface->get_device_bus();
+	_mag->_device_id.devid_s.address = _interface->get_device_address();
+
+	/* For an independent mag, ensure that it is connected to the i2c bus */
+	_interface->set_device_type(_device_id.devid_s.devtype);
 
 	// default accel scale factors
 	_accel_scale.x_offset = 0;
@@ -291,6 +207,9 @@ MPU9250::MPU9250(int bus, const char *path_accel, const char *path_gyro, const c
 	_gyro_scale.z_scale  = 1.0f;
 
 	memset(&_call, 0, sizeof(_call));
+#if defined(USE_I2C)
+	memset(&_work, 0, sizeof(_work));
+#endif
 }
 
 MPU9250::~MPU9250()
@@ -331,23 +250,33 @@ MPU9250::~MPU9250()
 int
 MPU9250::init()
 {
-	int ret;
 
-	/* do SPI init (and probe) first */
-	ret = SPI::init();
+#if defined(USE_I2C)
+	unsigned dummy;
+	use_i2c(_interface->ioctl(MPUIOCGIS_I2C, dummy));
+#endif
 
-	/* if probe/setup failed, bail now */
-	if (ret != OK) {
-		DEVICE_DEBUG("SPI setup failed");
-		return ret;
-	}
 
-	ret = probe();
+	int ret = probe();
 
 	if (ret != OK) {
 		DEVICE_DEBUG("MPU9250 probe failed");
 		return ret;
 	}
+
+
+	/* do init */
+
+	ret = CDev::init();
+
+	/* if init failed, bail now */
+	if (ret != OK) {
+		DEVICE_DEBUG("CDev init failed");
+		return ret;
+	}
+
+
+
 
 	/* allocate basic report buffers */
 	_accel_reports = new ringbuffer::RingBuffer(2, sizeof(accel_report));
@@ -390,8 +319,18 @@ MPU9250::init()
 		return ret;
 	}
 
+#ifdef USE_I2C
+
+	if (!_mag->is_passthrough() && _mag->_interface->init() != OK) {
+		warnx("failed to setup ak8963 interface");
+	}
+
+#endif
+
 	/* do CDev init for the mag device node, keep it optional */
-	ret = _mag->init();
+	if (_whoami == MPU_WHOAMI_9250) {
+		ret = _mag->init();
+	}
 
 	/* if probe/setup failed, bail now */
 	if (ret != OK) {
@@ -432,6 +371,12 @@ out:
 
 int MPU9250::reset()
 {
+	irqstate_t state;
+
+	// Hold off sampling for 60 ms
+	state = px4_enter_critical_section();
+	_reset_wait = hrt_absolute_time() + 60000;
+
 	write_reg(MPUREG_PWR_MGMT_1, BIT_H_RESET);
 	up_udelay(10000);
 
@@ -440,6 +385,14 @@ int MPU9250::reset()
 
 	write_checked_reg(MPUREG_PWR_MGMT_2, 0);
 	up_udelay(1000);
+
+	px4_leave_critical_section(state);
+
+	// Hold off sampling for 30 ms
+
+	state = px4_enter_critical_section();
+	_reset_wait = hrt_absolute_time() + 30000;
+	px4_leave_critical_section(state);
 
 	// SAMPLE RATE
 	_set_sample_rate(_sample_rate);
@@ -470,7 +423,15 @@ int MPU9250::reset()
 	// INT CFG => Interrupt on Data Ready
 	write_checked_reg(MPUREG_INT_ENABLE, BIT_RAW_RDY_EN);        // INT: Raw data ready
 	usleep(1000);
-	write_checked_reg(MPUREG_INT_PIN_CFG, BIT_INT_ANYRD_2CLEAR); // INT: Clear on any read
+
+#ifdef USE_I2C
+	bool bypass = !_mag->is_passthrough();
+#else
+	bool bypass = false;
+#endif
+	write_checked_reg(MPUREG_INT_PIN_CFG,
+			  BIT_INT_ANYRD_2CLEAR | (bypass ? BIT_INT_BYPASS_EN :
+					  0)); // INT: Clear on any read, also use i2c bypass is master mode isn't needed
 	usleep(1000);
 
 	write_checked_reg(MPUREG_ACCEL_CONFIG2, BITS_ACCEL_CONFIG2_41HZ);
@@ -505,6 +466,7 @@ MPU9250::probe()
 	// verify product revision
 	switch (_whoami) {
 	case MPU_WHOAMI_9250:
+	case MPU_WHOAMI_6500:
 		memset(_checked_values, 0, sizeof(_checked_values));
 		memset(_checked_bad, 0, sizeof(_checked_bad));
 		_checked_values[0] = _whoami;
@@ -647,31 +609,6 @@ MPU9250::accel_self_test()
 		return 1;
 	}
 
-	/* inspect accel offsets */
-	if (fabsf(_accel_scale.x_offset) < 0.000001f) {
-		return 2;
-	}
-
-	if (fabsf(_accel_scale.x_scale - 1.0f) > 0.4f || fabsf(_accel_scale.x_scale - 1.0f) < 0.000001f) {
-		return 3;
-	}
-
-	if (fabsf(_accel_scale.y_offset) < 0.000001f) {
-		return 4;
-	}
-
-	if (fabsf(_accel_scale.y_scale - 1.0f) > 0.4f || fabsf(_accel_scale.y_scale - 1.0f) < 0.000001f) {
-		return 5;
-	}
-
-	if (fabsf(_accel_scale.z_offset) < 0.000001f) {
-		return 6;
-	}
-
-	if (fabsf(_accel_scale.z_scale - 1.0f) > 0.4f || fabsf(_accel_scale.z_scale - 1.0f) < 0.000001f) {
-		return 7;
-	}
-
 	return 0;
 }
 
@@ -721,14 +658,6 @@ MPU9250::gyro_self_test()
 		return 1;
 	}
 
-	/* check if all scales are zero */
-	if ((fabsf(_gyro_scale.x_offset) < 0.000001f) &&
-	    (fabsf(_gyro_scale.y_offset) < 0.000001f) &&
-	    (fabsf(_gyro_scale.z_offset) < 0.000001f)) {
-		/* if all are zero, this device is not calibrated */
-		return 1;
-	}
-
 	return 0;
 }
 
@@ -742,7 +671,7 @@ MPU9250::test_error()
 	// development as a handy way to test the reset logic
 	uint8_t data[16];
 	memset(data, 0, sizeof(data));
-	transfer(data, data, sizeof(data));
+	_interface->read(MPU9250_SET_SPEED(MPUREG_INT_STATUS, MPU9250_LOW_BUS_SPEED), data, sizeof(data));
 	::printf("error triggered\n");
 	print_registers();
 }
@@ -956,7 +885,7 @@ MPU9250::ioctl(struct file *filp, int cmd, unsigned long arg)
 
 	default:
 		/* give it to the superclass */
-		return SPI::ioctl(filp, cmd, arg);
+		return CDev::ioctl(filp, cmd, arg);
 	}
 }
 
@@ -1047,48 +976,35 @@ MPU9250::gyro_ioctl(struct file *filp, int cmd, unsigned long arg)
 
 	default:
 		/* give it to the superclass */
-		return SPI::ioctl(filp, cmd, arg);
+		return CDev::ioctl(filp, cmd, arg);
 	}
 }
 
 uint8_t
 MPU9250::read_reg(unsigned reg, uint32_t speed)
 {
-	uint8_t cmd[2] = { (uint8_t)(reg | DIR_READ), 0};
-
-	// general register transfer at low clock speed
-	set_frequency(speed);
-
-	transfer(cmd, cmd, sizeof(cmd));
-
-	return cmd[1];
+	uint8_t buf;
+	_interface->read(MPU9250_SET_SPEED(reg, speed), &buf, 1);
+	return buf;
 }
 
 uint16_t
 MPU9250::read_reg16(unsigned reg)
 {
-	uint8_t cmd[3] = { (uint8_t)(reg | DIR_READ), 0, 0 };
+	uint8_t buf[2];
 
 	// general register transfer at low clock speed
-	set_frequency(MPU9250_LOW_BUS_SPEED);
 
-	transfer(cmd, cmd, sizeof(cmd));
-
-	return (uint16_t)(cmd[1] << 8) | cmd[2];
+	_interface->read(MPU9250_LOW_SPEED_OP(reg), &buf, arraySize(buf));
+	return (uint16_t)(buf[0] << 8) | buf[1];
 }
 
 void
 MPU9250::write_reg(unsigned reg, uint8_t value)
 {
-	uint8_t	cmd[2];
-
-	cmd[0] = reg | DIR_WRITE;
-	cmd[1] = value;
-
 	// general register transfer at low clock speed
-	set_frequency(MPU9250_LOW_BUS_SPEED);
 
-	transfer(cmd, nullptr, sizeof(cmd));
+	_interface->write(MPU9250_LOW_SPEED_OP(reg), &value, 1);
 }
 
 void
@@ -1111,6 +1027,7 @@ MPU9250::write_checked_reg(unsigned reg, uint8_t value)
 		if (reg == _checked_registers[i]) {
 			_checked_values[i] = value;
 			_checked_bad[i] = value;
+			break;
 		}
 	}
 }
@@ -1161,18 +1078,70 @@ MPU9250::start()
 	_gyro_reports->flush();
 	_mag->_mag_reports->flush();
 
-	/* start polling at the specified rate */
-	hrt_call_every(&_call,
-		       1000,
-		       _call_interval - MPU9250_TIMER_REDUCTION,
-		       (hrt_callout)&MPU9250::measure_trampoline, this);
+	if (_use_hrt) {
+		/* start polling at the specified rate */
+		hrt_call_every(&_call,
+			       1000,
+			       _call_interval - MPU9250_TIMER_REDUCTION,
+			       (hrt_callout)&MPU9250::measure_trampoline, this);;
+
+	} else {
+#ifdef USE_I2C
+		/* schedule a cycle to start things */
+		work_queue(HPWORK, &_work, (worker_t)&MPU9250::cycle_trampoline, this, 1);
+#endif
+	}
+
 }
 
 void
 MPU9250::stop()
 {
-	hrt_cancel(&_call);
+	if (_use_hrt) {
+		hrt_cancel(&_call);
+
+	} else {
+#ifdef USE_I2C
+		work_cancel(HPWORK, &_work);
+#endif
+	}
 }
+
+
+#if defined(USE_I2C)
+void
+MPU9250::cycle_trampoline(void *arg)
+{
+	MPU9250 *dev = (MPU9250 *)arg;
+
+	dev->cycle();
+}
+
+void
+MPU9250::cycle()
+{
+
+//	int ret = measure();
+
+	measure();
+
+//	if (ret != OK) {
+//		/* issue a reset command to the sensor */
+//		reset();
+//		start();
+//		return;
+//	}
+
+	if (_call_interval != 0) {
+		work_queue(HPWORK,
+			   &_work,
+			   (worker_t)&MPU9250::cycle_trampoline,
+			   this,
+			   USEC2TICK(_call_interval - MPU9250_TIMER_REDUCTION));
+	}
+}
+#endif
+
 
 void
 MPU9250::measure_trampoline(void *arg)
@@ -1311,12 +1280,9 @@ MPU9250::measure()
 	/*
 	 * Fetch the full set of measurements from the MPU9250 in one pass.
 	 */
-	mpu_report.cmd = DIR_READ | MPUREG_INT_STATUS;
-
-	// sensor transfer at high clock speed
-	set_frequency(MPU9250_HIGH_BUS_SPEED);
-
-	if (OK != transfer((uint8_t *)&mpu_report, ((uint8_t *)&mpu_report), sizeof(mpu_report))) {
+	if (OK != _interface->read(MPU9250_SET_SPEED(MPUREG_INT_STATUS, MPU9250_HIGH_BUS_SPEED),
+				   (uint8_t *)&mpu_report,
+				   sizeof(mpu_report))) {
 		return;
 	}
 
@@ -1326,7 +1292,18 @@ MPU9250::measure()
 		return;
 	}
 
-	_mag->measure(mpu_report.mag);
+#ifdef USE_I2C
+
+	if (_mag->is_passthrough()) {
+#endif
+		_mag->_measure(mpu_report.mag);
+#ifdef USE_I2C
+
+	} else {
+		_mag->measure();
+	}
+
+#endif
 
 	/*
 	 * Convert from big to little endian
@@ -1436,6 +1413,9 @@ MPU9250::measure()
 	arb.temperature_raw = report.temp;
 	arb.temperature = _last_temperature;
 
+	/* return device ID */
+	arb.device_id = _device_id.devid;
+
 	grb.x_raw = report.gyro_x;
 	grb.y_raw = report.gyro_y;
 	grb.z_raw = report.gyro_z;
@@ -1468,6 +1448,9 @@ MPU9250::measure()
 
 	grb.temperature_raw = report.temp;
 	grb.temperature = _last_temperature;
+
+	/* return device ID */
+	grb.device_id = _gyro->_device_id.devid;
 
 	_accel_reports->force(&arb);
 	_gyro_reports->force(&grb);

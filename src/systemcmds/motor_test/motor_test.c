@@ -39,6 +39,7 @@
  */
 
 #include <px4_config.h>
+#include <px4_getopt.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -103,17 +104,20 @@ int motor_test_main(int argc, char *argv[])
 	float value = 0.0f;
 	int ch;
 
-	while ((ch = getopt(argc, argv, "m:p:")) != EOF) {
+	int myoptind = 1;
+	const char *myoptarg = NULL;
+
+	while ((ch = px4_getopt(argc, argv, "m:p:", &myoptind, &myoptarg)) != EOF) {
 		switch (ch) {
 
 		case 'm':
 			/* Read in motor number */
-			channel = (int)strtoul(optarg, NULL, 0);
+			channel = (int)strtol(myoptarg, NULL, 0);
 			break;
 
 		case 'p':
 			/* Read in power value */
-			lval = strtoul(optarg, NULL, 0);
+			lval = strtoul(myoptarg, NULL, 0);
 
 			if (lval > 100) {
 				usage("value invalid");
@@ -149,7 +153,7 @@ int motor_test_main(int argc, char *argv[])
 	}
 
 	if (run_test) {
-		if (channel == -1) {
+		if (channel < 0) {
 			for (int i = 0; i < 8; ++i) {
 				motor_test(i, value);
 				usleep(10000);

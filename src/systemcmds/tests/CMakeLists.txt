@@ -34,6 +34,7 @@
 set(srcs
 	test_adc.c
 	test_autodeclination.cpp
+	test_dataman.c
 	test_hysteresis.cpp
 	test_bson.c
 	test_conv.cpp
@@ -50,7 +51,7 @@ set(srcs
 	test_matrix.cpp
 	test_mixer.cpp
 	test_mount.c
-	test_params.c
+	test_param.c
 	test_perf.c
 	test_ppm_loopback.c
 	test_rc.c
@@ -67,6 +68,7 @@ set(srcs
 if(${OS} STREQUAL "nuttx")
 	list(APPEND srcs
 		test_time.c
+		test_uart_break.c
 		)
 endif()
 
@@ -82,7 +84,6 @@ px4_add_module(
 		-Wno-missing-declarations
 		-Wno-double-promotion
 		-Wno-unknown-warning-option
-		-Os
 	SRCS ${srcs}
 	DEPENDS
 		platforms__common

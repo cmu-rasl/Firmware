@@ -76,11 +76,6 @@
 
 #include "drv_input_capture.h"
 
-#include <chip.h>
-#include <up_internal.h>
-#include <up_arch.h>
-
-#include <stm32.h>
 #include <stm32_gpio.h>
 #include <stm32_tim.h>
 
@@ -104,7 +99,7 @@ static struct channel_handler_entry {
 
 static void input_capture_chan_handler(void *context, const io_timers_t *timer, uint32_t chan_index,
 				       const timer_io_channels_t *chan,
-				       hrt_abstime isrs_time , uint16_t isrs_rcnt)
+				       hrt_abstime isrs_time, uint16_t isrs_rcnt)
 {
 	uint16_t capture = _REG32(timer, chan->ccr_offset);
 	channel_stats[chan_index].last_edge = px4_arch_gpioread(chan->gpio_in);

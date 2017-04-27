@@ -122,7 +122,6 @@ protected:
 	perf_counter_t		_sample_perf;
 	perf_counter_t		_measure_perf;
 	perf_counter_t		_comms_errors;
-	perf_counter_t		_buffer_overflows;
 
 	/**
 	 * Initialize the automatic measurement state machine and start it.
@@ -203,8 +202,7 @@ BAROSIM::BAROSIM(const char *path) :
 	_orb_class_instance(-1),
 	_sample_perf(perf_alloc(PC_ELAPSED, "barosim_read")),
 	_measure_perf(perf_alloc(PC_ELAPSED, "barosim_measure")),
-	_comms_errors(perf_alloc(PC_COUNT, "barosim_comms_errors")),
-	_buffer_overflows(perf_alloc(PC_COUNT, "barosim_buffer_overflows"))
+	_comms_errors(perf_alloc(PC_COUNT, "barosim_comms_errors"))
 {
 
 }
@@ -223,7 +221,6 @@ BAROSIM::~BAROSIM()
 	perf_free(_sample_perf);
 	perf_free(_measure_perf);
 	perf_free(_comms_errors);
-	perf_free(_buffer_overflows);
 
 }
 
@@ -620,7 +617,7 @@ BAROSIM::transfer(const uint8_t *send, unsigned send_len, uint8_t *recv, unsigne
 		/* read requested */
 		Simulator *sim = Simulator::getInstance();
 
-		if (sim == NULL) {
+		if (sim == nullptr) {
 			PX4_ERR("Error BAROSIM_DEV::transfer no simulator");
 			return -ENODEV;
 		}
@@ -680,6 +677,9 @@ BAROSIM::collect()
 		report.altitude = raw_baro.altitude;
 		report.temperature = raw_baro.temperature;
 
+		/* fake device ID */
+		report.device_id = 478459;
+
 		/* publish it */
 		if (!(m_pub_blocked)) {
 			if (_baro_topic != nullptr) {
@@ -691,9 +691,7 @@ BAROSIM::collect()
 			}
 		}
 
-		if (_reports->force(&report)) {
-			perf_count(_buffer_overflows);
-		}
+		_reports->force(&report);
 
 		/* notify anyone waiting for data */
 		//DevMgr::updateNotify(*this);
@@ -713,7 +711,6 @@ BAROSIM::print_info()
 {
 	perf_print_counter(_sample_perf);
 	perf_print_counter(_comms_errors);
-	perf_print_counter(_buffer_overflows);
 	PX4_INFO("poll interval:  %u usec", m_sample_interval_usecs);
 	_reports->print_info("report queue");
 	PX4_INFO("TEMP:           %f", (double)report.temperature);
@@ -782,7 +779,7 @@ start()
 
 	if (g_barosim != nullptr && OK != g_barosim->init()) {
 		delete g_barosim;
-		g_barosim = NULL;
+		g_barosim = nullptr;
 		PX4_ERR("bus init failed");
 		return false;
 	}

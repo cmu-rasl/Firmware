@@ -57,25 +57,29 @@ Block::Block(SuperBlock *parent, const char *name) :
 	_subscriptions(),
 	_params()
 {
-	if (getParent() != NULL) {
+	if (getParent() != nullptr) {
 		getParent()->getChildren().add(this);
 	}
 }
 
 void Block::getName(char *buf, size_t n)
 {
-	if (getParent() == NULL) {
+	if (getParent() == nullptr) {
 		strncpy(buf, _name, n);
+		// ensure string is terminated
+		buf[n - 1] = '\0';
 
 	} else {
 		char parentName[blockNameLengthMax];
 		getParent()->getName(parentName, n);
 
 		if (!strcmp(_name, "")) {
-			strncpy(buf, parentName, blockNameLengthMax);
+			strncpy(buf, parentName, n);
+			// ensure string is terminated
+			buf[n - 1] = '\0';
 
 		} else {
-			snprintf(buf, blockNameLengthMax, "%s_%s", parentName, _name);
+			snprintf(buf, n, "%s_%s", parentName, _name);
 		}
 	}
 }
@@ -85,7 +89,7 @@ void Block::updateParams()
 	BlockParamBase *param = getParams().getHead();
 	int count = 0;
 
-	while (param != NULL) {
+	while (param != nullptr) {
 		if (count++ > maxParamsPerBlock) {
 			char name[blockNameLengthMax];
 			getName(name, blockNameLengthMax);
@@ -104,7 +108,7 @@ void Block::updateSubscriptions()
 	uORB::SubscriptionNode *sub = getSubscriptions().getHead();
 	int count = 0;
 
-	while (sub != NULL) {
+	while (sub != nullptr) {
 		if (count++ > maxSubscriptionsPerBlock) {
 			char name[blockNameLengthMax];
 			getName(name, blockNameLengthMax);
@@ -122,7 +126,7 @@ void Block::updatePublications()
 	uORB::PublicationNode *pub = getPublications().getHead();
 	int count = 0;
 
-	while (pub != NULL) {
+	while (pub != nullptr) {
 		if (count++ > maxPublicationsPerBlock) {
 			char name[blockNameLengthMax];
 			getName(name, blockNameLengthMax);
@@ -141,10 +145,10 @@ void SuperBlock::setDt(float dt)
 	Block *child = getChildren().getHead();
 	int count = 0;
 
-	while (child != NULL) {
+	while (child != nullptr) {
 		if (count++ > maxChildrenPerBlock) {
-			char name[40];
-			getName(name, 40);
+			char name[blockNameLengthMax];
+			getName(name, blockNameLengthMax);
 			printf("exceeded max children for block: %s\n", name);
 			break;
 		}
@@ -159,10 +163,10 @@ void SuperBlock::updateChildParams()
 	Block *child = getChildren().getHead();
 	int count = 0;
 
-	while (child != NULL) {
+	while (child != nullptr) {
 		if (count++ > maxChildrenPerBlock) {
-			char name[40];
-			getName(name, 40);
+			char name[blockNameLengthMax];
+			getName(name, blockNameLengthMax);
 			printf("exceeded max children for block: %s\n", name);
 			break;
 		}
@@ -177,10 +181,10 @@ void SuperBlock::updateChildSubscriptions()
 	Block *child = getChildren().getHead();
 	int count = 0;
 
-	while (child != NULL) {
+	while (child != nullptr) {
 		if (count++ > maxChildrenPerBlock) {
-			char name[40];
-			getName(name, 40);
+			char name[blockNameLengthMax];
+			getName(name, blockNameLengthMax);
 			printf("exceeded max children for block: %s\n", name);
 			break;
 		}
@@ -195,10 +199,10 @@ void SuperBlock::updateChildPublications()
 	Block *child = getChildren().getHead();
 	int count = 0;
 
-	while (child != NULL) {
+	while (child != nullptr) {
 		if (count++ > maxChildrenPerBlock) {
-			char name[40];
-			getName(name, 40);
+			char name[blockNameLengthMax];
+			getName(name, blockNameLengthMax);
 			printf("exceeded max children for block: %s\n", name);
 			break;
 		}

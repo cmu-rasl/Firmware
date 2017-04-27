@@ -32,7 +32,7 @@
  ****************************************************************************/
 
 /**
- * @file controllib.cpp
+ * @file controllib_test_main.cpp
  * Unit testing for controllib.
  *
  * @author James Goppert <james.goppert@gmail.com>
@@ -69,31 +69,32 @@ int blockDelayTest();
 
 int basicBlocksTest()
 {
-	blockLimitTest();
-	blockLimitSymTest();
-	blockLowPassTest();
-	blockHighPassTest();
-	blockLowPass2Test();
-	blockIntegralTest();
-	blockIntegralTrapTest();
-	blockDerivativeTest();
-	blockPTest();
-	blockPITest();
-	blockPDTest();
-	blockPIDTest();
-	blockOutputTest();
-	//blockRandUniformTest();
+	bool failed = false;
+	failed = failed || blockLimitTest() < 0;
+	failed = failed || blockLimitSymTest() < 0;
+	failed = failed || blockLowPassTest() < 0;
+	failed = failed || blockHighPassTest() < 0;
+	failed = failed || blockLowPass2Test() < 0;
+	failed = failed || blockIntegralTest() < 0;
+	failed = failed || blockIntegralTrapTest() < 0;
+	failed = failed || blockDerivativeTest() < 0;
+	failed = failed || blockPTest() < 0;
+	failed = failed || blockPITest() < 0;
+	failed = failed || blockPDTest() < 0;
+	failed = failed || blockPIDTest() < 0;
+	failed = failed || blockOutputTest() < 0;
 	// known failures
-	// blockRandGaussTest();
-	blockStatsTest();
-	blockDelayTest();
-	return 0;
+	//failed = failed || blockRandUniformTest() < 0;
+	//failed = failed || blockRandGaussTest() < 0;
+	failed = failed || blockStatsTest() < 0;
+	failed = failed || blockDelayTest() < 0;
+	return failed ? -1 : 0;
 }
 
 int blockLimitTest()
 {
 	printf("Test BlockLimit\t\t\t: ");
-	BlockLimit limit(NULL, "TEST");
+	BlockLimit limit(nullptr, "TEST");
 	// initial state
 	ASSERT_CL(equal(1.0f, limit.getMax()));
 	ASSERT_CL(equal(-1.0f, limit.getMin()));
@@ -109,7 +110,7 @@ int blockLimitTest()
 int blockLimitSymTest()
 {
 	printf("Test BlockLimitSym\t\t: ");
-	BlockLimitSym limit(NULL, "TEST");
+	BlockLimitSym limit(nullptr, "TEST");
 	// initial state
 	ASSERT_CL(equal(1.0f, limit.getMax()));
 	ASSERT_CL(equal(0.0f, limit.getDt()));
@@ -124,7 +125,7 @@ int blockLimitSymTest()
 int blockLowPassTest()
 {
 	printf("Test BlockLowPass\t\t: ");
-	BlockLowPass lowPass(NULL, "TEST_LP");
+	BlockLowPass lowPass(nullptr, "TEST_LP");
 	// test initial state
 	ASSERT_CL(equal(10.0f, lowPass.getFCut()));
 	ASSERT_CL(equal(0.0f, lowPass.getState()));
@@ -152,7 +153,7 @@ int blockLowPassTest()
 int blockHighPassTest()
 {
 	printf("Test BlockHighPass\t\t: ");
-	BlockHighPass highPass(NULL, "TEST_HP");
+	BlockHighPass highPass(nullptr, "TEST_HP");
 	// test initial state
 	ASSERT_CL(equal(10.0f, highPass.getFCut()));
 	ASSERT_CL(equal(0.0f, highPass.getU()));
@@ -183,7 +184,7 @@ int blockHighPassTest()
 int blockLowPass2Test()
 {
 	printf("Test BlockLowPass2\t\t: ");
-	BlockLowPass2 lowPass(NULL, "TEST_LP", 100);
+	BlockLowPass2 lowPass(nullptr, "TEST_LP", 100);
 	// test initial state
 	ASSERT_CL(equal(10.0f, lowPass.getFCutParam()));
 	ASSERT_CL(equal(0.0f, lowPass.getState()));
@@ -211,7 +212,7 @@ int blockLowPass2Test()
 int blockIntegralTest()
 {
 	printf("Test BlockIntegral\t\t: ");
-	BlockIntegral integral(NULL, "TEST_I");
+	BlockIntegral integral(nullptr, "TEST_I");
 	// test initial state
 	ASSERT_CL(equal(1.0f, integral.getMax()));
 	ASSERT_CL(equal(0.0f, integral.getDt()));
@@ -248,7 +249,7 @@ int blockIntegralTest()
 int blockIntegralTrapTest()
 {
 	printf("Test BlockIntegralTrap\t\t: ");
-	BlockIntegralTrap integral(NULL, "TEST_I");
+	BlockIntegralTrap integral(nullptr, "TEST_I");
 	// test initial state
 	ASSERT_CL(equal(1.0f, integral.getMax()));
 	ASSERT_CL(equal(0.0f, integral.getDt()));
@@ -291,7 +292,7 @@ int blockIntegralTrapTest()
 int blockDerivativeTest()
 {
 	printf("Test BlockDerivative\t\t: ");
-	BlockDerivative derivative(NULL, "TEST_D");
+	BlockDerivative derivative(nullptr, "TEST_D");
 	// test initial state
 	ASSERT_CL(equal(0.0f, derivative.getU()));
 	ASSERT_CL(equal(10.0f, derivative.getLP()));
@@ -314,7 +315,7 @@ int blockDerivativeTest()
 int blockPTest()
 {
 	printf("Test BlockP\t\t\t: ");
-	BlockP blockP(NULL, "TEST_P");
+	BlockP blockP(nullptr, "TEST_P");
 	// test initial state
 	ASSERT_CL(equal(0.2f, blockP.getKP()));
 	ASSERT_CL(equal(0.0f, blockP.getDt()));
@@ -330,7 +331,7 @@ int blockPTest()
 int blockPITest()
 {
 	printf("Test BlockPI\t\t\t: ");
-	BlockPI blockPI(NULL, "TEST");
+	BlockPI blockPI(nullptr, "TEST");
 	// test initial state
 	ASSERT_CL(equal(0.2f, blockPI.getKP()));
 	ASSERT_CL(equal(0.1f, blockPI.getKI()));
@@ -352,7 +353,7 @@ int blockPITest()
 int blockPDTest()
 {
 	printf("Test BlockPD\t\t\t: ");
-	BlockPD blockPD(NULL, "TEST");
+	BlockPD blockPD(nullptr, "TEST");
 	// test initial state
 	ASSERT_CL(equal(0.2f, blockPD.getKP()));
 	ASSERT_CL(equal(0.01f, blockPD.getKD()));
@@ -377,7 +378,7 @@ int blockPDTest()
 int blockPIDTest()
 {
 	printf("Test BlockPID\t\t\t: ");
-	BlockPID blockPID(NULL, "TEST");
+	BlockPID blockPID(nullptr, "TEST");
 	// test initial state
 	ASSERT_CL(equal(0.2f, blockPID.getKP()));
 	ASSERT_CL(equal(0.1f, blockPID.getKI()));
@@ -407,7 +408,7 @@ int blockPIDTest()
 int blockOutputTest()
 {
 	printf("Test BlockOutput\t\t: ");
-	BlockOutput blockOutput(NULL, "TEST");
+	BlockOutput blockOutput(nullptr, "TEST");
 	// test initial state
 	ASSERT_CL(equal(0.0f, blockOutput.getDt()));
 	ASSERT_CL(equal(0.5f, blockOutput.get()));
@@ -430,7 +431,7 @@ int blockRandUniformTest()
 {
 	srand(1234);
 	printf("Test BlockRandUniform\t\t: ");
-	BlockRandUniform blockRandUniform(NULL, "TEST");
+	BlockRandUniform blockRandUniform(nullptr, "TEST");
 	// test initial state
 	ASSERT_CL(equal(0.0f, blockRandUniform.getDt()));
 	ASSERT_CL(equal(-1.0f, blockRandUniform.getMin()));
@@ -456,7 +457,7 @@ int blockRandGaussTest()
 {
 	srand(1234);
 	printf("Test BlockRandGauss\t\t: ");
-	BlockRandGauss blockRandGauss(NULL, "TEST");
+	BlockRandGauss blockRandGauss(nullptr, "TEST");
 	// test initial state
 	ASSERT_CL(equal(0.0f, blockRandGauss.getDt()));
 	ASSERT_CL(equal(1.0f, blockRandGauss.getMean()));
@@ -474,7 +475,7 @@ int blockRandGaussTest()
 		mean = newMean;
 	}
 
-	float stdDev = sqrt(sum / (n - 1));
+	float stdDev = sqrtf(sum / (n - 1));
 	(void)(stdDev);
 	ASSERT_CL(equal(mean, blockRandGauss.getMean(), 1e-1));
 	ASSERT_CL(equal(stdDev, blockRandGauss.getStdDev(), 1e-1));
@@ -485,7 +486,7 @@ int blockRandGaussTest()
 int blockStatsTest()
 {
 	printf("Test BlockStats\t\t\t: ");
-	BlockStats<float, 1> stats(NULL, "TEST");
+	BlockStats<float, 1> stats(nullptr, "TEST");
 	ASSERT_CL(equal(0.0f, stats.getMean()(0)));
 	ASSERT_CL(equal(0.0f, stats.getStdDev()(0)));
 	stats.update(matrix::Scalar<float>(1.0f));
@@ -503,7 +504,7 @@ int blockDelayTest()
 {
 	printf("Test BlockDelay\t\t\t: ");
 	using namespace matrix;
-	BlockDelay<float, 2, 1, 3> delay(NULL, "TEST");
+	BlockDelay<float, 2, 1, 3> delay(nullptr, "TEST");
 	Vector2f u1(1, 2);
 	Vector2f y1 = delay.update(u1);
 	ASSERT_CL(equal(y1(0), u1(0)));
