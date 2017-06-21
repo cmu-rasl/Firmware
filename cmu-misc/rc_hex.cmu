@@ -282,6 +282,8 @@ mocap_control start
 usleep 2500
 mavlink start -d /dev/ttyS1 -b 921600
 mavlink start -d /dev/ttyS2 -b 921600 
+mavlink stream -s HIGHRES_IMU -r 200 -d /dev/ttyS2
+mavlink stream -s ATTITUDE_QUATERNION -r 200 -d /dev/ttyS2
 
 
 #

@@ -263,10 +263,10 @@ usleep 2500
 #
 # Start mavlink
 #
-#mavlink start -d /dev/ttyS1 -b 921600 -m custom -r 80000 -x
-
-#mavlink stream -s BATTERY_STATUS -r 1 -d /dev/ttyS1
-mavlink start #-b 921600 #115200
+mavlink start -d /dev/ttyS1 -b 921600
+mavlink start -d /dev/ttyS2 -b 921600 
+mavlink stream -s HIGHRES_IMU -r 200 -d /dev/ttyS2
+mavlink stream -s ATTITUDE_QUATERNION -r 200 -d /dev/ttyS2
 
 #
 # Logging
