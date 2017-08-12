@@ -842,7 +842,7 @@ FixedwingPositionControl::control_position(const math::Vector<2> &curr_pos, cons
 
 			// we want the plane to keep tracking the desired flight path until we start flaring
 			// if we go into heading hold mode earlier then we risk to be pushed away from the runway by cross winds
-			if (!_land_noreturn_horizontal &&
+			if ((_parameters.land_heading_hold_horizontal_distance > 0.0f) && !_land_noreturn_horizontal &&
 			    ((wp_distance < _parameters.land_heading_hold_horizontal_distance) || _land_noreturn_vertical)) {
 
 				if (pos_sp_prev.valid) {
@@ -1466,15 +1466,12 @@ FixedwingPositionControl::handle_command()
 {
 	if (_vehicle_command.command == vehicle_command_s::VEHICLE_CMD_DO_GO_AROUND) {
 		// only abort landing before point of no return (horizontal and vertical)
-		if (_pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_LAND) {
+		if (_control_mode.flag_control_auto_enabled &&
+		    _pos_sp_triplet.current.valid &&
+		    _pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_LAND) {
 
-			if (_land_noreturn_vertical) {
-				mavlink_log_info(&_mavlink_log_pub, "Landing, can't abort after flare");
-
-			} else {
-				_fw_pos_ctrl_status.abort_landing = true;
-				mavlink_log_info(&_mavlink_log_pub, "Landing, aborted");
-			}
+			_fw_pos_ctrl_status.abort_landing = true;
+			mavlink_log_critical(&_mavlink_log_pub, "Landing, aborted");
 		}
 	}
 }
@@ -1512,13 +1509,11 @@ FixedwingPositionControl::task_main()
 	}
 
 	/* wakeup source(s) */
-	px4_pollfd_struct_t fds[2];
+	px4_pollfd_struct_t fds[1];
 
 	/* Setup of loop */
-	fds[0].fd = _params_sub;
+	fds[0].fd = _global_pos_sub;
 	fds[0].events = POLLIN;
-	fds[1].fd = _global_pos_sub;
-	fds[1].events = POLLIN;
 
 	_task_running = true;
 
@@ -1534,7 +1529,7 @@ FixedwingPositionControl::task_main()
 
 		/* this is undesirable but not much we can do - might want to flag unhappy status */
 		if (pret < 0) {
-			warn("poll error %d, %d", pret, errno);
+			PX4_WARN("poll error %d, %d", pret, errno);
 			continue;
 		}
 
@@ -1544,9 +1539,12 @@ FixedwingPositionControl::task_main()
 		vehicle_status_poll();
 
 		/* only update parameters if they changed */
-		if ((fds[0].revents & POLLIN) != 0) {
+		bool params_updated = false;
+		orb_check(_params_sub, &params_updated);
+
+		if (params_updated) {
 			/* read from param to clear updated flag */
-			parameter_update_s update {};
+			parameter_update_s update;
 			orb_copy(ORB_ID(parameter_update), _params_sub, &update);
 
 			/* update parameters from storage */
@@ -1554,7 +1552,7 @@ FixedwingPositionControl::task_main()
 		}
 
 		/* only run controller if position changed */
-		if ((fds[1].revents & POLLIN) != 0) {
+		if ((fds[0].revents & POLLIN) != 0) {
 			perf_begin(_loop_perf);
 
 			/* load local copies */
@@ -1859,7 +1857,7 @@ FixedwingPositionControl::start()
 	/* start the task */
 	_control_task = px4_task_spawn_cmd("fw_pos_ctrl_l1",
 					   SCHED_DEFAULT,
-					   SCHED_PRIORITY_MAX - 5,
+					   SCHED_PRIORITY_POSITION_CONTROL,
 					   1700,
 					   (px4_main_t)&FixedwingPositionControl::task_main_trampoline,
 					   nullptr);

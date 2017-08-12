@@ -125,7 +125,7 @@ set(config_module_list
 	# Logging
 	#
 	modules/logger
-	modules/sdlog2
+	#modules/sdlog2
 
 	#
 	# Library modules
@@ -155,6 +155,7 @@ set(config_module_list
 	lib/version
 	lib/DriverFramework/framework
 	platforms/nuttx
+	lib/micro-CDR
 
 	# had to add for cmake, not sure why wasn't in original config
 	platforms/common

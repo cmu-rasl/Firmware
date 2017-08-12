@@ -71,6 +71,37 @@ __EXPORT const io_timers_t io_timers[MAX_IO_TIMERS] = {
 		.last_channel_index = 5,
 		.handler = io_timer_handler1,
 		.vectorno =  STM32_IRQ_TIM4,
+	},
+	{
+		.base = STM32_TIM12_BASE,
+		.clock_register = STM32_RCC_APB1ENR,
+		.clock_bit = RCC_APB1ENR_TIM12EN,
+		.clock_freq = STM32_APB1_TIM12_CLKIN,
+		.first_channel_index = 6,
+		.last_channel_index = 7,
+		.handler = io_timer_handler2,
+		.vectorno =  STM32_IRQ_TIM12,
+	},
+	{
+		.base = STM32_TIM2_BASE,
+		.clock_register = STM32_RCC_APB1ENR,
+		.clock_bit = RCC_APB1ENR_TIM2EN,
+		.clock_freq = STM32_APB1_TIM2_CLKIN,
+		.first_channel_index = 8,
+		.last_channel_index = 10,
+		.handler = io_timer_handler3,
+		.vectorno =  STM32_IRQ_TIM2,
+	},
+	{
+		.base = STM32_TIM9_BASE,
+		.clock_register = STM32_RCC_APB2ENR,
+		.clock_bit = RCC_APB2ENR_TIM9EN,
+		.clock_freq = STM32_APB2_TIM9_CLKIN,
+		.first_channel_index = 11,
+		.last_channel_index = 11,
+		.handler = io_timer_handler4,
+		.vectorno =  STM32_IRQ_TIM9,
+
 	}
 };
 
@@ -122,6 +153,22 @@ __EXPORT const timer_io_channels_t timer_io_channels[MAX_TIMER_IO_CHANNELS] = {
 		.timer_channel = 3,
 		.ccr_offset = STM32_GTIM_CCR3_OFFSET,
 		.masks  = GTIM_SR_CC3IF | GTIM_SR_CC3OF
+	},
+	{
+		.gpio_out = GPIO_TIM12_CH1OUT,
+		.gpio_in = GPIO_TIM12_CH1IN,
+		.timer_index = 2,
+		.timer_channel = 1,
+		.ccr_offset = STM32_GTIM_CCR1_OFFSET, // TODO: need revision
+		.masks  = GTIM_SR_CC1IF | GTIM_SR_CC1OF // TODO: need revision
+	},
+	{
+		.gpio_out = GPIO_TIM12_CH2OUT,
+		.gpio_in = GPIO_TIM12_CH2IN,
+		.timer_index = 2,
+		.timer_channel = 2,
+		.ccr_offset = STM32_GTIM_CCR2_OFFSET, // TODO: need revision
+		.masks  = GTIM_SR_CC2IF | GTIM_SR_CC2OF // TODO: need revision
 	}
 };
 
@@ -166,19 +213,19 @@ __EXPORT const struct timer_io_channels_t led_pwm_channels[MAX_TIMER_LED_CHANNEL
 		.timer_channel = 2,
 	},
 	{
-		.gpio_out = LED_TIM5_CH1OUT,
+		.gpio_out = UILED_TIM5_CH1OUT,
 		.gpio_in  = 0,
 		.timer_index = 1,
 		.timer_channel = 1,
 	},
 	{
-		.gpio_out = LED_TIM5_CH2OUT,
+		.gpio_out = UILED_TIM5_CH2OUT,
 		.gpio_in  = 0,
 		.timer_index = 1,
 		.timer_channel = 2,
 	},
 	{
-		.gpio_out = LED_TIM5_CH3OUT,
+		.gpio_out = UILED_TIM5_CH3OUT,
 		.gpio_in  = 0,
 		.timer_index = 1,
 		.timer_channel = 3,

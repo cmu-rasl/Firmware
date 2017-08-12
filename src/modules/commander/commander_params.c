@@ -185,7 +185,7 @@ PARAM_DEFINE_FLOAT(COM_RC_LOSS_T, 0.5f);
  * override request by the pilot.
  *
  * @group Commander
- # @unit %
+ * @unit %
  * @min 5
  * @max 40
  * @decimal 0
@@ -370,6 +370,7 @@ PARAM_DEFINE_INT32(COM_OBL_RC_ACT, 0);
  * @value 8 Stabilized
  * @value 9 Rattitude
  * @value 12 Follow Me
+ * @group Commander
  */
 PARAM_DEFINE_INT32(COM_FLTMODE1, -1);
 
@@ -393,6 +394,7 @@ PARAM_DEFINE_INT32(COM_FLTMODE1, -1);
  * @value 8 Stabilized
  * @value 9 Rattitude
  * @value 12 Follow Me
+ * @group Commander
  */
 PARAM_DEFINE_INT32(COM_FLTMODE2, -1);
 
@@ -416,6 +418,7 @@ PARAM_DEFINE_INT32(COM_FLTMODE2, -1);
  * @value 8 Stabilized
  * @value 9 Rattitude
  * @value 12 Follow Me
+ * @group Commander
  */
 PARAM_DEFINE_INT32(COM_FLTMODE3, -1);
 
@@ -439,6 +442,7 @@ PARAM_DEFINE_INT32(COM_FLTMODE3, -1);
  * @value 8 Stabilized
  * @value 9 Rattitude
  * @value 12 Follow Me
+ * @group Commander
  */
 PARAM_DEFINE_INT32(COM_FLTMODE4, -1);
 
@@ -462,6 +466,7 @@ PARAM_DEFINE_INT32(COM_FLTMODE4, -1);
  * @value 8 Stabilized
  * @value 9 Rattitude
  * @value 12 Follow Me
+ * @group Commander
  */
 PARAM_DEFINE_INT32(COM_FLTMODE5, -1);
 
@@ -485,6 +490,7 @@ PARAM_DEFINE_INT32(COM_FLTMODE5, -1);
  * @value 8 Stabilized
  * @value 9 Rattitude
  * @value 12 Follow Me
+ * @group Commander
  */
 PARAM_DEFINE_INT32(COM_FLTMODE6, -1);
 
@@ -582,7 +588,7 @@ PARAM_DEFINE_FLOAT(COM_ARM_IMU_ACC, 0.7f);
  * @decimal 3
  * @increment 0.01
  */
-PARAM_DEFINE_FLOAT(COM_ARM_IMU_GYR, 0.2f);
+PARAM_DEFINE_FLOAT(COM_ARM_IMU_GYR, 0.25f);
 
 /**
  * Enable RC stick override of auto modes
