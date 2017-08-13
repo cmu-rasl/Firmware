@@ -54,6 +54,7 @@ px4_add_module(
 		mavlink_shell.cpp
 		mavlink_ulog.cpp
 		mavlink_command_sender.cpp
+                cmu_mavlink_handler.cpp
 	DEPENDS
 		platforms__common
 	)

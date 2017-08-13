@@ -88,6 +88,10 @@
 #include "mavlink_rate_limiter.h"
 #include "mavlink_command_sender.h"
 
+#include "cmu_mavlink_handler.h"
+
+#include "cmu_mavlink_handler.h"
+
 // Guard against MAVLink misconfiguration
 #ifndef MAVLINK_CRC_EXTRA
 #error MAVLINK_CRC_EXTRA has to be defined on PX4 systems
@@ -278,7 +282,9 @@ Mavlink::Mavlink() :
 
 	/* performance counters */
 	_loop_perf(perf_alloc(PC_ELAPSED, "mavlink_el")),
-	_txerr_perf(perf_alloc(PC_COUNT, "mavlink_txe"))
+	_txerr_perf(perf_alloc(PC_COUNT, "mavlink_txe")),
+        /* custom message handler */
+        _cmu_mavlink_handler(nullptr)
 {
 	_instance_id = Mavlink::instance_count();
 
@@ -1271,6 +1277,12 @@ Mavlink::handle_message(const mavlink_message_t *msg)
 	 *  NOTE: this is called from the receiver thread
 	 */
 
+        /* handle custom dialect packets */
+        _cmu_mavlink_handler->handle_message(msg);
+
+        /* handle custom dialect packets */
+        _cmu_mavlink_handler->handle_message(msg);
+
 	if (get_forwarding_on()) {
 		/* forward any messages to other mavlink instances */
 		Mavlink::forward_message(msg, this);
@@ -2020,6 +2032,16 @@ Mavlink::task_main(int argc, char *argv[])
 		configure_stream("COMMAND_LONG");
 
 	}
+
+        _cmu_mavlink_handler =
+          (CMUMavlinkHandler *) CMUMavlinkHandler::new_instance();
+        _cmu_mavlink_handler->set_system_id(mavlink_system.sysid);
+        _cmu_mavlink_handler->set_channel(get_channel());
+
+        _cmu_mavlink_handler =
+          (CMUMavlinkHandler *) CMUMavlinkHandler::new_instance();
+        _cmu_mavlink_handler->set_system_id(mavlink_system.sysid);
+        _cmu_mavlink_handler->set_channel(get_channel());
 
 	switch (_mode) {
 	case MAVLINK_MODE_NORMAL:

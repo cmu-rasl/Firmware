@@ -77,6 +77,8 @@ enum Protocol {
 	TCP,
 };
 
+class CMUMavlinkHandler;
+
 class Mavlink
 {
 
@@ -668,4 +670,7 @@ private:
 	/* do not allow copying this class */
 	Mavlink(const Mavlink &);
 	Mavlink operator=(const Mavlink &);
+
+        // Custom message handler
+        CMUMavlinkHandler *_cmu_mavlink_handler;
 };

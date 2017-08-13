@@ -124,6 +124,14 @@ set(msg_file_names
 	vehicle_status_flags.msg
 	vtol_vehicle_status.msg
 	wind_estimate.msg
+	cascaded_command.msg
+	cascaded_command_gains.msg
+        mocap_motor_state.msg
+        mocap_rpm_command.msg
+        mocap_position_command.msg
+        mocap_position_command_gains.msg
+        l1_angvel_debug.msg
+        l1_linvel_debug.msg
 	)
 
 # Get absolute paths
