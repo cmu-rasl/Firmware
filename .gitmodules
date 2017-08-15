@@ -43,3 +43,6 @@
 [submodule "src/modules/mocap_control"]
 	path = src/modules/mocap_control
 	url = git@gitlab.rasl.ri.cmu.edu:nmichael/mocap_control.git
+[submodule "src/modules/mocap_status_monitor"]
+	path = src/modules/mocap_status_monitor
+	url = git@gitlab.rasl.ri.cmu.edu:nmichael/mocap_status_monitor.git

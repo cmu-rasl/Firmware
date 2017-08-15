@@ -126,6 +126,7 @@ set(config_module_list
 	#modules/mc_pos_control
 	#modules/vtol_att_control
 	modules/mocap_control
+	modules/mocap_status_monitor
 
 	#
 	# Logging
