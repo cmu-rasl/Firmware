@@ -2038,11 +2038,6 @@ Mavlink::task_main(int argc, char *argv[])
         _cmu_mavlink_handler->set_system_id(mavlink_system.sysid);
         _cmu_mavlink_handler->set_channel(get_channel());
 
-        _cmu_mavlink_handler =
-          (CMUMavlinkHandler *) CMUMavlinkHandler::new_instance();
-        _cmu_mavlink_handler->set_system_id(mavlink_system.sysid);
-        _cmu_mavlink_handler->set_channel(get_channel());
-
 	switch (_mode) {
 	case MAVLINK_MODE_NORMAL:
 		configure_stream("SYS_STATUS", 1.0f);
