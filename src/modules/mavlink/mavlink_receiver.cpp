@@ -2398,6 +2398,11 @@ MavlinkReceiver::receive_thread(void *arg)
 	bool verbose = _mavlink->get_verbose();
 	_mission_manager.set_verbose(verbose);
 
+        param_t h = param_find("MAV_BASE_ID");
+        int base_id;
+        param_get(h, &base_id);
+
+
 	while (!_mavlink->_task_should_exit) {
 		if (poll(&fds[0], 1, timeout) > 0) {
 			if (_mavlink->get_protocol() == SERIAL) {
@@ -2460,23 +2465,26 @@ MavlinkReceiver::receive_thread(void *arg)
 							_mavlink->set_proto_version(2);
 						}
 
-						/* handle generic messages and commands */
-						handle_message(&msg);
+                                                if (msg.sysid == base_id)
+                                                {
+                                                  /* handle generic messages and commands */
+                                                  handle_message(&msg);
 
-						/* handle packet with mission manager */
-						_mission_manager.handle_message(&msg);
+                                                  /* handle packet with mission manager */
+                                                  _mission_manager.handle_message(&msg);
 
-						/* handle packet with parameter component */
-						_parameters_manager.handle_message(&msg);
+                                                  /* handle packet with parameter component */
+                                                  _parameters_manager.handle_message(&msg);
 
-						/* handle packet with ftp component */
-						_mavlink_ftp.handle_message(&msg);
+                                                  /* handle packet with ftp component */
+                                                  _mavlink_ftp.handle_message(&msg);
 
-						/* handle packet with log component */
-						_mavlink_log_handler.handle_message(&msg);
+                                                  /* handle packet with log component */
+                                                  _mavlink_log_handler.handle_message(&msg);
 
-						/* handle packet with parent object */
-						_mavlink->handle_message(&msg);
+                                                  /* handle packet with parent object */
+                                                  _mavlink->handle_message(&msg);
+                                                }
 					}
 				}
 
