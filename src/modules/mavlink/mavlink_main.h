@@ -70,6 +70,7 @@
 #include "mavlink_messages.h"
 #include "mavlink_shell.h"
 #include "mavlink_ulog.h"
+#include "cmu_mavlink_handler.h"
 
 enum Protocol {
 	SERIAL = 0,

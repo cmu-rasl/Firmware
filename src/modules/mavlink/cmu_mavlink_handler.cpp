@@ -8,16 +8,8 @@
 #include <uORB/topics/mocap_position_command.h>
 #include <uORB/topics/mocap_position_command_gains.h>
 
-#include <modules/mavlink/mavlink_main.h>
-#include <modules/mavlink/cmu_mavlink_handler.h>
-#include <v2.0/cmu_mavlink/mavlink_msg_cascaded_cmd.h>
-#include <v2.0/cmu_mavlink/mavlink_msg_cascaded_cmd_gains.h>
-#include <v2.0/cmu_mavlink/mavlink_msg_mocap_motor_state.h>
-#include <v2.0/cmu_mavlink/mavlink_msg_mocap_rpm_cmd.h>
-#include <v2.0/cmu_mavlink/mavlink_msg_mocap_timesync.h>
-#include <v2.0/cmu_mavlink/mavlink_msg_mocap_multi_pose.h>
-#include <v2.0/cmu_mavlink/mavlink_msg_mocap_position_cmd.h>
-#include <v2.0/cmu_mavlink/mavlink_msg_mocap_position_cmd_gains.h>
+#include "mavlink_main.h"
+#include "cmu_mavlink_handler.h"
 
 CMUMavlinkHandler::CMUMavlinkHandler() :
   system_id(0),

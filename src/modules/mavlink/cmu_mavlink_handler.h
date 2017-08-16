@@ -3,7 +3,6 @@
 
 #include <drivers/drv_hrt.h>
 #include <uORB/uORB.h>
-#include <v2.0/mavlink_types.h>
 
 class CMUMavlinkHandler
 {

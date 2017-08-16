@@ -90,8 +90,6 @@
 
 #include "cmu_mavlink_handler.h"
 
-#include "cmu_mavlink_handler.h"
-
 // Guard against MAVLink misconfiguration
 #ifndef MAVLINK_CRC_EXTRA
 #error MAVLINK_CRC_EXTRA has to be defined on PX4 systems
@@ -1276,9 +1274,6 @@ Mavlink::handle_message(const mavlink_message_t *msg)
 	/*
 	 *  NOTE: this is called from the receiver thread
 	 */
-
-        /* handle custom dialect packets */
-        _cmu_mavlink_handler->handle_message(msg);
 
         /* handle custom dialect packets */
         _cmu_mavlink_handler->handle_message(msg);
