@@ -27,6 +27,7 @@ private:
   void handle_message_mocap_motor_state(const mavlink_message_t *msg);
   void handle_message_mocap_rpm_cmd(const mavlink_message_t *msg);
   void handle_message_mocap_timesync(const mavlink_message_t *msg);
+  void handle_message_mocap_pose(const mavlink_message_t *msg);
   void handle_message_mocap_multi_pose(const mavlink_message_t *msg);
   void handle_message_mocap_position_cmd(const mavlink_message_t *msg);
   void handle_message_mocap_position_cmd_gains(const mavlink_message_t *msg);

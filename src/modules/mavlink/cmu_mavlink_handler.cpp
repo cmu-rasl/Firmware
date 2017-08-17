@@ -59,6 +59,9 @@ void CMUMavlinkHandler::handle_message(const mavlink_message_t *msg)
     case MAVLINK_MSG_ID_MOCAP_TIMESYNC:
       handle_message_mocap_timesync(msg);
       break;
+    case MAVLINK_MSG_ID_MOCAP_POSE:
+      handle_message_mocap_pose(msg);
+      break;
     case MAVLINK_MSG_ID_MOCAP_MULTI_POSE:
       handle_message_mocap_multi_pose(msg);
       break;
@@ -242,6 +245,45 @@ void CMUMavlinkHandler::handle_message_mocap_multi_pose(const mavlink_message_t 
   att_pos_mocap.z = mpose.pose[k++]/1000.0f;
 
   float heading = mpose.pose[k++]/10000.0f;
+  math::Quaternion mq;
+  mq.from_yaw(heading);
+
+#if 0
+  // Hack to address NuttX printf issue re: handling of float/double
+  char buf[128];
+  sprintf(buf, "position = %0.5f, %0.5f, %0.5f, heading = %0.5f",
+          (double)att_pos_mocap.x, (double)att_pos_mocap.y,
+          (double)att_pos_mocap.z, (double)heading);
+  printf("%s\n", buf);
+#endif
+
+  att_pos_mocap.q[0] = mq(0);
+  att_pos_mocap.q[1] = mq(1);
+  att_pos_mocap.q[2] = mq(2);
+  att_pos_mocap.q[3] = mq(3);
+
+  int inst; // Not used
+  orb_publish_auto(ORB_ID(att_pos_mocap), &att_pos_mocap_pub,
+                   &att_pos_mocap, &inst, ORB_PRIO_HIGH);
+}
+
+void CMUMavlinkHandler::handle_message_mocap_pose(const mavlink_message_t *msg)
+{
+  mavlink_mocap_pose_t mpose;
+  mavlink_msg_mocap_pose_decode(msg, &mpose);
+
+  struct att_pos_mocap_s att_pos_mocap;
+  memset(&att_pos_mocap, 0, sizeof(att_pos_mocap));
+
+  // Use the component ID to identify the mocap system
+  att_pos_mocap.id = msg->compid;
+  att_pos_mocap.timestamp_received = sync_stamp(mpose.time_usec); // Synced time
+
+  att_pos_mocap.x = mpose.pose[0]*1.0e-3f;
+  att_pos_mocap.y = mpose.pose[1]*1.0e-3f;
+  att_pos_mocap.z = mpose.pose[2]*1.0e-3f;
+
+  float heading = mpose.pose[3]*1.0e-4f;
   math::Quaternion mq;
   mq.from_yaw(heading);
 
