@@ -277,7 +277,7 @@ void CMUMavlinkHandler::handle_message_mocap_pose(const mavlink_message_t *msg)
 
   // Use the component ID to identify the mocap system
   att_pos_mocap.id = msg->compid;
-  att_pos_mocap.timestamp_received = sync_stamp(mpose.time_usec); // Synced time
+  att_pos_mocap.timestamp_received = hrt_absolute_time(); //sync_stamp(mpose.time_usec); // Synced time
 
   att_pos_mocap.x = mpose.pose[0]*1.0e-3f;
   att_pos_mocap.y = mpose.pose[1]*1.0e-3f;
