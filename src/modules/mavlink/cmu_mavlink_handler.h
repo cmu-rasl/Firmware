@@ -51,6 +51,9 @@ private:
       (time_offset_avg_alpha*offset_ns) + (1.0 - time_offset_avg_alpha)*time_offset;
   }
 
+  void pack_publish_mocap(uint32_t id, uint64_t time,
+                          float x, float y, float z, float heading);
+
   int system_id;
   mavlink_channel_t channel;
   double time_offset_avg_alpha;

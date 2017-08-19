@@ -103,6 +103,10 @@ void CMUMavlinkHandler::handle_message_cascaded_cmd(const mavlink_message_t *msg
   int inst; // Not used
   orb_publish_auto(ORB_ID(cascaded_command), &cascaded_command_pub,
                    &cascaded_command, &inst, ORB_PRIO_HIGH);
+
+  if (!isnan(mavlink_cascaded_cmd.current_yaw))
+    pack_publish_mocap(msg->compid, cascaded_command.timestamp, 0.0f, 0.0f, 0.0f,
+                       static_cast<float>(mavlink_cascaded_cmd.current_yaw));
 }
 
 void CMUMavlinkHandler::handle_message_cascaded_cmd_gains(const mavlink_message_t *msg)
@@ -164,6 +168,16 @@ void CMUMavlinkHandler::handle_message_mocap_rpm_cmd(const mavlink_message_t *ms
 
   for (unsigned int i = 0; i < mavlink_mocap_rpm_cmd.ninputs; i++)
     mocap_rpm_cmd.input[i] = mavlink_mocap_rpm_cmd.input[i];
+
+#if 0
+  puts("handle_message_mocap_rpm_cmd");
+  // Hack to address NuttX printf issue re: handling of float/double
+  char buf[128];
+  printf("rpm =[");
+  for (uint8_t i = 0; i < mocap_rpm_cmd.ninputs; i++)
+    printf(" %hu ", mocap_rpm_cmd.input[i]);
+  printf("%s]\n", buf);
+#endif
 
   int inst; // Not used
   orb_publish_auto(ORB_ID(mocap_rpm_command), &mocap_rpm_cmd_pub,
@@ -232,39 +246,12 @@ void CMUMavlinkHandler::handle_message_mocap_multi_pose(const mavlink_message_t 
   if (indx == -1)
     return;
 
-  struct att_pos_mocap_s att_pos_mocap;
-  memset(&att_pos_mocap, 0, sizeof(att_pos_mocap));
-
-  // Use the component ID to identify the mocap system
-  att_pos_mocap.id = msg->compid;
-  att_pos_mocap.timestamp_received = sync_stamp(mpose.time_usec); // Synced time
-
   unsigned int k = 4*indx;
-  att_pos_mocap.x = mpose.pose[k++]/1000.0f;
-  att_pos_mocap.y = mpose.pose[k++]/1000.0f;
-  att_pos_mocap.z = mpose.pose[k++]/1000.0f;
-
-  float heading = mpose.pose[k++]/10000.0f;
-  math::Quaternion mq;
-  mq.from_yaw(heading);
-
-#if 0
-  // Hack to address NuttX printf issue re: handling of float/double
-  char buf[128];
-  sprintf(buf, "position = %0.5f, %0.5f, %0.5f, heading = %0.5f",
-          (double)att_pos_mocap.x, (double)att_pos_mocap.y,
-          (double)att_pos_mocap.z, (double)heading);
-  printf("%s\n", buf);
-#endif
-
-  att_pos_mocap.q[0] = mq(0);
-  att_pos_mocap.q[1] = mq(1);
-  att_pos_mocap.q[2] = mq(2);
-  att_pos_mocap.q[3] = mq(3);
-
-  int inst; // Not used
-  orb_publish_auto(ORB_ID(att_pos_mocap), &att_pos_mocap_pub,
-                   &att_pos_mocap, &inst, ORB_PRIO_HIGH);
+  float x = static_cast<float>(mpose.pose[k++])*1.0e-3f;
+  float y = static_cast<float>(mpose.pose[k++])*1.0e-3f;
+  float z = static_cast<float>(mpose.pose[k++])*1.0e-3f;
+  float heading = static_cast<float>(mpose.pose[k++])*1.0e-4f;
+  pack_publish_mocap(msg->compid, mpose.time_usec, x, y, z, heading);
 }
 
 void CMUMavlinkHandler::handle_message_mocap_pose(const mavlink_message_t *msg)
@@ -272,38 +259,12 @@ void CMUMavlinkHandler::handle_message_mocap_pose(const mavlink_message_t *msg)
   mavlink_mocap_pose_t mpose;
   mavlink_msg_mocap_pose_decode(msg, &mpose);
 
-  struct att_pos_mocap_s att_pos_mocap;
-  memset(&att_pos_mocap, 0, sizeof(att_pos_mocap));
+  float x = static_cast<float>(mpose.pose[0])*1.0e-3f;
+  float y = static_cast<float>(mpose.pose[1])*1.0e-3f;
+  float z = static_cast<float>(mpose.pose[2])*1.0e-3f;
+  float heading = static_cast<float>(mpose.pose[3])*1.0e-4f;
 
-  // Use the component ID to identify the mocap system
-  att_pos_mocap.id = msg->compid;
-  att_pos_mocap.timestamp_received = hrt_absolute_time(); //sync_stamp(mpose.time_usec); // Synced time
-
-  att_pos_mocap.x = mpose.pose[0]*1.0e-3f;
-  att_pos_mocap.y = mpose.pose[1]*1.0e-3f;
-  att_pos_mocap.z = mpose.pose[2]*1.0e-3f;
-
-  float heading = mpose.pose[3]*1.0e-4f;
-  math::Quaternion mq;
-  mq.from_yaw(heading);
-
-#if 0
-  // Hack to address NuttX printf issue re: handling of float/double
-  char buf[128];
-  sprintf(buf, "position = %0.5f, %0.5f, %0.5f, heading = %0.5f",
-          (double)att_pos_mocap.x, (double)att_pos_mocap.y,
-          (double)att_pos_mocap.z, (double)heading);
-  printf("%s\n", buf);
-#endif
-
-  att_pos_mocap.q[0] = mq(0);
-  att_pos_mocap.q[1] = mq(1);
-  att_pos_mocap.q[2] = mq(2);
-  att_pos_mocap.q[3] = mq(3);
-
-  int inst; // Not used
-  orb_publish_auto(ORB_ID(att_pos_mocap), &att_pos_mocap_pub,
-                   &att_pos_mocap, &inst, ORB_PRIO_HIGH);
+  pack_publish_mocap(msg->compid, mpose.time_usec, x, y, z, heading);
 }
 
 void CMUMavlinkHandler::handle_message_mocap_position_cmd(const mavlink_message_t *msg)
@@ -354,4 +315,63 @@ void CMUMavlinkHandler::handle_message_mocap_position_cmd_gains(const mavlink_me
   orb_publish_auto(ORB_ID(mocap_position_command_gains),
                    &mocap_position_command_gains_pub,
                    &mcmd_gains, &inst, ORB_PRIO_HIGH);
+}
+
+void CMUMavlinkHandler::pack_publish_mocap(uint32_t id, uint64_t time,
+                                           float x, float y, float z, float heading)
+{
+  struct att_pos_mocap_s att_pos_mocap;
+  memset(&att_pos_mocap, 0, sizeof(att_pos_mocap));
+
+  // Use the component ID to identify the mocap system
+  att_pos_mocap.id = id;
+
+  // Temporary hack to deal with fact that time offset is sometimes set incorrectly
+#if 0
+  att_pos_mocap.timestamp = sync_stamp(time); // Synced time
+#else
+  att_pos_mocap.timestamp = hrt_absolute_time(); // Synced time
+#endif
+
+  att_pos_mocap.timestamp_received = att_pos_mocap.timestamp;
+
+  att_pos_mocap.x = x;
+  att_pos_mocap.y = y;
+  att_pos_mocap.z = z;
+
+  math::Quaternion mq;
+  mq.from_yaw(heading);
+
+  att_pos_mocap.q[0] = mq(0);
+  att_pos_mocap.q[1] = mq(1);
+  att_pos_mocap.q[2] = mq(2);
+  att_pos_mocap.q[3] = mq(3);
+
+#if 0
+  puts("pack_publish_mocap");
+  // Hack to address NuttX printf issue re: handling of float/double
+  char buf[128];
+  sprintf(buf, "position = %0.5f, %0.5f, %0.5f, heading = %0.5f",
+          (double)att_pos_mocap.x, (double)att_pos_mocap.y,
+          (double)att_pos_mocap.z, (double)heading);
+  printf("%s\n", buf);
+
+  static uint64_t t_last = 0;
+  uint64_t tnow = hrt_absolute_time();
+  uint64_t dt = tnow - t_last;
+  t_last = tnow;
+
+  float tn = tnow*1.0e-9f;
+  float ts = sync_stamp(time)*1.0e-9f;
+
+  sprintf(buf, "dt = %0.5f", (double)(dt*1.0e-6f));
+  printf("%s\n", buf);
+  sprintf(buf, "tn = %0.9f, offset = %llu, time = %llu, ts = %0.9f, err = %0.9f",
+          (double)tn, time_offset, time, (double)ts, (double)(tn-ts));
+  printf("%s\n", buf);
+#endif
+
+  int inst; // Not used
+  orb_publish_auto(ORB_ID(att_pos_mocap), &att_pos_mocap_pub,
+                   &att_pos_mocap, &inst, ORB_PRIO_HIGH);
 }
