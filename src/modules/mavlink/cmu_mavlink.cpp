@@ -75,6 +75,7 @@ void CMUMavlink::handle_message_cascaded_cmd(const mavlink_message_t *msg)
   cascaded_command.timestamp = mavlink_cascaded_cmd.time_usec;
 
   cascaded_command.thrust = mavlink_cascaded_cmd.thrust;
+  cascaded_command.current_yaw = mavlink_cascaded_cmd.current_yaw;
   math::Quaternion q(mavlink_cascaded_cmd.q);
   q.normalize();
 

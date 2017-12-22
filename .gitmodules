@@ -47,8 +47,8 @@
 	url = https://github.com/PX4/GpsDrivers.git
 [submodule "src/modules/mocap_control"]
 	path = src/modules/mocap_control
-	url = git@gitlab.rasl.ri.cmu.edu:nmichael/mocap_control.git
-  branch = feature/l1_att_refactor
+	url = git@gitlab.rislab.org:nmichael/mocap_control.git
+  branch = feature/mocap_yaw
 [submodule "src/modules/mocap_status_monitor"]
 	path = src/modules/mocap_status_monitor
-	url = git@gitlab.rasl.ri.cmu.edu:nmichael/mocap_status_monitor.git
+	url = git@gitlab.rislab.org:nmichael/mocap_status_monitor.git
