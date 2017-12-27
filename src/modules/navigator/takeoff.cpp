@@ -92,7 +92,8 @@ Takeoff::on_active()
 		// set loiter item so position controllers stop doing takeoff logic
 		set_loiter_item(&_mission_item);
 		struct position_setpoint_triplet_s *pos_sp_triplet = _navigator->get_position_setpoint_triplet();
-		mission_item_to_position_setpoint(&_mission_item, &pos_sp_triplet->current);
+		mission_apply_limitation(_mission_item);
+		mission_item_to_position_setpoint(_mission_item, &pos_sp_triplet->current);
 		_navigator->set_position_setpoint_triplet_updated();
 	}
 }
@@ -141,14 +142,14 @@ Takeoff::set_takeoff_position()
 
 	// set current mission item to takeoff
 	set_takeoff_item(&_mission_item, abs_altitude);
-	_navigator->get_mission_result()->reached = false;
 	_navigator->get_mission_result()->finished = false;
 	_navigator->set_mission_result_updated();
 	reset_mission_item_reached();
 
 	// convert mission item to current setpoint
 	struct position_setpoint_triplet_s *pos_sp_triplet = _navigator->get_position_setpoint_triplet();
-	mission_item_to_position_setpoint(&_mission_item, &pos_sp_triplet->current);
+	mission_apply_limitation(_mission_item);
+	mission_item_to_position_setpoint(_mission_item, &pos_sp_triplet->current);
 	pos_sp_triplet->previous.valid = false;
 	pos_sp_triplet->current.yaw_valid = true;
 	pos_sp_triplet->next.valid = false;

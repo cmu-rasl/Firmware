@@ -73,7 +73,7 @@
 
 extern "C" __EXPORT int camera_trigger_main(int argc, char *argv[]);
 
-typedef enum : uint8_t {
+typedef enum : int32_t {
 	CAMERA_INTERFACE_MODE_NONE = 0,
 	CAMERA_INTERFACE_MODE_GPIO,
 	CAMERA_INTERFACE_MODE_SEAGULL_MAP2_PWM,
@@ -81,7 +81,7 @@ typedef enum : uint8_t {
 	CAMERA_INTERFACE_MODE_GENERIC_PWM
 } camera_interface_mode_t;
 
-typedef enum : uint8_t {
+typedef enum : int32_t {
 	TRIGGER_MODE_NONE = 0,
 	TRIGGER_MODE_INTERVAL_ON_CMD,
 	TRIGGER_MODE_INTERVAL_ALWAYS_ON,
@@ -273,8 +273,8 @@ CameraTrigger::CameraTrigger() :
 	param_get(_p_activation_time, &_activation_time);
 	param_get(_p_interval, &_interval);
 	param_get(_p_distance, &_distance);
-	param_get(_p_mode, &_trigger_mode);
-	param_get(_p_interface, &_camera_interface_mode);
+	param_get(_p_mode, (int32_t *)&_trigger_mode);
+	param_get(_p_interface, (int32_t *)&_camera_interface_mode);
 
 	switch (_camera_interface_mode) {
 #ifdef __PX4_NUTTX
@@ -483,10 +483,17 @@ CameraTrigger::stop()
 void
 CameraTrigger::test()
 {
-	struct vehicle_command_s cmd = {};
-	cmd.timestamp = hrt_absolute_time(),
-	    cmd.param5 = 1.0f;
-	cmd.command = vehicle_command_s::VEHICLE_CMD_DO_DIGICAM_CONTROL;
+	struct vehicle_command_s cmd = {
+		.timestamp = hrt_absolute_time(),
+		.param5 = 1.0f,
+		.param6 = 0.0f,
+		.param1 = 0.0f,
+		.param2 = 0.0f,
+		.param3 = 0.0f,
+		.param4 = 0.0f,
+		.param7 = 0.0f,
+		.command = vehicle_command_s::VEHICLE_CMD_DO_DIGICAM_CONTROL
+	};
 
 	orb_advert_t pub = orb_advertise_queue(ORB_ID(vehicle_command), &cmd, vehicle_command_s::ORB_QUEUE_LENGTH);
 	(void)orb_unadvertise(pub);
@@ -717,8 +724,13 @@ CameraTrigger::cycle_trampoline(void *arg)
 	if (updated && need_ack) {
 		vehicle_command_ack_s command_ack = {
 			.timestamp = 0,
+			.result_param2 = 0,
 			.command = cmd.command,
-			.result = (uint8_t)cmd_result
+			.result = (uint8_t)cmd_result,
+			.from_external = false,
+			.result_param1 = 0,
+			.target_system = cmd.source_system,
+			.target_component = cmd.source_component
 		};
 
 		if (trig->_cmd_ack_pub == nullptr) {

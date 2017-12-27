@@ -1,6 +1,6 @@
 /***************************************************************************
  *
- *   Copyright (c) 2013-2014 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2013-2017 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -41,13 +41,6 @@
 #ifndef NAVIGATOR_RTL_H
 #define NAVIGATOR_RTL_H
 
-#include <controllib/blocks.hpp>
-#include <controllib/block/BlockParam.hpp>
-
-#include <navigator/navigation.h>
-#include <uORB/topics/home_position.h>
-#include <uORB/topics/vehicle_global_position.h>
-
 #include "navigator_mode.h"
 #include "mission_block.h"
 
@@ -63,6 +56,8 @@ public:
 	void on_activation() override;
 	void on_active() override;
 
+	void set_return_alt_min(bool min);
+
 private:
 	/**
 	 * Set the RTL item
@@ -73,12 +68,6 @@ private:
 	 * Move to next RTL item
 	 */
 	void		advance_rtl();
-
-	/**
-	 * Get RTL altitude
-	 */
-	float 		get_rtl_altitude();
-
 
 	enum RTLState {
 		RTL_STATE_NONE = 0,
@@ -91,8 +80,9 @@ private:
 		RTL_STATE_LANDED,
 	} _rtl_state{RTL_STATE_NONE};
 
+	bool _rtl_alt_min{false};
+
 	control::BlockParamFloat _param_return_alt;
-	control::BlockParamFloat _param_min_loiter_alt;
 	control::BlockParamFloat _param_descend_alt;
 	control::BlockParamFloat _param_land_delay;
 	control::BlockParamFloat _param_rtl_min_dist;

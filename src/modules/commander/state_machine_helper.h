@@ -67,6 +67,13 @@ enum class link_loss_actions_t {
     LOCKDOWN = 6,
 };
 
+typedef enum {
+	ARM_REQ_NONE = 0,
+	ARM_REQ_MISSION_BIT = (1 << 0),
+	ARM_REQ_ARM_AUTH_BIT = (1 << 1),
+	ARM_REQ_GPS_BIT = (1 << 2),
+} arm_requirements_t;
+
 // This is a struct used by the commander internally.
 struct status_flags_s {
     bool condition_calibration_enabled;
@@ -96,15 +103,9 @@ struct status_flags_s {
     bool offboard_control_set_by_command;                // true if the offboard mode was set by a mavlink command and should not be overridden by RC
     bool offboard_control_loss_timeout;                // true if offboard is lost for a certain amount of time
     bool rc_signal_found_once;
-    bool rc_signal_lost_cmd;                        // true if RC lost mode is commanded
     bool rc_input_blocked;                                // set if RC input should be ignored temporarily
-    bool data_link_lost_cmd;                        // datalink to GCS lost mode commanded
     bool vtol_transition_failure;                        // Set to true if vtol transition failed
-    bool vtol_transition_failure_cmd;                // Set to true if vtol transition failure mode is commanded
     bool gps_failure;                                // Set to true if a gps failure is detected
-    bool gps_failure_cmd;                                // Set to true if a gps failure mode is commanded
-    bool barometer_failure;                                // Set to true if a barometer failure is detected
-    bool ever_had_barometer_data;                        // Set to true if ever had valid barometer data before
 };
 
 bool is_safe(const struct safety_s *safety, const struct actuator_armed_s *armed);
@@ -118,8 +119,7 @@ transition_result_t arming_state_transition(struct vehicle_status_s *status,
 					    orb_advert_t *mavlink_log_pub,        ///< uORB handle for mavlink log
 					    status_flags_s *status_flags,
 					    float avionics_power_rail_voltage,
-					    bool arm_without_gps,
-					    bool arm_mission_required,
+					    uint8_t arm_requirements,
 					    hrt_abstime time_since_boot);
 
 transition_result_t
@@ -164,6 +164,6 @@ void set_data_link_loss_nav_state(vehicle_status_s *status, actuator_armed_s *ar
 
 int preflight_check(struct vehicle_status_s *status, orb_advert_t *mavlink_log_pub, bool prearm,
 		    bool force_report, status_flags_s *status_flags, battery_status_s *battery,
-		    bool arm_without_gps, bool arm_mission_required, hrt_abstime time_since_boot);
+		    uint8_t arm_requirements, hrt_abstime time_since_boot);
 
 #endif /* STATE_MACHINE_HELPER_H_ */

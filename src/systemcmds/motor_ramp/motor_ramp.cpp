@@ -58,6 +58,7 @@
 
 #include "systemlib/systemlib.h"
 #include "systemlib/err.h"
+#include "uORB/topics/actuator_controls.h"
 
 enum RampState {
 	RAMP_INIT,
@@ -210,9 +211,6 @@ int motor_ramp_main(int argc, char *argv[])
 					      motor_ramp_thread_main,
 					      (argv) ? (char *const *)&argv[2] : (char *const *)nullptr);
 	return 0;
-
-	usage("unrecognized command");
-	return 1;
 }
 
 bool min_pwm_valid(unsigned pwm_value)

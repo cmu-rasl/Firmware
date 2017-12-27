@@ -65,8 +65,8 @@ struct spi_calibration_s {
 class BMP280_SPI: public device::SPI, public bmp280::IBMP280
 {
 public:
-	BMP280_SPI(uint8_t bus, spi_dev_e device, bool external);
-	~BMP280_SPI();
+	BMP280_SPI(uint8_t bus, uint32_t device, bool external);
+	virtual ~BMP280_SPI() = default;
 
 	bool is_external();
 	int init();
@@ -84,20 +84,14 @@ private:
 
 bmp280::IBMP280 *bmp280_spi_interface(uint8_t busnum, uint8_t device, bool external)
 {
-	return new BMP280_SPI(busnum, (spi_dev_e)device, external);
+	return new BMP280_SPI(busnum, device, external);
 }
 
-BMP280_SPI::BMP280_SPI(uint8_t bus, spi_dev_e device, bool external) :
+BMP280_SPI::BMP280_SPI(uint8_t bus, uint32_t device, bool external) :
 	SPI("BMP280_SPI", nullptr, bus, device, SPIDEV_MODE3, 10 * 1000 * 1000)
 {
 	_external = external;
 }
-
-
-BMP280_SPI::~BMP280_SPI()
-{
-}
-
 
 bool BMP280_SPI::is_external()
 {
@@ -133,8 +127,6 @@ bmp280::data_s *BMP280_SPI::get_data(uint8_t addr)
 	} else {
 		return nullptr;
 	}
-
-
 }
 
 bmp280::calibration_s *BMP280_SPI::get_calibration(uint8_t addr)
@@ -148,7 +140,5 @@ bmp280::calibration_s *BMP280_SPI::get_calibration(uint8_t addr)
 		return nullptr;
 	}
 }
-
-
 
 #endif /* PX4_SPIDEV_BARO || PX4_SPIDEV_EXT_BARO */

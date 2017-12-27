@@ -54,8 +54,11 @@
  ****************************************************************************************************/
 /* Configuration ************************************************************************************/
 
-/* Un-comment to support some RC00 polarities for test HW */
+/* Un-comment to support some RC00 polarities inversions
+ * on test HW as well as R and G LEDs on UI LED are swapped
+ */
 //#define PX4_FMUV5_RC00
+
 #define PX4_FMUV5_RC01
 #define BOARD_HAS_LTC4417
 
@@ -169,10 +172,10 @@
 /* ^ END Legacy SPI defines TODO: fix this with enumeration */
 
 
-#define PX4_SPIDEV_ICM_20689    PX4_MK_SPI_SEL(PX4_SPI_BUS_SENSORS,0)
-#define PX4_SPIDEV_ICM_20602    PX4_MK_SPI_SEL(PX4_SPI_BUS_SENSORS,1)
-#define PX4_SPIDEV_BMI055_GYR   PX4_MK_SPI_SEL(PX4_SPI_BUS_SENSORS,2)
-#define PX4_SPIDEV_BMI055_ACC   PX4_MK_SPI_SEL(PX4_SPI_BUS_SENSORS,3)
+#define PX4_SPIDEV_ICM_20689      PX4_MK_SPI_SEL(PX4_SPI_BUS_SENSORS,0)
+#define PX4_SPIDEV_ICM_20602      PX4_MK_SPI_SEL(PX4_SPI_BUS_SENSORS,1)
+#define PX4_SPIDEV_BMI055_GYR     PX4_MK_SPI_SEL(PX4_SPI_BUS_SENSORS,2)
+#define PX4_SPIDEV_BMI055_ACC     PX4_MK_SPI_SEL(PX4_SPI_BUS_SENSORS,3)
 
 #define PX4_SENSOR_BUS_CS_GPIO    {GPIO_SPI1_CS1_ICM20689, GPIO_SPI1_CS2_ICM20602, GPIO_SPI1_CS3_BMI055_GYRO, GPIO_SPI1_CS4_BMI055_ACC}
 #define PX4_SENSORS_BUS_FIRST_CS  PX4_SPIDEV_ICM_20689
@@ -209,9 +212,10 @@
 
 #define PX4_I2C_BUS_EXPANSION	1
 #define PX4_I2C_BUS_EXPANSION1	2
-#define PX4_I2C_BUS_EXPANSION2	4
-#define PX4_I2C_BUS_EXPANSION3	3
+#define PX4_I2C_BUS_EXPANSION2	3
+#define PX4_I2C_BUS_EXPANSION3	4
 #define PX4_I2C_BUS_LED			PX4_I2C_BUS_EXPANSION
+#define PX4_I2C_BUS_ONBOARD	PX4_I2C_BUS_EXPANSION2
 
 #define BOARD_NUMBER_I2C_BUSES  4
 #define BOARD_I2C_BUS_CLOCK_INIT {100000, 100000, 100000, 100000}
@@ -259,7 +263,7 @@
 #define ADC_BATTERY2_VOLTAGE_CHANNEL        /* PA2 */  ADC1_CH(2)
 #define ADC_BATTERY2_CURRENT_CHANNEL        /* PA3 */  ADC1_CH(3)
 #define ADC1_SPARE_2_CHANNEL                /* PA4 */  ADC1_CH(4)
-#define ADC_RSSI_IN_CHANNEL                 /* PB8 */  ADC1_CH(8)
+#define ADC_RSSI_IN_CHANNEL                 /* PB0 */  ADC1_CH(8)
 #define ADC_SCALED_V5_CHANNEL               /* PC0 */  ADC1_CH(10)
 #define ADC_SCALED_VDD_3V3_SENSORS_CHANNEL  /* PC1 */  ADC1_CH(11)
 #define ADC_HW_VER_SENSE_CHANNEL            /* PC2 */  ADC1_CH(12)
@@ -302,11 +306,21 @@
 	 (1 << ADC1_SPARE_1_CHANNEL))
 #endif
 
+/* HW has to large of R termination on ADC todo:change when HW value is chosen */
+
+#define BOARD_ADC_OPEN_CIRCUIT_V               (5.6f)
+
 /* HW Version and Revision drive signals Default to 1 to detect */
 
-#define GPIO_HW_REV_DRIVE    /* PH14  */ (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTH|GPIO_PIN14)
-#define GPIO_HW_VER_DRIVE    /* PG0   */ (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTG|GPIO_PIN0)
+#define BOARD_HAS_HW_VERSIONING
 
+#define GPIO_HW_REV_DRIVE    /* PH14  */ (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTH|GPIO_PIN14)
+#define GPIO_HW_REV_SENSE    /* PC3   */ ADC1_GPIO(13)
+#define GPIO_HW_VER_DRIVE    /* PG0   */ (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTG|GPIO_PIN0)
+#define GPIO_HW_VER_SENSE    /* PC2   */ ADC1_GPIO(12)
+#define HW_INFO_INIT {'V','5','x', 'x',0}
+#define HW_INFO_INIT_REV       2
+#define HW_INFO_INIT_VER            3
 /* CAN Silence
  *
  * Silent mode control \ ESC Mux select
@@ -375,19 +389,22 @@
 
 #define DIRECT_INPUT_TIMER_CHANNELS  8
 
-#define BOARD_HAS_LED_PWM
+#define BOARD_HAS_LED_PWM              1
 #define BOARD_LED_PWM_DRIVE_ACTIVE_LOW 1
 
 #define LED_TIM3_CH1OUT   /* PC6   T3C1  GREEN */ GPIO_TIM3_CH1OUT_3
 #define LED_TIM3_CH2OUT   /* PC7   T3C2  BLUE  */ GPIO_TIM3_CH2OUT_3
 #define LED_TIM3_CH4OUT   /* PB1   T3C4  RED   */ GPIO_TIM3_CH4OUT_1
 
-#define BOARD_HAS_UILED_PWM
-#undef BOARD_UILED_PWM_DRIVE_ACTIVE_LOW
-
-#define UILED_TIM5_CH1OUT /* PH10  T5C1  RED   */ GPIO_TIM5_CH1OUT_2
-#define UILED_TIM5_CH2OUT /* PH11  T5C2  GREEN */ GPIO_TIM5_CH2OUT_2
-#define UILED_TIM5_CH3OUT /* PH12  T5C3  BLUE  */ GPIO_TIM5_CH3OUT_2
+#define BOARD_HAS_UI_LED_PWM            1
+#if defined(PX4_FMUV5_RC00)
+# define BOARD_UI_LED_SWAP_RG           1
+#else
+#  define BOARD_UI_LED_PWM_DRIVE_ACTIVE_LOW 1
+#endif
+#define UI_LED_TIM5_CH1OUT /* PH10  T5C1  RED   */ GPIO_TIM5_CH1OUT_2
+#define UI_LED_TIM5_CH2OUT /* PH11  T5C2  GREEN */ GPIO_TIM5_CH2OUT_2
+#define UI_LED_TIM5_CH3OUT /* PH12  T5C3  BLUE  */ GPIO_TIM5_CH3OUT_2
 
 
 /* User GPIOs

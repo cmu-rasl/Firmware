@@ -32,10 +32,10 @@
 using namespace matrix;
 using namespace control;
 
-static const float DELAY_MAX = 0.5f; // seconds
-static const float HIST_STEP = 0.05f; // 20 hz
+static const float DELAY_MAX = 0.5f;	// seconds
+static const float HIST_STEP = 0.05f;	// 20 hz
 static const float BIAS_MAX = 1e-1f;
-static const size_t HIST_LEN = 10; // DELAY_MAX / HIST_STEP;
+static const size_t HIST_LEN = 10;	// DELAY_MAX / HIST_STEP;
 static const size_t N_DIST_SUBS = 4;
 
 // for fault detection
@@ -73,31 +73,31 @@ class BlockLocalPositionEstimator : public control::SuperBlock
 //
 //
 // input:
-// 	ax, ay, az (acceleration NED)
+//      ax, ay, az (acceleration NED)
 //
 // states:
-// 	px, py, pz , ( position NED, m)
-// 	vx, vy, vz ( vel NED, m/s),
-// 	bx, by, bz ( accel bias, m/s^2)
-// 	tz (terrain altitude, ASL, m)
+//      px, py, pz , ( position NED, m)
+//      vx, vy, vz ( vel NED, m/s),
+//      bx, by, bz ( accel bias, m/s^2)
+//      tz (terrain altitude, ASL, m)
 //
 // measurements:
 //
-// 	sonar: pz (measured d*cos(phi)*cos(theta))
+//      sonar: pz (measured d*cos(phi)*cos(theta))
 //
-// 	baro: pz
+//      baro: pz
 //
-// 	flow: vx, vy (flow is in body x, y frame)
+//      flow: vx, vy (flow is in body x, y frame)
 //
-// 	gps: px, py, pz, vx, vy, vz (flow is in body x, y frame)
+//      gps: px, py, pz, vx, vy, vz (flow is in body x, y frame)
 //
-// 	lidar: pz (actual measured d*cos(phi)*cos(theta))
+//      lidar: pz (actual measured d*cos(phi)*cos(theta))
 //
-// 	vision: px, py, pz, vx, vy, vz
+//      vision: px, py, pz, vx, vy, vz
 //
-// 	mocap: px, py, pz
+//      mocap: px, py, pz
 //
-// 	land (detects when landed)): pz (always measures agl = 0)
+//      land (detects when landed)): pz (always measures agl = 0)
 //
 public:
 
@@ -122,6 +122,7 @@ public:
 		FUSE_PUB_AGL_Z = 1 << 5,
 		FUSE_FLOW_GYRO_COMP = 1 << 6,
 		FUSE_BARO = 1 << 7,
+		FUSE_LAND_TARGET = 1 << 8
 	};
 
 	enum sensor_t {
@@ -133,6 +134,7 @@ public:
 		SENSOR_VISION = 1 << 5,
 		SENSOR_MOCAP = 1 << 6,
 		SENSOR_LAND = 1 << 7,
+		SENSOR_LAND_TARGET = 1 << 8,
 	};
 
 	enum estimate_t {
@@ -218,7 +220,10 @@ private:
 	void checkTimeouts();
 
 	// misc
-	inline float agl() { return _x(X_tz) - _x(X_z); }
+	inline float agl()
+	{
+		return _x(X_tz) - _x(X_z);
+	}
 	bool landed();
 	int getDelayPeriods(float delay, uint8_t *periods);
 
@@ -237,7 +242,6 @@ private:
 	uORB::Subscription<optical_flow_s> _sub_flow;
 	uORB::Subscription<sensor_combined_s> _sub_sensor;
 	uORB::Subscription<parameter_update_s> _sub_param_update;
-	uORB::Subscription<manual_control_setpoint_s> _sub_manual;
 	uORB::Subscription<vehicle_gps_position_s> _sub_gps;
 	uORB::Subscription<vehicle_local_position_s> _sub_vision_pos;
 	uORB::Subscription<att_pos_mocap_s> _sub_mocap;
@@ -316,7 +320,7 @@ private:
 	BlockParamFloat  _t_max_grade;
 
 	// init origin
-	BlockParamInt  	 _fake_origin;
+	BlockParamInt    _fake_origin;
 	BlockParamFloat  _init_origin_lat;
 	BlockParamFloat  _init_origin_lon;
 
@@ -361,6 +365,7 @@ private:
 	// reference altitudes
 	float _altOrigin;
 	bool _altOriginInitialized;
+	bool _altOriginGlobal; // true when the altitude of the origin is defined wrt a global reference frame
 	float _baroAltOrigin;
 	float _gpsAltOrigin;
 
@@ -369,20 +374,20 @@ private:
 	bool _lastArmedState;
 
 	// masks
-	uint8_t _sensorTimeout;
-	uint8_t _sensorFault;
+	uint16_t _sensorTimeout;
+	uint16_t _sensorFault;
 	uint8_t _estimatorInitialized;
 
 	// state space
-	Vector<float, n_x>  _x; // state vector
-	Vector<float, n_u>  _u; // input vector
-	Matrix<float, n_x, n_x>  _P; // state covariance matrix
+	Vector<float, n_x>  _x;	// state vector
+	Vector<float, n_u>  _u;	// input vector
+	Matrix<float, n_x, n_x>  _P;	// state covariance matrix
 
 	matrix::Dcm<float> _R_att;
 	Vector3f _eul;
 
-	Matrix<float, n_x, n_x>  _A; // dynamics matrix
-	Matrix<float, n_x, n_u>  _B; // input matrix
-	Matrix<float, n_u, n_u>  _R; // input covariance
-	Matrix<float, n_x, n_x>  _Q; // process noise covariance
+	Matrix<float, n_x, n_x>  _A;	// dynamics matrix
+	Matrix<float, n_x, n_u>  _B;	// input matrix
+	Matrix<float, n_u, n_u>  _R;	// input covariance
+	Matrix<float, n_x, n_x>  _Q;	// process noise covariance
 };

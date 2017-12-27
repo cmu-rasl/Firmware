@@ -404,10 +404,11 @@ int GPS::pollOrRead(uint8_t *buf, size_t buf_length, int timeout)
 			 * If more bytes are available, we'll go back to poll() again.
 			 */
 #ifdef __PX4_NUTTX
-			int err = 0, bytesAvailable = 0;
+			int err = 0;
+			int bytesAvailable = 0;
 			err = ioctl(_serial_fd, FIONREAD, (unsigned long)&bytesAvailable);
 
-			if ((err != 0) || (bytesAvailable < buf_length)) {
+			if ((err != 0) || (bytesAvailable < (int)buf_length)) {
 				usleep(GPS_WAIT_BEFORE_READ * 1000);
 			}
 
@@ -768,7 +769,6 @@ GPS::run()
 				}
 
 				if (_healthy) {
-					PX4_WARN("GPS module lost");
 					_healthy = false;
 					_rate = 0.0f;
 					_rate_rtcm_injection = 0.0f;

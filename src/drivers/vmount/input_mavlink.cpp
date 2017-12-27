@@ -41,7 +41,6 @@
 #include "input_mavlink.h"
 #include <uORB/uORB.h>
 #include <uORB/topics/vehicle_roi.h>
-#include <uORB/topics/vehicle_command.h>
 #include <uORB/topics/vehicle_command_ack.h>
 #include <uORB/topics/position_setpoint_triplet.h>
 #include <drivers/drv_hrt.h>
@@ -50,14 +49,8 @@
 #include <px4_posix.h>
 #include <errno.h>
 
-
 namespace vmount
 {
-
-
-InputMavlinkROI::InputMavlinkROI()
-{
-}
 
 InputMavlinkROI::~InputMavlinkROI()
 {
@@ -117,27 +110,27 @@ int InputMavlinkROI::update_impl(unsigned int timeout_ms, ControlData **control_
 
 			_control_data.gimbal_shutter_retract = false;
 
-			if (vehicle_roi.mode == vehicle_roi_s::VEHICLE_ROI_NONE) {
+			if (vehicle_roi.mode == vehicle_roi_s::ROI_NONE) {
 
 				_control_data.type = ControlData::Type::Neutral;
 				*control_data = &_control_data;
 
-			} else if (vehicle_roi.mode == vehicle_roi_s::VEHICLE_ROI_WPNEXT) {
+			} else if (vehicle_roi.mode == vehicle_roi_s::ROI_WPNEXT) {
 				_read_control_data_from_position_setpoint_sub();
 				_control_data.type_data.lonlat.roll_angle = 0.f;
 				_control_data.type_data.lonlat.pitch_fixed_angle = -10.f;
 
 				*control_data = &_control_data;
 
-			} else if (vehicle_roi.mode == vehicle_roi_s::VEHICLE_ROI_WPINDEX) {
+			} else if (vehicle_roi.mode == vehicle_roi_s::ROI_WPINDEX) {
 				//TODO how to do this?
 
-			} else if (vehicle_roi.mode == vehicle_roi_s::VEHICLE_ROI_LOCATION) {
+			} else if (vehicle_roi.mode == vehicle_roi_s::ROI_LOCATION) {
 				control_data_set_lon_lat(vehicle_roi.lon, vehicle_roi.lat, vehicle_roi.alt);
 
 				*control_data = &_control_data;
 
-			} else if (vehicle_roi.mode == vehicle_roi_s::VEHICLE_ROI_TARGET) {
+			} else if (vehicle_roi.mode == vehicle_roi_s::ROI_TARGET) {
 				//TODO is this even suported?
 			}
 
@@ -150,9 +143,15 @@ int InputMavlinkROI::update_impl(unsigned int timeout_ms, ControlData **control_
 		}
 
 		// check whether the position setpoint got updated
-		if ((polls[1].revents & POLLIN) && _cur_roi_mode == vehicle_roi_s::VEHICLE_ROI_WPNEXT) {
-			_read_control_data_from_position_setpoint_sub();
-			*control_data = &_control_data;
+		if (polls[1].revents & POLLIN) {
+			if (_cur_roi_mode == vehicle_roi_s::ROI_WPNEXT) {
+				_read_control_data_from_position_setpoint_sub();
+				*control_data = &_control_data;
+
+			} else { // must do an orb_copy() in *every* case
+				position_setpoint_triplet_s position_setpoint_triplet;
+				orb_copy(ORB_ID(position_setpoint_triplet), _position_setpoint_triplet_sub, &position_setpoint_triplet);
+			}
 		}
 	}
 
@@ -174,23 +173,18 @@ void InputMavlinkROI::print_status()
 }
 
 
-InputMavlinkCmdMount::InputMavlinkCmdMount()
+InputMavlinkCmdMount::InputMavlinkCmdMount(bool stabilize)
+	: _stabilize {stabilize, stabilize, stabilize}
 {
 	param_t handle = param_find("MAV_SYS_ID");
 
-	if (handle == PARAM_INVALID) {
-		_mav_sys_id = 1;
-
-	} else {
+	if (handle != PARAM_INVALID) {
 		param_get(handle, &_mav_sys_id);
 	}
 
 	handle = param_find("MAV_COMP_ID");
 
-	if (handle == PARAM_INVALID) {
-		_mav_comp_id = 1;
-
-	} else {
+	if (handle != PARAM_INVALID) {
 		param_get(handle, &_mav_comp_id);
 	}
 }
@@ -273,6 +267,11 @@ int InputMavlinkCmdMount::update_impl(unsigned int timeout_ms, ControlData **con
 					// both specs have yaw on channel 2
 					_control_data.type_data.angle.angles[2] = vehicle_command.param3 * M_DEG_TO_RAD_F;
 
+					// We expect angle of [-pi..+pi]. If the input range is [0..2pi] we can fix that.
+					if (_control_data.type_data.angle.angles[2] > M_PI_F) {
+						_control_data.type_data.angle.angles[2] -= 2 * M_PI_F;
+					}
+
 					*control_data = &_control_data;
 					break;
 
@@ -286,7 +285,7 @@ int InputMavlinkCmdMount::update_impl(unsigned int timeout_ms, ControlData **con
 					break;
 				}
 
-				_ack_vehicle_command(vehicle_command.command);
+				_ack_vehicle_command(&vehicle_command);
 
 			} else if (vehicle_command.command == vehicle_command_s::VEHICLE_CMD_DO_MOUNT_CONFIGURE) {
 				_stabilize[0] = (uint8_t) vehicle_command.param2 == 1;
@@ -295,7 +294,7 @@ int InputMavlinkCmdMount::update_impl(unsigned int timeout_ms, ControlData **con
 				_control_data.type = ControlData::Type::Neutral; //always switch to neutral position
 
 				*control_data = &_control_data;
-				_ack_vehicle_command(vehicle_command.command);
+				_ack_vehicle_command(&vehicle_command);
 			}
 		}
 
@@ -304,12 +303,17 @@ int InputMavlinkCmdMount::update_impl(unsigned int timeout_ms, ControlData **con
 	return 0;
 }
 
-void InputMavlinkCmdMount::_ack_vehicle_command(uint16_t command)
+void InputMavlinkCmdMount::_ack_vehicle_command(vehicle_command_s *cmd)
 {
 	vehicle_command_ack_s vehicle_command_ack = {
 		.timestamp = hrt_absolute_time(),
-		.command = command,
-		.result = vehicle_command_s::VEHICLE_CMD_RESULT_ACCEPTED
+		.result_param2 = 0,
+		.command = cmd->command,
+		.result = vehicle_command_s::VEHICLE_CMD_RESULT_ACCEPTED,
+		.from_external = false,
+		.result_param1 = 0,
+		.target_system = cmd->source_system,
+		.target_component = cmd->source_component
 	};
 
 	if (_vehicle_command_ack_pub == nullptr) {

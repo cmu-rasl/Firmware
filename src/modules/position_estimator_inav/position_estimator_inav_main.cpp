@@ -59,6 +59,7 @@
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_global_position.h>
 #include <uORB/topics/vehicle_gps_position.h>
+#include <uORB/topics/vehicle_rates_setpoint.h>
 #include <uORB/topics/att_pos_mocap.h>
 #include <uORB/topics/optical_flow.h>
 #include <uORB/topics/distance_sensor.h>
@@ -378,8 +379,13 @@ int position_estimator_inav_thread_main(int argc, char *argv[])
 	int vehicle_gps_position_sub = orb_subscribe(ORB_ID(vehicle_gps_position));
 	int vision_position_sub = orb_subscribe(ORB_ID(vehicle_vision_position));
 	int att_pos_mocap_sub = orb_subscribe(ORB_ID(att_pos_mocap));
-	int distance_sensor_sub = orb_subscribe(ORB_ID(distance_sensor));
 	int vehicle_rate_sp_sub = orb_subscribe(ORB_ID(vehicle_rates_setpoint));
+	// because we can have several distance sensor instances with different orientations
+	int distance_sensor_subs[ORB_MULTI_MAX_INSTANCES];
+
+	for (unsigned i = 0; i < ORB_MULTI_MAX_INSTANCES; i++) {
+		distance_sensor_subs[i] = orb_subscribe_multi(ORB_ID(distance_sensor), i);
+	}
 
 	/* advertise */
 	orb_advert_t vehicle_local_position_pub = orb_advertise(ORB_ID(vehicle_local_position), &local_pos);
@@ -534,13 +540,24 @@ int position_estimator_inav_thread_main(int argc, char *argv[])
 			}
 
 
-			/* lidar alt estimation */
-			orb_check(distance_sensor_sub, &updated);
+			/* lidar alt estimation
+			 * update lidar separately, needed by terrain estimator */
+			for (unsigned i = 0; i < ORB_MULTI_MAX_INSTANCES; i++) {
 
-			/* update lidar separately, needed by terrain estimator */
-			if (updated) {
-				orb_copy(ORB_ID(distance_sensor), distance_sensor_sub, &lidar);
-				lidar.current_distance += params.lidar_calibration_offset;
+				orb_check(distance_sensor_subs[i], &updated);
+
+				if (updated) {
+
+					orb_copy(ORB_ID(distance_sensor), distance_sensor_subs[i], &lidar);
+
+					if (lidar.orientation != distance_sensor_s::ROTATION_DOWNWARD_FACING) {
+						updated = false;
+
+					} else {
+						lidar.current_distance += params.lidar_calibration_offset;
+						break; // only the first valid distance sensor instance is used
+					}
+				}
 			}
 
 			if (updated) { //check if altitude estimation for lidar is enabled and new sensor data
@@ -1361,7 +1378,6 @@ int position_estimator_inav_thread_main(int argc, char *argv[])
 			if (local_pos.xy_global && local_pos.z_global) {
 				/* publish global position */
 				global_pos.timestamp = t;
-				global_pos.time_utc_usec = gps.time_utc_usec;
 
 				double est_lat, est_lon;
 				map_projection_reproject(&ref, local_pos.x, local_pos.y, &est_lat, &est_lon);

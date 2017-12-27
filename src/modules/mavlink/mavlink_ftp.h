@@ -71,9 +71,10 @@ public:
 	///	@param worker_data Data to pass to worker
 	void set_unittest_worker(ReceiveMessageFunc_t rcvMsgFunc, void *worker_data);
 
-	/// @brief This is the payload which is in mavlink_file_transfer_protocol_t.payload. We pad the structure ourselves to
-	/// 32 bit alignment to avoid usage of any pack pragmas.
-	struct PayloadHeader {
+	/// @brief This is the payload which is in mavlink_file_transfer_protocol_t.payload.
+	/// This needs to be packed, because it's typecasted from mavlink_file_transfer_protocol_t.payload, which starts
+	/// at a 3 byte offset, causing an unaligned access to seq_number and offset
+	struct __attribute__((__packed__)) PayloadHeader {
 		uint16_t	seq_number;	///< sequence number for message
 		uint8_t		session;	///< Session id for read and write commands
 		uint8_t		opcode;		///< Command opcode
@@ -117,7 +118,9 @@ public:
 		kErrInvalidSession,		///< Session is not currently open
 		kErrNoSessionsAvailable,	///< All available Sessions in use
 		kErrEOF,			///< Offset past end of file for List and Read commands
-		kErrUnknownCommand		///< Unknown command opcode
+		kErrUnknownCommand,		///< Unknown command opcode
+		kErrFailFileExists,		///< File exists already
+		kErrFailFileProtected		///< File is write protected
 	};
 
 	unsigned get_size();
@@ -195,6 +198,10 @@ private:
 	static constexpr const char _root_dir[] = PX4_ROOTFSDIR;
 #endif
 	static constexpr const int _root_dir_len = sizeof(_root_dir) - 1;
+
+	bool _last_reply_valid = false;
+	uint8_t _last_reply[MAVLINK_MSG_ID_FILE_TRANSFER_PROTOCOL_LEN - MAVLINK_MSG_FILE_TRANSFER_PROTOCOL_FIELD_PAYLOAD_LEN
+								      + sizeof(PayloadHeader) + sizeof(uint32_t)];
 
 	// Mavlink test needs to be able to call send
 	friend class MavlinkFtpTest;

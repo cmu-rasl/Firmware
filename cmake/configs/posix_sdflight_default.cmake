@@ -1,3 +1,6 @@
+include(common/px4_git)
+px4_add_git_submodule(TARGET git_cmake_hexagon PATH "cmake/cmake_hexagon")
+
 include(posix/px4_impl_posix)
 
 # Get $QC_SOC_TARGET from environment if existing.
@@ -30,10 +33,11 @@ set(CONFIG_SHMEM "1")
 set(config_module_list
 	drivers/device
 	drivers/blinkm
+	drivers/linux_sbus
 	drivers/pwm_out_sim
 	drivers/rgbled
 	drivers/led
-	drivers/boards/sitl
+	drivers/boards
 	drivers/qshell/posix
 
 	systemcmds/param
@@ -54,7 +58,6 @@ set(config_module_list
 
 	modules/systemlib/param
 	modules/systemlib
-	modules/systemlib/mixer
 	modules/uORB
 	modules/muorb/krait
 	modules/sensors
@@ -65,33 +68,22 @@ set(config_module_list
 	modules/commander
 	modules/navigator
 
-	# micro RTPS
-	modules/micrortps_bridge/micrortps_client
-
 	lib/controllib
-	lib/mathlib
-	lib/mathlib/math/filter
 	lib/conversion
+	lib/DriverFramework/framework
 	lib/ecl
 	lib/geo
 	lib/geo_lookup
 	lib/led
-	lib/terrain_estimation
+	lib/mathlib
+	lib/mathlib/math/filter
+	lib/mixer
 	lib/runway_takeoff
 	lib/tailsitter_recovery
+	lib/terrain_estimation
 	lib/version
-	lib/DriverFramework/framework
-	lib/micro-CDR
 
 	platforms/common
 	platforms/posix/px4_layer
 	platforms/posix/work_queue
 	)
-
-set(config_rtps_send_topics
-        sensor_baro
-        )
-
-set(config_rtps_receive_topics
-        sensor_combined
-        )

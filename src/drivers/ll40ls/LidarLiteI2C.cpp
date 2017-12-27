@@ -49,8 +49,9 @@
 #include <stdio.h>
 #include <drivers/drv_hrt.h>
 
-LidarLiteI2C::LidarLiteI2C(int bus, const char *path, int address) :
+LidarLiteI2C::LidarLiteI2C(int bus, const char *path, uint8_t rotation, int address) :
 	I2C("LL40LS", path, bus, address, 100000),
+	_rotation(rotation),
 	_work{},
 	_reports(nullptr),
 	_sensor_ok(false),
@@ -67,8 +68,7 @@ LidarLiteI2C::LidarLiteI2C(int bus, const char *path, int address) :
 	_acquire_time_usec(0),
 	_pause_measurements(false),
 	_hw_version(0),
-	_sw_version(0),
-	_bus(bus)
+	_sw_version(0)
 {
 	// up the retries since the device misses the first measure attempts
 	_retries = 3;
@@ -454,7 +454,7 @@ int LidarLiteI2C::collect()
 	report.covariance = 0.0f;
 	/* the sensor is in fact a laser + sonar but there is no enum for this */
 	report.type = distance_sensor_s::MAV_DISTANCE_SENSOR_LASER;
-	report.orientation = 8;
+	report.orientation = _rotation;
 	/* TODO: set proper ID */
 	report.id = 0;
 

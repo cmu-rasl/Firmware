@@ -13,7 +13,7 @@ set +e
 #
 # NOTE: COMMENT LINES ARE REMOVED BEFORE STORED IN ROMFS.
 #
-# UART mapping on FMUv1/2/3/4:
+# UART mapping on FMUv2/3/4:
 #
 # UART1			/dev/ttyS0		IO debug
 # USART2		/dev/ttyS1		TELEM1 (flow control)
@@ -41,9 +41,10 @@ mount -t procfs /proc
 #
 # Start CDC/ACM serial driver
 #
-if sercon
-then
-fi
+sercon
+
+# print full system version
+ver all
 
 #
 # Default to auto-start mode.
@@ -68,10 +69,10 @@ then
 			hardfault_log reset
 			tone_alarm stop
 		fi
-  else
-    # Start playing the startup tune
-    tone_alarm start
- fi
+	else
+		# Start playing the startup tune
+		tone_alarm start
+	fi
 else
 	tone_alarm MBAGP
 	if mkfatfs /dev/mmcsd0
@@ -140,10 +141,8 @@ then
 		fi
 	fi
 
-	# Currently unused, but might be useful down the road
-	#if pca8574 start
-	#then
-	#fi
+	# FMUv5 may have both PWM I2C RGB LED support
+	rgbled_pwm start
 
 	#
 	# Set AUTOCNF flag to use it in AUTOSTART scripts
@@ -170,7 +169,6 @@ then
 	#
 	# Set default values
 	#
-	set HIL no
 	set VEHICLE_TYPE none
 	set MIXER none
 	set MIXER_AUX none
@@ -193,66 +191,37 @@ then
 	set FMU_ARGS ""
 	set MAVLINK_F default
 	set MAVLINK_COMPANION_DEVICE /dev/ttyS2
-	set EXIT_ON_END no
 	set MAV_TYPE none
 	set FAILSAFE none
-	set USE_IO yes
+	set USE_IO no
 	set LOGGER_BUF 16
 
-	if param compare SYS_FMU_TASK 1
+	if ver hwcmp PX4FMU_V4
 	then
-		set FMU_ARGS "-t"
+		param set SYS_FMU_TASK 1
 	fi
 
-	if param compare SYS_HITL 1
+	if ver hwcmp PX4FMU_V4PRO
 	then
-		# Enable HITL mode
-		set HIL yes
+		param set SYS_FMU_TASK 1
 	fi
 
-	#
-	# Set USE_IO flag
-	#
-	if param compare SYS_USE_IO 1
+	if ver hwcmp PX4FMU_V5
 	then
-		if ver hwcmp PX4FMU_V4
-		then
-			set USE_IO no
-		fi
+		param set SYS_FMU_TASK 1
+		set MAVLINK_COMPANION_DEVICE /dev/ttyS3
 
-		if ver hwcmp PX4FMU_V5
-		then
-			set USE_IO no
-			set MAVLINK_COMPANION_DEVICE /dev/ttyS3
-		fi
+		set LOGGER_BUF 64
+		param set SDLOG_MODE 2
+	fi
 
-		if ver hwcmp MINDPX_V2
+	if ver hwcmp CRAZYFLIE
+	then
+		if param compare SYS_AUTOSTART 0
 		then
-			set USE_IO no
+			param set SYS_AUTOSTART 4900
+			set AUTOCNF yes
 		fi
-
-		if ver hwcmp CRAZYFLIE
-		then
-			set USE_IO no
-
-			if param compare SYS_AUTOSTART 0
-			then
-				param set SYS_AUTOSTART 4900
-				set AUTOCNF yes
-			fi
-		fi
-
-		if ver hwcmp AEROFC_V1
-		then
-			set USE_IO no
-		fi
-
-		if ver hwcmp AEROCORE2
-		then
-			set USE_IO no
-		fi
-	else
-		set USE_IO no
 	fi
 
 	if ver hwcmp AEROFC_V1
@@ -267,12 +236,30 @@ then
 		param set SYS_AUTOSTART 4070
 	fi
 
+	if ver hwcmp NXPHLITE_V3
+	then
+		param set SYS_FMU_TASK 1
+		set MAVLINK_COMPANION_DEVICE /dev/ttyS4
+	fi
+
+	#
+	# Set USE_IO flag
+	#
+	if param compare SYS_USE_IO 1
+	then
+		set USE_IO yes
+	fi
+
+	if param compare SYS_FMU_TASK 1
+	then
+		set FMU_ARGS "-t"
+	fi
+
 	#
 	# Set parameters and env variables for selected AUTOSTART
 	#
 	if param compare SYS_AUTOSTART 0
 	then
-		ekf2 start
 	else
 		sh /etc/init.d/rc.autostart
 	fi
@@ -289,23 +276,6 @@ then
 		then
 			set MIXER_AUX mount
 		fi
-	fi
-
-	#
-	# Wipe incompatible settings for boards not having two outputs
-	if ver hwcmp PX4FMU_V4
-	then
-		set MIXER_AUX none
-	fi
-
-	if ver hwcmp PX4FMU_V5
-	then
-		set MIXER_AUX none
-	fi
-
-	if ver hwcmp AEROFC_V1
-	then
-		set MIXER_AUX none
 	fi
 
 	#
@@ -343,46 +313,44 @@ then
 		if [ -f /etc/extras/px4io-v2.bin ]
 		then
 			set IO_FILE /etc/extras/px4io-v2.bin
-		else
-			set IO_FILE /etc/extras/px4io-v1.bin
-		fi
 
-		if px4io checkcrc ${IO_FILE}
-		then
-			echo "[init] PX4IO CRC OK" >> $LOG_FILE
-
-			set IO_PRESENT yes
-		else
-			tone_alarm MLL32CP8MB
-
-			if px4io start
+			if px4io checkcrc ${IO_FILE}
 			then
-				# try to safe px4 io so motor outputs dont go crazy
-				if px4io safety_on
+				echo "[init] PX4IO CRC OK" >> $LOG_FILE
+
+				set IO_PRESENT yes
+			else
+				tone_alarm MLL32CP8MB
+
+				if px4io start
 				then
-					# success! no-op
-				else
-					# px4io did not respond to the safety command
-					px4io stop
+					# try to safe px4 io so motor outputs dont go crazy
+					if px4io safety_on
+					then
+						# success! no-op
+					else
+						# px4io did not respond to the safety command
+						px4io stop
+					fi
 				fi
-			fi
 
-			if px4io forceupdate 14662 ${IO_FILE}
-			then
-				usleep 10000
-				if px4io checkcrc ${IO_FILE}
+				if px4io forceupdate 14662 ${IO_FILE}
 				then
-					echo "PX4IO CRC OK after updating" >> $LOG_FILE
-					tone_alarm MLL8CDE
+					usleep 10000
+					if px4io checkcrc ${IO_FILE}
+					then
+						echo "PX4IO CRC OK after updating" >> $LOG_FILE
+						tone_alarm MLL8CDE
 
-					set IO_PRESENT yes
+						set IO_PRESENT yes
+					else
+						echo "PX4IO update failed" >> $LOG_FILE
+						tone_alarm ${TUNE_ERR}
+					fi
 				else
 					echo "PX4IO update failed" >> $LOG_FILE
 					tone_alarm ${TUNE_ERR}
 				fi
-			else
-				echo "PX4IO update failed" >> $LOG_FILE
-				tone_alarm ${TUNE_ERR}
 			fi
 		fi
 		unset IO_FILE
@@ -411,33 +379,11 @@ then
 	then
 		# Need IO for output but it not present, disable output
 		set OUTPUT_MODE none
-
-		# Avoid using ttyS0 for MAVLink on FMUv1
-		if ver hwcmp PX4FMU_V1
-		then
-			set FMU_MODE serial
-		fi
-	fi
-
-	if [ $OUTPUT_MODE == ardrone ]
-	then
-		set FMU_MODE gpio_serial
 	fi
 
 	if [ $OUTPUT_MODE == tap_esc ]
 	then
 		set FMU_MODE rcin
-	fi
-
-	if [ $HIL == yes ]
-	then
-		set OUTPUT_MODE hil
-		if ver hwcmp PX4FMU_V1
-		then
-			set FMU_MODE serial
-		fi
-	else
-		gps start
 	fi
 
 	set DATAMAN_OPT ""
@@ -458,36 +404,25 @@ then
 
 	#
 	# Sensors System (start before Commander so Preflight checks are properly run)
-	#
-	if [ $HIL == yes ]
+	# commander Needs to be this early for in-air-restarts
+	if param compare SYS_HITL 1
 	then
+		set OUTPUT_MODE hil
 		sensors start -h
+		commander start --hil
 	else
+		if ver hwcmp PX4_SAME70XPLAINED_V1
+		then
+			gps start -d /dev/ttyS2
+		else
+			gps start
+		fi
 		sh /etc/init.d/rc.sensors
-	fi
-	unset HIL
-
-	# Needs to be this early for in-air-restarts
-	if [ $OUTPUT_MODE == hil ]
-	then
-	    commander start --hil
-	else
-	    commander start
+		commander start
 	fi
 
-	if send_event start
-	then
-	fi
-
-	#
-	# Start CPU load monitor
-	#
+	send_event start
 	load_mon start
-
-	#
-	# Start primary output
-	#
-	set TTYS1_BUSY no
 
 	#
 	# Check if UAVCAN is enabled, default to it for ESCs
@@ -545,25 +480,13 @@ then
 			fi
 		fi
 
-		if [ $OUTPUT_MODE == fmu -o $OUTPUT_MODE == ardrone ]
+		if [ $OUTPUT_MODE == fmu ]
 		then
 			if fmu mode_$FMU_MODE $FMU_ARGS
 			then
 			else
 				echo "FMU start failed" >> $LOG_FILE
 				tone_alarm $TUNE_ERR
-			fi
-
-			if ver hwcmp PX4FMU_V1
-			then
-				if [ $FMU_MODE == pwm -o $FMU_MODE == gpio ]
-				then
-					set TTYS1_BUSY yes
-				fi
-				if [ $FMU_MODE == pwm_gpio -o $OUTPUT_MODE == ardrone ]
-				then
-					set TTYS1_BUSY yes
-				fi
 			fi
 		fi
 
@@ -614,25 +537,13 @@ then
 				fi
 			fi
 		else
-			if [ $OUTPUT_MODE != fmu -a $OUTPUT_MODE != ardrone ]
+			if [ $OUTPUT_MODE != fmu ]
 			then
 				if fmu mode_${FMU_MODE} $FMU_ARGS
 				then
 				else
 					echo "FMU mode_${FMU_MODE} start failed" >> $LOG_FILE
 					tone_alarm $TUNE_ERR
-				fi
-
-				if ver hwcmp PX4FMU_V1
-				then
-					if [ $FMU_MODE == pwm -o $FMU_MODE == gpio ]
-					then
-						set TTYS1_BUSY yes
-					fi
-					if [ $FMU_MODE == pwm_gpio -o $OUTPUT_MODE == ardrone ]
-					then
-						set TTYS1_BUSY yes
-					fi
 				fi
 			fi
 		fi
@@ -641,27 +552,19 @@ then
 	if [ $MAVLINK_F == default ]
 	then
 		# Normal mode, use baudrate 57600 (default) and data rate 1000 bytes/s
-		if [ $TTYS1_BUSY == yes ]
+		set MAVLINK_F "-r 1200 -f"
+
+		# Avoid using ttyS1 for MAVLink on FMUv4
+		if ver hwcmp PX4FMU_V4
 		then
-			# Start MAVLink on ttyS0, because FMU ttyS1 pins configured as something else
-			set MAVLINK_F "-r 1200 -d /dev/ttyS0"
+			set MAVLINK_F "-r 1200 -d /dev/ttyS1"
+			# Start MAVLink on Wifi (ESP8266 port)
+			mavlink start -r 20000 -b 921600 -d /dev/ttyS0
+		fi
 
-			# Exit from nsh to free port for mavlink
-			set EXIT_ON_END yes
-		else
-			set MAVLINK_F "-r 1200 -f"
-			# Avoid using ttyS1 for MAVLink on FMUv4
-			if ver hwcmp PX4FMU_V4
-			then
-				set MAVLINK_F "-r 1200 -d /dev/ttyS1"
-				# Start MAVLink on Wifi (ESP8266 port)
-				mavlink start -r 20000 -m config -b 921600 -d /dev/ttyS0
-			fi
-
-			if ver hwcmp AEROFC_V1
-			then
-				set MAVLINK_F "-r 1200 -d /dev/ttyS3"
-			fi
+		if ver hwcmp AEROFC_V1
+		then
+			set MAVLINK_F "-r 1200 -d /dev/ttyS3"
 		fi
 
 		if ver hwcmp CRAZYFLIE
@@ -681,69 +584,76 @@ then
 	#
 	# MAVLink onboard / TELEM2
 	#
-	if ver hwcmp PX4FMU_V1
+	# XXX We need a better way for runtime eval of shell variables,
+	# but this works for now
+	if param compare SYS_COMPANION 10
 	then
-	else
-		# XXX We need a better way for runtime eval of shell variables,
-		# but this works for now
-		if param compare SYS_COMPANION 10
+		frsky_telemetry start -d ${MAVLINK_COMPANION_DEVICE}
+	fi
+	if param compare SYS_COMPANION 20
+	then
+		syslink start
+		mavlink start -d /dev/bridge0 -b 57600 -m osd -r 40000
+	fi
+	if param compare SYS_COMPANION 921600
+	then
+		if ver hwcmp AEROFC_V1
 		then
-			frsky_telemetry start -d ${MAVLINK_COMPANION_DEVICE}
-		fi
-		if param compare SYS_COMPANION 20
-		then
-			syslink start
-			mavlink start -d /dev/bridge0 -b 57600 -m osd -r 40000
-		fi
-		if param compare SYS_COMPANION 921600
-		then
+			if protocol_splitter start ${MAVLINK_COMPANION_DEVICE}
+			then
+				mavlink start -d /dev/mavlink -b 921600 -m onboard -r 5000 -x
+				micrortps_client start -d /dev/rtps -b 921600 -l -1 -s 2000
+			else
+				 mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 921600 -m onboard -r 80000 -x -f
+			fi
+		else
 			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 921600 -m onboard -r 80000 -x -f
 		fi
-		if param compare SYS_COMPANION 57600
-		then
-			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 57600 -m onboard -r 5000 -x -f
-		fi
-		if param compare SYS_COMPANION 460800
-		then
-			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 460800 -m onboard -r 5000 -x -f
-		fi
-		if param compare SYS_COMPANION 157600
-		then
-			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 57600 -m osd -r 1000
-		fi
-		if param compare SYS_COMPANION 257600
-		then
-			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 57600 -m magic -r 5000 -x -f
-		fi
-		if param compare SYS_COMPANION 319200
-		then
-			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 19200 -r 1000
-		fi
-		if param compare SYS_COMPANION 338400
-		then
-			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 38400 -r 1000
-		fi
-		if param compare SYS_COMPANION 357600
-		then
-			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 57600 -r 1000
-		fi
-		if param compare SYS_COMPANION 3115200
-		then
-			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 115200 -r 1000
-		fi
-		if param compare SYS_COMPANION 419200
-		then
-			iridiumsbd start -d /dev/ttyS2
-			mavlink start -d /dev/iridium -b 19200 -m iridium -r 10
-		fi
-		if param compare SYS_COMPANION 1921600
-		then
-			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 921600 -r 20000
-		fi
-		if param compare SYS_COMPANION 1500000
-		then
-			mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 1500000 -m onboard -r 10000 -x -f
-		fi
+	fi
+	if param compare SYS_COMPANION 57600
+	then
+		mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 57600 -m onboard -r 5000 -x -f
+	fi
+	if param compare SYS_COMPANION 460800
+	then
+		mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 460800 -m onboard -r 5000 -x -f
+	fi
+	if param compare SYS_COMPANION 157600
+	then
+		mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 57600 -m osd -r 1000
+	fi
+	if param compare SYS_COMPANION 257600
+	then
+		mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 57600 -m magic -r 5000 -x -f
+	fi
+	if param compare SYS_COMPANION 319200
+	then
+		mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 19200 -r 1000 -f
+	fi
+	if param compare SYS_COMPANION 338400
+	then
+		mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 38400 -r 1000 -f
+	fi
+	if param compare SYS_COMPANION 357600
+	then
+		mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 57600 -r 1000 -f
+	fi
+	if param compare SYS_COMPANION 3115200
+	then
+		mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 115200 -r 1000 -f
+	fi
+	if param compare SYS_COMPANION 419200
+	then
+		iridiumsbd start -d /dev/ttyS2
+		mavlink start -d /dev/iridium -b 19200 -m iridium -r 10
+	fi
+	if param compare SYS_COMPANION 1921600
+	then
+		mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 921600 -r 20000
+	fi
+	if param compare SYS_COMPANION 1500000
+	then
+		mavlink start -d ${MAVLINK_COMPANION_DEVICE} -b 1500000 -m onboard -r 10000 -x -f
 	fi
 
 	unset MAVLINK_COMPANION_DEVICE
@@ -784,6 +694,12 @@ then
 		px4flow start &
 	fi
 
+	if ver hwcmp PX4FMU_V4PRO
+	then
+		# Check for flow sensor - as it is a background task, launch it last
+		px4flow start &
+	fi
+
 	if ver hwcmp MINDPX_V2
 	then
 		px4flow start &
@@ -791,6 +707,7 @@ then
 
 	if ver hwcmp AEROFC_V1
 	then
+		# don't start mavlink ttyACM0 on aerofc_v1
 	else
 		# Start MAVLink
 		mavlink start -r 800000 -d /dev/ttyACM0 -m config -x
@@ -799,61 +716,31 @@ then
 	#
 	# Logging
 	#
-	if ver hwcmp PX4FMU_V1
+	if param compare SYS_LOGGER 0
 	then
-		if sdlog2 start -r 30 -a -b 2 -t
-		then
-		fi
+		sdlog2 start -r 100 -a -b 9 -t
 	else
-		if param compare SYS_LOGGER 0
-		then
-			# check if we should increase logging rate for ekf2 replay message logging
-			if param greater EKF2_REC_RPL 0
-			then
-				if sdlog2 start -r 500 -e -b 18 -t
-				then
-				fi
-			else
-				if sdlog2 start -r 100 -a -b 9 -t
-				then
-				fi
-			fi
-		else
-			set LOGGER_ARGS ""
-			#
-			# Adjust FMUv5 logging settings
-			#
-			if ver hwcmp PX4FMU_V5
-			then
-				set LOGGER_BUF 64
-				param set SDLOG_MODE 2
-			fi
-			if param compare SDLOG_MODE 1
-			then
-				set LOGGER_ARGS "-e"
-			fi
-			if param compare SDLOG_MODE 2
-			then
-				set LOGGER_ARGS "-f"
-			fi
-			if ver hwcmp AEROFC_V1
-			then
-				set LOGGER_ARGS "-m mavlink"
-			fi
-			if logger start -b ${LOGGER_BUF} -t ${LOGGER_ARGS}
-			then
-			fi
-			unset LOGGER_BUF
-			unset LOGGER_ARGS
-		fi
-	fi
+		set LOGGER_ARGS ""
 
-	#
-	# Start up ARDrone Motor interface
-	#
-	if [ $OUTPUT_MODE == ardrone ]
-	then
-		ardrone_interface start -d /dev/ttyS1
+		if param compare SDLOG_MODE 1
+		then
+			set LOGGER_ARGS "-e"
+		fi
+
+		if param compare SDLOG_MODE 2
+		then
+			set LOGGER_ARGS "-f"
+		fi
+
+		if ver hwcmp AEROFC_V1
+		then
+			set LOGGER_ARGS "-m mavlink"
+		fi
+
+		logger start -b ${LOGGER_BUF} -t ${LOGGER_ARGS}
+
+		unset LOGGER_BUF
+		unset LOGGER_ARGS
 	fi
 
 	#
@@ -1000,7 +887,7 @@ then
 		if [ $MIXER == none ]
 		then
 			# Set default mixer for UGV if not defined
-			set MIXER stampede
+			set MIXER ugv_generic
 		fi
 
 		if [ $MAV_TYPE == none ]
@@ -1015,7 +902,7 @@ then
 		sh /etc/init.d/rc.interface
 
 		# Start standard UGV apps
-		sh /etc/init.d/rc.gnd_apps
+		sh /etc/init.d/rc.ugv_apps
 	fi
 
 	#
@@ -1073,6 +960,7 @@ then
 	if [ $VEHICLE_TYPE == none ]
 	then
 		echo "No autostart ID found"
+		ekf2 start
 	fi
 
 	# Start any custom addons
@@ -1149,10 +1037,3 @@ unset TUNE_ERR
 
 # Boot is complete, inform MAVLink app(s) that the system is now fully up and running
 mavlink boot_complete
-
-if [ $EXIT_ON_END == yes ]
-then
-	echo "NSH exit"
-	exit
-fi
-unset EXIT_ON_END

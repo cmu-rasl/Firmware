@@ -64,8 +64,8 @@ VtolType::VtolType(VtolAttitudeControl *att_controller) :
 	_actuators_out_1 = _attc->get_actuators_out1();
 	_actuators_mc_in = _attc->get_actuators_mc_in();
 	_actuators_fw_in = _attc->get_actuators_fw_in();
-	_armed = _attc->get_armed();
 	_local_pos = _attc->get_local_pos();
+	_local_pos_sp = _attc->get_local_pos_sp();
 	_airspeed = _attc->get_airspeed();
 	_batt_status = _attc->get_batt_status();
 	_tecs_status = _attc->get_tecs_status();
@@ -153,6 +153,24 @@ void VtolType::update_mc_state()
 	_mc_roll_weight = 1.0f;
 	_mc_pitch_weight = 1.0f;
 	_mc_yaw_weight = 1.0f;
+
+	// VTOL weathervane
+	_v_att_sp->disable_mc_yaw_control = false;
+
+	if (_attc->get_pos_sp_triplet()->current.valid &&
+	    !_v_control_mode->flag_control_manual_enabled) {
+
+		if (_params->wv_takeoff && _attc->get_pos_sp_triplet()->current.type == position_setpoint_s::SETPOINT_TYPE_TAKEOFF) {
+			_v_att_sp->disable_mc_yaw_control = true;
+
+		} else if (_params->wv_loiter
+			   && _attc->get_pos_sp_triplet()->current.type == position_setpoint_s::SETPOINT_TYPE_LOITER) {
+			_v_att_sp->disable_mc_yaw_control = true;
+
+		} else if (_params->wv_land && _attc->get_pos_sp_triplet()->current.type == position_setpoint_s::SETPOINT_TYPE_LAND) {
+			_v_att_sp->disable_mc_yaw_control = true;
+		}
+	}
 }
 
 void VtolType::update_fw_state()
@@ -190,20 +208,47 @@ void VtolType::update_transition_state()
 
 bool VtolType::can_transition_on_ground()
 {
-	return !_armed->armed || _land_detected->landed;
+	return !_v_control_mode->flag_armed || _land_detected->landed;
 }
 
 void VtolType::check_quadchute_condition()
 {
 
-	if (_armed->armed && !_land_detected->landed) {
+	if (_v_control_mode->flag_armed && !_land_detected->landed) {
 		matrix::Eulerf euler = matrix::Quatf(_v_att->q);
 
 		// fixed-wing minimum altitude
 		if (_params->fw_min_alt > FLT_EPSILON) {
 
 			if (-(_local_pos->z) < _params->fw_min_alt) {
-				_attc->abort_front_transition("Minimum altitude breached");
+				_attc->abort_front_transition("QuadChute: Minimum altitude breached");
+			}
+		}
+
+		// adaptive quadchute
+		if (_params->fw_alt_err > FLT_EPSILON && _v_control_mode->flag_control_altitude_enabled) {
+
+			// We use tecs for tracking in FW and local_pos_sp during transitions
+			if (_tecs_running) {
+				// 1 second rolling average
+				_ra_hrate = (49 * _ra_hrate + _tecs_status->flightPathAngle) / 50;
+				_ra_hrate_sp = (49 * _ra_hrate_sp + _tecs_status->flightPathAngleSp) / 50;
+
+				// are we dropping while requesting significant ascend?
+				if (((_tecs_status->altitudeSp - _tecs_status->altitude_filtered) > _params->fw_alt_err) &&
+				    (_ra_hrate < -1.0f) &&
+				    (_ra_hrate_sp > 1.0f)) {
+
+					_attc->abort_front_transition("QuadChute: loss of altitude");
+				}
+
+			} else {
+				const bool height_error = _local_pos->z_valid && ((-_local_pos_sp->z - -_local_pos->z) > _params->fw_alt_err);
+				const bool height_rate_error = _local_pos->v_z_valid && (_local_pos->vz > 1.0f) && (_local_pos->z_deriv > 1.0f);
+
+				if (height_error && height_rate_error) {
+					_attc->abort_front_transition("QuadChute: large altitude error");
+				}
 			}
 		}
 

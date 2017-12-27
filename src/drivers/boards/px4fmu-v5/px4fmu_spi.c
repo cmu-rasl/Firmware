@@ -238,7 +238,7 @@ __EXPORT int stm32_spi_bus_initialize(void)
  *
  ************************************************************************************/
 
-__EXPORT void stm32_spi1select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
+__EXPORT void stm32_spi1select(FAR struct spi_dev_s *dev, uint32_t devid, bool selected)
 {
 	/* SPI select is active low, so write !selected to select the device */
 
@@ -247,7 +247,7 @@ __EXPORT void stm32_spi1select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, 
 
 	/* Making sure the other peripherals are not selected */
 
-	for (int cs = 0;  arraySize(spi1selects_gpio) > 1 && cs < arraySize(spi1selects_gpio); cs++) {
+	for (size_t cs = 0; arraySize(spi1selects_gpio) > 1 && cs < arraySize(spi1selects_gpio); cs++) {
 		if (spi1selects_gpio[cs] != 0) {
 			stm32_gpiowrite(spi1selects_gpio[cs], 1);
 		}
@@ -260,7 +260,7 @@ __EXPORT void stm32_spi1select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, 
 	}
 }
 
-__EXPORT uint8_t stm32_spi1status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
+__EXPORT uint8_t stm32_spi1status(FAR struct spi_dev_s *dev, uint32_t devid)
 {
 	return SPI_STATUS_PRESENT;
 }
@@ -274,13 +274,13 @@ __EXPORT uint8_t stm32_spi1status(FAR struct spi_dev_s *dev, enum spi_dev_e devi
  *
  ************************************************************************************/
 
-__EXPORT void stm32_spi2select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
+__EXPORT void stm32_spi2select(FAR struct spi_dev_s *dev, uint32_t devid, bool selected)
 {
 	/* SPI select is active low, so write !selected to select the device */
 
 	int sel = (int) devid;
 
-	if (devid == SPIDEV_FLASH) {
+	if (devid == SPIDEV_FLASH(0)) {
 		sel = PX4_SPIDEV_MEMORY;
 	}
 
@@ -301,7 +301,7 @@ __EXPORT void stm32_spi2select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, 
 	}
 }
 
-__EXPORT uint8_t stm32_spi2status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
+__EXPORT uint8_t stm32_spi2status(FAR struct spi_dev_s *dev, uint32_t devid)
 {
 	return SPI_STATUS_PRESENT;
 }
@@ -315,7 +315,7 @@ __EXPORT uint8_t stm32_spi2status(FAR struct spi_dev_s *dev, enum spi_dev_e devi
  ************************************************************************************/
 
 #ifdef CONFIG_STM32F7_SPI3
-__EXPORT void stm32_spi3select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
+__EXPORT void stm32_spi3select(FAR struct spi_dev_s *dev, uint32_t devid, bool selected)
 {
 	/* SPI select is active low, so write !selected to select the device */
 
@@ -337,7 +337,7 @@ __EXPORT void stm32_spi3select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, 
 	}
 }
 
-__EXPORT uint8_t stm32_spi3status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
+__EXPORT uint8_t stm32_spi3status(FAR struct spi_dev_s *dev, uint32_t devid)
 {
 	return SPI_STATUS_PRESENT;
 }
@@ -350,14 +350,14 @@ __EXPORT uint8_t stm32_spi3status(FAR struct spi_dev_s *dev, enum spi_dev_e devi
  *
  ************************************************************************************/
 
-__EXPORT void stm32_spi4select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
+__EXPORT void stm32_spi4select(FAR struct spi_dev_s *dev, uint32_t devid, bool selected)
 {
 	int sel = (int) devid;
 
 	ASSERT(PX4_SPI_BUS_ID(sel) == PX4_SPI_BUS_BARO);
 
 	/* Making sure the other peripherals are not selected */
-	for (int cs = 0; arraySize(spi4selects_gpio) > 1 && cs < arraySize(spi4selects_gpio); cs++) {
+	for (size_t cs = 0; arraySize(spi4selects_gpio) > 1 && cs < arraySize(spi4selects_gpio); cs++) {
 		stm32_gpiowrite(spi4selects_gpio[cs], 1);
 	}
 
@@ -368,7 +368,7 @@ __EXPORT void stm32_spi4select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, 
 	}
 }
 
-__EXPORT uint8_t stm32_spi4status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
+__EXPORT uint8_t stm32_spi4status(FAR struct spi_dev_s *dev, uint32_t devid)
 {
 	return SPI_STATUS_PRESENT;
 }
@@ -382,7 +382,7 @@ __EXPORT uint8_t stm32_spi4status(FAR struct spi_dev_s *dev, enum spi_dev_e devi
  ************************************************************************************/
 
 #ifdef CONFIG_STM32F7_SPI5
-__EXPORT void stm32_spi5select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
+__EXPORT void stm32_spi5select(FAR struct spi_dev_s *dev, uint32_t devid, bool selected)
 {
 	/* SPI select is active low, so write !selected to select the device */
 
@@ -391,7 +391,7 @@ __EXPORT void stm32_spi5select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, 
 	ASSERT(PX4_SPI_BUS_ID(sel) == PX4_SPI_BUS_EXTERNAL1);
 
 	/* Making sure the other peripherals are not selected */
-	for (int cs = 0; arraySize(spi5selects_gpio) > 1 && cs < arraySize(spi5selects_gpio); cs++) {
+	for (size_t cs = 0; arraySize(spi5selects_gpio) > 1 && cs < arraySize(spi5selects_gpio); cs++) {
 		stm32_gpiowrite(spi5selects_gpio[cs], 1);
 	}
 
@@ -402,7 +402,7 @@ __EXPORT void stm32_spi5select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, 
 	}
 }
 
-__EXPORT uint8_t stm32_spi5status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
+__EXPORT uint8_t stm32_spi5status(FAR struct spi_dev_s *dev, uint32_t devid)
 {
 	return SPI_STATUS_PRESENT;
 }
@@ -416,7 +416,7 @@ __EXPORT uint8_t stm32_spi5status(FAR struct spi_dev_s *dev, enum spi_dev_e devi
  *
  ************************************************************************************/
 
-__EXPORT void stm32_spi6select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, bool selected)
+__EXPORT void stm32_spi6select(FAR struct spi_dev_s *dev, uint32_t devid, bool selected)
 {
 	/* SPI select is active low, so write !selected to select the device */
 
@@ -425,7 +425,7 @@ __EXPORT void stm32_spi6select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, 
 	ASSERT(PX4_SPI_BUS_ID(sel) == PX4_SPI_BUS_EXTERNAL2);
 
 	/* Making sure the other peripherals are not selected */
-	for (int cs = 0; arraySize(spi6selects_gpio) > 1 && cs < arraySize(spi6selects_gpio); cs++) {
+	for (size_t cs = 0; arraySize(spi6selects_gpio) > 1 && cs < arraySize(spi6selects_gpio); cs++) {
 		stm32_gpiowrite(spi6selects_gpio[cs], 1);
 	}
 
@@ -436,7 +436,7 @@ __EXPORT void stm32_spi6select(FAR struct spi_dev_s *dev, enum spi_dev_e devid, 
 	}
 }
 
-__EXPORT uint8_t stm32_spi6status(FAR struct spi_dev_s *dev, enum spi_dev_e devid)
+__EXPORT uint8_t stm32_spi6status(FAR struct spi_dev_s *dev, uint32_t devid)
 {
 	return SPI_STATUS_PRESENT;
 }
@@ -452,7 +452,7 @@ __EXPORT uint8_t stm32_spi6status(FAR struct spi_dev_s *dev, enum spi_dev_e devi
 __EXPORT void board_spi_reset(int ms)
 {
 	/* disable SPI bus */
-	for (int cs = 0;  arraySize(spi1selects_gpio) > 1 && cs < arraySize(spi1selects_gpio); cs++) {
+	for (size_t cs = 0;  arraySize(spi1selects_gpio) > 1 && cs < arraySize(spi1selects_gpio); cs++) {
 		if (spi1selects_gpio[cs] != 0) {
 			stm32_configgpio(_PIN_OFF(spi1selects_gpio[cs]));
 		}
@@ -487,7 +487,7 @@ __EXPORT void board_spi_reset(int ms)
 	usleep(100);
 
 	/* reconfigure the SPI pins */
-	for (int cs = 0;  arraySize(spi1selects_gpio) > 1 && cs < arraySize(spi1selects_gpio); cs++) {
+	for (size_t cs = 0; arraySize(spi1selects_gpio) > 1 && cs < arraySize(spi1selects_gpio); cs++) {
 		if (spi1selects_gpio[cs] != 0) {
 			stm32_configgpio(spi1selects_gpio[cs]);
 		}

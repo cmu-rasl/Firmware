@@ -41,8 +41,10 @@
 
 #include "input.h"
 #include "input_rc.h"
-#include <uORB/topics/vehicle_roi.h>
 #include <cstdint>
+
+#include <uORB/topics/vehicle_roi.h>
+#include <uORB/topics/vehicle_command.h>
 
 namespace vmount
 {
@@ -55,7 +57,7 @@ namespace vmount
 class InputMavlinkROI : public InputBase
 {
 public:
-	InputMavlinkROI();
+	InputMavlinkROI() = default;
 	virtual ~InputMavlinkROI();
 
 	virtual void print_status();
@@ -69,7 +71,7 @@ private:
 
 	int _vehicle_roi_sub = -1;
 	int _position_setpoint_triplet_sub = -1;
-	uint8_t _cur_roi_mode = vehicle_roi_s::VEHICLE_ROI_NONE;
+	uint8_t _cur_roi_mode = vehicle_roi_s::ROI_NONE;
 };
 
 
@@ -80,7 +82,7 @@ private:
 class InputMavlinkCmdMount : public InputBase
 {
 public:
-	InputMavlinkCmdMount();
+	InputMavlinkCmdMount(bool stabilize);
 	virtual ~InputMavlinkCmdMount();
 
 	virtual void print_status();
@@ -90,14 +92,14 @@ protected:
 	virtual int initialize();
 
 private:
-	void _ack_vehicle_command(uint16_t command);
+	void _ack_vehicle_command(vehicle_command_s *cmd);
 
 	int _vehicle_command_sub = -1;
 	orb_advert_t _vehicle_command_ack_pub = nullptr;
 	bool _stabilize[3] = { false, false, false };
 
-	int32_t _mav_sys_id; ///< our mavlink system id
-	int32_t _mav_comp_id; ///< our mavlink component id
+	int32_t _mav_sys_id{1}; ///< our mavlink system id
+	int32_t _mav_comp_id{1}; ///< our mavlink component id
 };
 
 

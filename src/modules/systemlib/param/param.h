@@ -169,7 +169,7 @@ __EXPORT param_t	param_for_index(unsigned index);
 /**
  * Look up an used parameter by index.
  *
- * @param param		The parameter to obtain the index for.
+ * @param index		The parameter to obtain the index for.
  * @return		The index of the parameter in use, or -1 if the parameter does not exist.
  */
 __EXPORT param_t	param_for_used_index(unsigned index);
@@ -450,5 +450,38 @@ struct param_info_s {
 };
 
 __END_DECLS
+
+
+
+#ifdef	__cplusplus
+#if 0 // set to 1 to debug param type mismatches
+#include <cstdio>
+#define CHECK_PARAM_TYPE(param, type) \
+	if (param_type(param) != type) { \
+		/* use printf() to avoid having to use more includes */ \
+		printf("wrong type passed to param_get() for param %s\n", param_name(param)); \
+	}
+#else
+#define CHECK_PARAM_TYPE(param, type)
+#endif
+
+// param is a C-interface. This means there is no overloading, and thus no type-safety for param_get().
+// So for C++ code we redefine param_get() to inlined overloaded versions, which gives us type-safety
+// w/o having to use a different interface
+static inline int param_get_cplusplus(param_t param, float *val)
+{
+	CHECK_PARAM_TYPE(param, PARAM_TYPE_FLOAT);
+	return param_get(param, val);
+}
+static inline int param_get_cplusplus(param_t param, int32_t *val)
+{
+	CHECK_PARAM_TYPE(param, PARAM_TYPE_INT32);
+	return param_get(param, val);
+}
+#undef CHECK_PARAM_TYPE
+
+#define param_get(param, val) param_get_cplusplus(param, val)
+
+#endif /* __cplusplus */
 
 #endif

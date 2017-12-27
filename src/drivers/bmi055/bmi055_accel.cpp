@@ -14,7 +14,7 @@ const uint8_t BMI055_accel::_checked_registers[BMI055_ACCEL_NUM_CHECKED_REGISTER
 
 
 
-BMI055_accel::BMI055_accel(int bus, const char *path_accel, spi_dev_e device, enum Rotation rotation) :
+BMI055_accel::BMI055_accel(int bus, const char *path_accel, uint32_t device, enum Rotation rotation) :
 	BMI055("BMI055_ACCEL", path_accel, bus, device, SPIDEV_MODE3, BMI055_BUS_SPEED, rotation),
 	_accel_reports(nullptr),
 	_accel_scale{},
@@ -79,7 +79,6 @@ BMI055_accel::init()
 
 	/* if probe/setup failed, bail now */
 	if (ret != OK) {
-		warnx("SPI error");
 		DEVICE_DEBUG("SPI setup failed");
 		return ret;
 	}
@@ -114,7 +113,7 @@ BMI055_accel::init()
 
 	/* measurement will have generated a report, publish */
 	_accel_topic = orb_advertise_multi(ORB_ID(sensor_accel), &arp,
-					   &_accel_orb_class_instance, (is_external()) ? ORB_PRIO_MAX - 1 : ORB_PRIO_HIGH - 1);
+					   &_accel_orb_class_instance, (external()) ? ORB_PRIO_MAX - 1 : ORB_PRIO_HIGH - 1);
 
 	if (_accel_topic == nullptr) {
 		warnx("ADVERT FAIL");

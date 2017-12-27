@@ -48,6 +48,9 @@ set(config_module_list
 	#
 	modules/mc_att_control
 	modules/mc_pos_control
+	modules/vtol_att_control
+	modules/fw_att_control
+	modules/fw_pos_control_l1
 
 	#
 	# Library modules
@@ -57,7 +60,6 @@ set(config_module_list
 	modules/commander
 	modules/systemlib/param
 	modules/systemlib
-	modules/systemlib/mixer
 	modules/uORB
 	modules/dataman
 	modules/land_detector
@@ -69,29 +71,30 @@ set(config_module_list
 	#
 	drivers/gps
 	drivers/ocpoc_adc
-	drivers/ocpoc_sbus_rc_in
+	drivers/linux_sbus
 	drivers/linux_pwm_out
 	drivers/rgbled
+	drivers/ulanding
 
 	#
 	# Libraries
 	#
 	lib/controllib
-	lib/mathlib
-	lib/mathlib/math/filter
-	lib/geo
+	lib/conversion
+	lib/DriverFramework/framework
 	lib/ecl
+	lib/geo
 	lib/geo_lookup
 	lib/launchdetection
-	lib/external_lgpl
-	lib/conversion
-	lib/terrain_estimation
+	lib/led
+	lib/mathlib
+	lib/mathlib/math/filter
+	lib/mixer
+	lib/rc
 	lib/runway_takeoff
 	lib/tailsitter_recovery
+	lib/terrain_estimation
 	lib/version
-	lib/DriverFramework/framework
-	lib/rc
-	lib/led
 
 	#
 	# POSIX

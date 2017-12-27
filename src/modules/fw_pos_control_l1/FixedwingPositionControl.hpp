@@ -33,21 +33,14 @@
 
 
 /**
- * @file fw_pos_control_l1_main.c
+ * @file fw_pos_control_l1_main.hpp
  * Implementation of a generic position controller based on the L1 norm. Outputs a bank / roll
  * angle, equivalent to a lateral motion (for copters and rovers).
  *
- * Original publication for horizontal control class:
- *    S. Park, J. Deyst, and J. P. How, "A New Nonlinear Guidance Logic for Trajectory Tracking,"
- *    Proceedings of the AIAA Guidance, Navigation and Control
- *    Conference, Aug 2004. AIAA-2004-4900.
+ * The implementation for the controllers is in the ECL library. This class only
+ * interfaces to the library.
  *
- * Original implementation for total energy control class:
- *    Paul Riseborough and Andrew Tridgell, 2013 (code in lib/external_lgpl)
- *
- * More details and acknowledgements in the referenced library headers.
- *
- * @author Lorenz Meier <lm@inf.ethz.ch>
+ * @author Lorenz Meier <lorenz@px4.io>
  * @author Thomas Gubler <thomasgubler@gmail.com>
  * @author Andreas Antener <andreas@uaventure.com>
  */
@@ -66,36 +59,50 @@
 
 #include <drivers/drv_hrt.h>
 #include <ecl/l1/ecl_l1_pos_controller.h>
-#include <external_lgpl/tecs/tecs.h>
+#include <ecl/tecs/tecs.h>
 #include <geo/geo.h>
 #include <launchdetection/LaunchDetector.h>
 #include <mathlib/mathlib.h>
 #include <runway_takeoff/RunwayTakeoff.h>
 #include <systemlib/perf_counter.h>
-#include <uORB/topics/control_state.h>
+#include <uORB/Subscription.hpp>
+#include <uORB/topics/airspeed.h>
 #include <uORB/topics/fw_pos_ctrl_status.h>
 #include <uORB/topics/manual_control_setpoint.h>
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/position_setpoint_triplet.h>
+#include <uORB/topics/sensor_bias.h>
+#include <uORB/topics/sensor_baro.h>
 #include <uORB/topics/tecs_status.h>
+#include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_attitude_setpoint.h>
 #include <uORB/topics/vehicle_command.h>
 #include <uORB/topics/vehicle_control_mode.h>
 #include <uORB/topics/vehicle_global_position.h>
+#include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_land_detected.h>
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/uORB.h>
 #include <vtol_att_control/vtol_type.h>
 
-#define HDG_HOLD_DIST_NEXT 		3000.0f 	// initial distance of waypoint in front of plane in heading hold mode
-#define HDG_HOLD_REACHED_DIST 		1000.0f 	// distance (plane to waypoint in front) at which waypoints are reset in heading hold mode
-#define HDG_HOLD_SET_BACK_DIST 		100.0f 		// distance by which previous waypoint is set behind the plane
-#define HDG_HOLD_YAWRATE_THRESH 	0.15f 		// max yawrate at which plane locks yaw for heading hold mode
-#define HDG_HOLD_MAN_INPUT_THRESH 	0.01f 		// max manual roll/yaw input from user which does not change the locked heading
-#define T_ALT_TIMEOUT 			1		// time after which we abort landing if terrain estimate is not valid
-#define THROTTLE_THRESH 0.05f				///< max throttle from user which will not lead to motors spinning up in altitude controlled modes
-#define MANUAL_THROTTLE_CLIMBOUT_THRESH 0.85f		///< a throttle / pitch input above this value leads to the system switching to climbout mode
-#define ALTHOLD_EPV_RESET_THRESH 5.0f
+static constexpr float HDG_HOLD_DIST_NEXT =
+	3000.0f; // initial distance of waypoint in front of plane in heading hold mode
+static constexpr float HDG_HOLD_REACHED_DIST =
+	1000.0f; // distance (plane to waypoint in front) at which waypoints are reset in heading hold mode
+static constexpr float HDG_HOLD_SET_BACK_DIST = 100.0f; // distance by which previous waypoint is set behind the plane
+static constexpr float HDG_HOLD_YAWRATE_THRESH = 0.15f;	// max yawrate at which plane locks yaw for heading hold mode
+static constexpr float HDG_HOLD_MAN_INPUT_THRESH =
+	0.01f; // max manual roll/yaw input from user which does not change the locked heading
+
+static constexpr hrt_abstime T_ALT_TIMEOUT = 1; // time after which we abort landing if terrain estimate is not valid
+
+static constexpr float THROTTLE_THRESH =
+	0.05f;	///< max throttle from user which will not lead to motors spinning up in altitude controlled modes
+static constexpr float MANUAL_THROTTLE_CLIMBOUT_THRESH =
+	0.85f; ///< a throttle / pitch input above this value leads to the system switching to climbout mode
+static constexpr float ALTHOLD_EPV_RESET_THRESH = 5.0f;
+
+static constexpr float MSL_PRESSURE_MILLIBAR = 1013.25f; ///< standard atmospheric pressure in millibar
 
 using math::constrain;
 using math::max;
@@ -107,6 +114,8 @@ using matrix::Eulerf;
 using matrix::Quatf;
 using matrix::Vector2f;
 using matrix::Vector3f;
+
+using uORB::Subscription;
 
 using namespace launchdetection;
 using namespace runwaytakeoff;
@@ -140,14 +149,16 @@ private:
 	bool		_task_running{false};			///< if true, task is running in its mainloop */
 
 	int		_global_pos_sub{-1};
+	int		_local_pos_sub{-1};
 	int		_pos_sp_triplet_sub{-1};
-	int		_ctrl_state_sub{-1};			///< control state subscription */
 	int		_control_mode_sub{-1};			///< control mode subscription */
+	int		_vehicle_attitude_sub{-1};		///< vehicle attitude subscription */
 	int		_vehicle_command_sub{-1};		///< vehicle command subscription */
 	int		_vehicle_status_sub{-1};		///< vehicle status subscription */
 	int		_vehicle_land_detected_sub{-1};		///< vehicle land detected subscription */
 	int		_params_sub{-1};			///< notification of parameter updates */
 	int		_manual_control_sub{-1};		///< notification of manual control updates */
+	int		_sensor_baro_sub{-1};
 
 	orb_advert_t	_attitude_sp_pub{nullptr};		///< attitude setpoint */
 	orb_advert_t	_tecs_status_pub{nullptr};		///< TECS status publication */
@@ -155,16 +166,20 @@ private:
 
 	orb_id_t _attitude_setpoint_id{nullptr};
 
-	control_state_s			_ctrl_state {};			///< control state */
 	fw_pos_ctrl_status_s		_fw_pos_ctrl_status {};		///< navigation capabilities */
 	manual_control_setpoint_s	_manual {};			///< r/c channel data */
 	position_setpoint_triplet_s	_pos_sp_triplet {};		///< triplet of mission items */
+	vehicle_attitude_s	_att {};			///< vehicle attitude setpoint */
 	vehicle_attitude_setpoint_s	_att_sp {};			///< vehicle attitude setpoint */
 	vehicle_command_s		_vehicle_command {};		///< vehicle commands */
 	vehicle_control_mode_s		_control_mode {};		///< control mode */
 	vehicle_global_position_s	_global_pos {};			///< global vehicle position */
+	vehicle_local_position_s	_local_pos {};			///< vehicle local position */
 	vehicle_land_detected_s		_vehicle_land_detected {};	///< vehicle land detected */
 	vehicle_status_s		_vehicle_status {};		///< vehicle status */
+
+	Subscription<airspeed_s> _sub_airspeed;
+	Subscription<sensor_bias_s> _sub_sensors;
 
 	perf_counter_t	_loop_perf;				///< loop performance counter */
 
@@ -214,6 +229,8 @@ private:
 	/* throttle and airspeed states */
 	bool _airspeed_valid{false};				///< flag if a valid airspeed estimate exists
 	hrt_abstime _airspeed_last_received{0};			///< last time airspeed was received. Used to detect timeouts.
+	float _airspeed{0.0f};
+	float _eas2tas{1.0f};
 
 	float _groundspeed_undershoot{0.0f};			///< ground speed error to min. speed in m/s
 
@@ -269,7 +286,7 @@ private:
 		float airspeed_trim;
 		float airspeed_max;
 		float airspeed_trans;
-		int32_t airspeed_mode;
+		int32_t airspeed_disabled;
 
 		float pitch_limit_min;
 		float pitch_limit_max;
@@ -280,6 +297,7 @@ private:
 		float throttle_idle;
 		float throttle_cruise;
 		float throttle_slew_max;
+		float throttle_alt_scale;
 
 		float man_roll_max_rad;
 		float man_pitch_max_rad;
@@ -327,7 +345,7 @@ private:
 		param_t airspeed_trim;
 		param_t airspeed_max;
 		param_t airspeed_trans;
-		param_t airspeed_mode;
+		param_t airspeed_disabled;
 
 		param_t pitch_limit_min;
 		param_t pitch_limit_max;
@@ -338,6 +356,7 @@ private:
 		param_t throttle_idle;
 		param_t throttle_cruise;
 		param_t throttle_slew_max;
+		param_t throttle_alt_scale;
 
 		param_t man_roll_max_deg;
 		param_t man_pitch_max_deg;
@@ -366,10 +385,11 @@ private:
 	int		parameters_update();
 
 	// Update subscriptions
-	void		control_state_poll();
+	void		airspeed_poll();
 	void		control_update();
 	void		manual_control_setpoint_poll();
 	void		position_setpoint_triplet_poll();
+	void		vehicle_attitude_poll();
 	void		vehicle_command_poll();
 	void		vehicle_control_mode_poll();
 	void		vehicle_land_detected_poll();

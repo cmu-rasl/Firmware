@@ -43,6 +43,8 @@
 #include <systemlib/printload.h>
 #include <px4_module.h>
 
+#include <uORB/topics/vehicle_command.h>
+
 extern "C" __EXPORT int logger_main(int argc, char *argv[]);
 
 #define TRY_SUBSCRIBE_INTERVAL 1000*1000	// interval in microseconds at which we try to subscribe to a topic
@@ -59,15 +61,24 @@ namespace px4
 namespace logger
 {
 
-enum class SDLogProfile : int32_t {
-	DEFAULT = 0,
-	THERMAL_CALIBRATION,
-	SYSTEM_IDENTIFICATION,
-	N_PROFILES
+enum class SDLogProfileMask : int32_t {
+	DEFAULT =               1 << 0,
+	ESTIMATOR_REPLAY =      1 << 1,
+	THERMAL_CALIBRATION =   1 << 2,
+	SYSTEM_IDENTIFICATION = 1 << 3,
+	HIGH_RATE =             1 << 4,
+	DEBUG_TOPICS =          1 << 5,
+	SENSOR_COMPARISON =	1 << 6
 };
 
+inline bool operator&(SDLogProfileMask a, SDLogProfileMask b)
+{
+	return static_cast<int32_t>(a) & static_cast<int32_t>(b);
+}
+
 struct LoggerSubscription {
-	int fd[ORB_MULTI_MAX_INSTANCES];
+	int fd[ORB_MULTI_MAX_INSTANCES]; ///< uorb subscription. The first fd is also used to store the interval if
+	/// not subscribed yet (-interval - 1)
 	uint16_t msg_ids[ORB_MULTI_MAX_INSTANCES];
 	const orb_metadata *metadata = nullptr;
 
@@ -126,14 +137,17 @@ public:
 	 * (because it does not write an ADD_LOGGED_MSG message).
 	 * @param name topic name
 	 * @param interval limit rate if >0, otherwise log as fast as the topic is updated.
-	 * @return -1 on error, file descriptor otherwise
+	 * @return true on success
 	 */
-	int add_topic(const char *name, unsigned interval);
+	bool add_topic(const char *name, unsigned interval = 0);
 
 	/**
-	 * add a logged topic (called by add_topic() above)
+	 * add a logged topic (called by add_topic() above).
+	 * In addition, it subscribes to the first instance of the topic, if it's advertised,
+	 * and sets the file descriptor of LoggerSubscription accordingly
+	 * @return the newly added subscription on success, nullptr otherwise
 	 */
-	int add_topic(const orb_metadata *topic);
+	LoggerSubscription *add_topic(const orb_metadata *topic);
 
 	/**
 	 * request the logger thread to stop (this method does not block).
@@ -243,6 +257,12 @@ private:
 	inline bool copy_if_updated_multi(LoggerSubscription &sub, int multi_instance, void *buffer, bool try_to_subscribe);
 
 	/**
+	 * Check if a topic instance exists and subscribe to it
+	 * @return true when topic exists and subscription successful
+	 */
+	bool try_to_subscribe_topic(LoggerSubscription &sub, int multi_instance);
+
+	/**
 	 * Write exactly one ulog message to the logger and handle dropouts.
 	 * Must be called with _writer.lock() held.
 	 * @return true if data written, false otherwise (on overflow)
@@ -264,12 +284,15 @@ private:
 	 */
 	int add_topics_from_file(const char *fname);
 
-	void add_common_topics();
+	void add_default_topics();
 	void add_estimator_replay_topics();
 	void add_thermal_calibration_topics();
 	void add_system_identification_topics();
+	void add_high_rate_topics();
+	void add_debug_topics();
+	void add_sensor_comparison_topics();
 
-	void ack_vehicle_command(orb_advert_t &vehicle_command_ack_pub, uint16_t command, uint32_t result);
+	void ack_vehicle_command(orb_advert_t &vehicle_command_ack_pub, vehicle_command_s *cmd, uint32_t result);
 
 	/**
 	 * initialize the output for the process load, so that ~1 second later it will be written to the log
@@ -290,42 +313,42 @@ private:
 	static constexpr const char 	*LOG_ROOT = PX4_ROOTFSDIR"/fs/microsd/log";
 #endif
 
-	uint8_t						*_msg_buffer = nullptr;
-	int						_msg_buffer_len = 0;
-	char 						_log_dir[LOG_DIR_LEN];
-	int						_sess_dir_index = 1; ///< search starting index for 'sess<i>' directory name
+	uint8_t						*_msg_buffer{nullptr};
+	int						_msg_buffer_len{0};
+	char 						_log_dir[LOG_DIR_LEN] {};
+	int						_sess_dir_index{1}; ///< search starting index for 'sess<i>' directory name
 	char 						_log_file_name[32];
-	bool						_has_log_dir = false;
-	bool						_was_armed = false;
-	bool						_arm_override;
+	bool						_has_log_dir{false};
+	bool						_was_armed{false};
+	bool						_arm_override{false};
 
 
 	// statistics
-	hrt_abstime					_start_time_file; ///< Time when logging started, file backend (not the logger thread)
-	hrt_abstime					_dropout_start = 0; ///< start of current dropout (0 = no dropout)
-	float						_max_dropout_duration = 0.f; ///< max duration of dropout [s]
-	size_t						_write_dropouts = 0; ///< failed buffer writes due to buffer overflow
-	size_t						_high_water = 0; ///< maximum used write buffer
+	hrt_abstime					_start_time_file{0}; ///< Time when logging started, file backend (not the logger thread)
+	hrt_abstime					_dropout_start{0}; ///< start of current dropout (0 = no dropout)
+	float						_max_dropout_duration{0.0f}; ///< max duration of dropout [s]
+	size_t						_write_dropouts{0}; ///< failed buffer writes due to buffer overflow
+	size_t						_high_water{0}; ///< maximum used write buffer
 
 	const bool 					_log_on_start;
 	const bool 					_log_until_shutdown;
 	const bool					_log_name_timestamp;
 	Array<LoggerSubscription, MAX_TOPICS_NUM>	_subscriptions;
 	LogWriter					_writer;
-	uint32_t					_log_interval;
-	const orb_metadata				*_polling_topic_meta = nullptr; ///< if non-null, poll on this topic instead of sleeping
-	param_t						_log_utc_offset;
-	param_t						_log_dirs_max;
-	orb_advert_t					_mavlink_log_pub = nullptr;
-	uint16_t					_next_topic_id = 0; ///< id of next subscribed ulog topic
-	char						*_replay_file_name = nullptr;
-	bool						_should_stop_file_log = false; /**< if true _next_load_print is set and file logging
+	uint32_t					_log_interval{0};
+	const orb_metadata				*_polling_topic_meta{nullptr}; ///< if non-null, poll on this topic instead of sleeping
+	orb_advert_t					_mavlink_log_pub{nullptr};
+	uint16_t					_next_topic_id{0}; ///< id of next subscribed ulog topic
+	char						*_replay_file_name{nullptr};
+	bool						_should_stop_file_log{false}; /**< if true _next_load_print is set and file logging
 											will be stopped after load printing */
-	print_load_s					_load; ///< process load data
-	hrt_abstime					_next_load_print = 0; ///< timestamp when to print the process load
+	print_load_s					_load{}; ///< process load data
+	hrt_abstime					_next_load_print{0}; ///< timestamp when to print the process load
 
 	// control
-	param_t _sdlog_profile_handle;
+	param_t						_sdlog_profile_handle{PARAM_INVALID};
+	param_t						_log_utc_offset{PARAM_INVALID};
+	param_t						_log_dirs_max{PARAM_INVALID};
 };
 
 } //namespace logger

@@ -44,8 +44,6 @@
 #include "navigator_mode.h"
 
 #include <navigator/navigation.h>
-#include <uORB/topics/actuator_controls.h>
-#include <uORB/topics/follow_target.h>
 #include <uORB/topics/mission.h>
 #include <uORB/topics/position_setpoint_triplet.h>
 #include <uORB/topics/vehicle_command.h>
@@ -66,7 +64,7 @@ public:
 	MissionBlock(const MissionBlock &) = delete;
 	MissionBlock &operator=(const MissionBlock &) = delete;
 
-	static bool item_contains_position(const struct mission_item_s *item);
+	static bool item_contains_position(const mission_item_s &item);
 
 protected:
 	/**
@@ -86,7 +84,7 @@ protected:
 	 * @param the mission item to convert
 	 * @param the position setpoint that needs to be set
 	 */
-	bool mission_item_to_position_setpoint(const mission_item_s *item, position_setpoint_s *sp);
+	bool mission_item_to_position_setpoint(const mission_item_s &item, position_setpoint_s *sp);
 
 	/**
 	 * Set previous position setpoint to current setpoint
@@ -116,16 +114,11 @@ protected:
 	void set_idle_item(struct mission_item_s *item);
 
 	/**
-	 * Set follow_target item
+	 * General function used to adjust the mission item based on vehicle specific limitations
 	 */
-	void set_follow_target_item(struct mission_item_s *item, float min_clearance, follow_target_s &target, float yaw);
+	void	mission_apply_limitation(mission_item_s &item);
 
-	/**
-	 * Convert a mission item to a command
-	 */
-	void mission_item_to_vehicle_command(const struct mission_item_s *item, struct vehicle_command_s *cmd);
-
-	void issue_command(const struct mission_item_s *item);
+	void issue_command(const mission_item_s &item);
 
 	float get_time_inside(const struct mission_item_s &item);
 
@@ -138,17 +131,14 @@ protected:
 	hrt_abstime _action_start{0};
 	hrt_abstime _time_wp_reached{0};
 
-	actuator_controls_s _actuators{};
 	orb_advert_t    _actuator_pub{nullptr};
 
-	control::BlockParamFloat _param_loiter_min_alt;
 	control::BlockParamFloat _param_yaw_timeout;
 	control::BlockParamFloat _param_yaw_err;
-	control::BlockParamInt _param_vtol_wv_land;
-	control::BlockParamInt _param_vtol_wv_takeoff;
-	control::BlockParamInt _param_vtol_wv_loiter;
-	control::BlockParamInt _param_force_vtol;
-	control::BlockParamFloat _param_back_trans_dur;
+
+	// VTOL parameters
+	control::BlockParamFloat _param_back_trans_dec_mss;
+	control::BlockParamFloat _param_reverse_delay;
 };
 
 #endif

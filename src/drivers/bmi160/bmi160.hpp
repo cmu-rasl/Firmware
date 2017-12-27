@@ -244,19 +244,12 @@
 
 #define BMI160_TIMER_REDUCTION				200
 
-#ifdef PX4_SPI_BUS_EXT
-#define EXTERNAL_BUS PX4_SPI_BUS_EXT
-#else
-#define EXTERNAL_BUS 0
-#endif
-
-
 class BMI160_gyro;
 
 class BMI160 : public device::SPI
 {
 public:
-	BMI160(int bus, const char *path_accel, const char *path_gyro, spi_dev_e device, enum Rotation rotation);
+	BMI160(int bus, const char *path_accel, const char *path_gyro, uint32_t device, enum Rotation rotation);
 	virtual ~BMI160();
 
 	virtual int		init();
@@ -432,13 +425,6 @@ private:
 	 * Swap a 16-bit value read from the BMI160 to native byte order.
 	 */
 	uint16_t		swap16(uint16_t val) { return (val >> 8) | (val << 8);	}
-
-	/**
-	 * Get the internal / external state
-	 *
-	 * @return true if the sensor is not on the main MCU board
-	 */
-	bool			is_external() { return (_bus == EXTERNAL_BUS); }
 
 	/**
 	 * Measurement self test

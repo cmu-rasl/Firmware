@@ -1,3 +1,6 @@
+include(common/px4_git)
+px4_add_git_submodule(TARGET git_cmake_hexagon PATH "cmake/cmake_hexagon")
+
 include(qurt/px4_impl_qurt)
 
 if ("$ENV{HEXAGON_SDK_ROOT}" STREQUAL "")
@@ -60,7 +63,6 @@ set(config_module_list
 	#
 	modules/systemlib/param
 	modules/systemlib
-	modules/systemlib/mixer
 	modules/uORB
 	modules/commander
 	modules/land_detector
@@ -70,30 +72,31 @@ set(config_module_list
 	#
 	drivers/gps
 	drivers/pwm_out_rc_in
+	drivers/spektrum_rc
 	drivers/qshell/qurt
 
 	#
 	# FC_ADDON drivers
 	#
-	platforms/qurt/fc_addon/rc_receiver
 	platforms/qurt/fc_addon/uart_esc
 
 	#
 	# Libraries
 	#
 	lib/controllib
+	lib/conversion
+	lib/DriverFramework/framework
+	lib/ecl
+	lib/geo
+	lib/geo_lookup
 	lib/mathlib
 	lib/mathlib/math/filter
-	lib/geo
-	lib/ecl
-	lib/geo_lookup
-	lib/conversion
-	lib/terrain_estimation
+	lib/mixer
+	lib/rc
 	lib/runway_takeoff
 	lib/tailsitter_recovery
+	lib/terrain_estimation
 	lib/version
-	lib/DriverFramework/framework
-	lib/micro-CDR
 
 	#
 	# QuRT port

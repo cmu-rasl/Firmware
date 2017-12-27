@@ -127,8 +127,6 @@
 #define PX4IO_P_STATUS_ALARMS_PWM_ERROR		(1 << 6) /* PWM configuration or output was bad */
 #define PX4IO_P_STATUS_ALARMS_VSERVO_FAULT	(1 << 7) /* [2] VServo was out of the valid range (2.5 - 5.5 V) */
 
-#define PX4IO_P_STATUS_VBATT			4	/* [1] battery voltage in mV */
-#define PX4IO_P_STATUS_IBATT			5	/* [1] battery current (raw ADC) */
 #define PX4IO_P_STATUS_VSERVO			6	/* [2] servo rail voltage in mV */
 #define PX4IO_P_STATUS_VRSSI			7	/* [2] RSSI voltage */
 #define PX4IO_P_STATUS_PRSSI			8	/* [2] RSSI PWM value */
@@ -193,18 +191,8 @@
 #define PX4IO_P_SETUP_PWM_RATES			2	/* bitmask, 0 = low rate, 1 = high rate */
 #define PX4IO_P_SETUP_PWM_DEFAULTRATE		3	/* 'low' PWM frame output rate in Hz */
 #define PX4IO_P_SETUP_PWM_ALTRATE		4	/* 'high' PWM frame output rate in Hz */
-
-#if defined(CONFIG_ARCH_BOARD_PX4IO_V1) || defined(CONFIG_ARCH_BOARD_PX4FMU_V1)
-#define PX4IO_P_SETUP_RELAYS			5	/* bitmask of relay/switch outputs, 0 = off, 1 = on */
-#define PX4IO_P_SETUP_RELAYS_POWER1		(1<<0)	/* hardware rev [1] power relay 1 */
-#define PX4IO_P_SETUP_RELAYS_POWER2		(1<<1)	/* hardware rev [1] power relay 2 */
-#define PX4IO_P_SETUP_RELAYS_ACC1		(1<<2)	/* hardware rev [1] accessory power 1 */
-#define PX4IO_P_SETUP_RELAYS_ACC2		(1<<3)	/* hardware rev [1] accessory power 2 */
-#else
 #define PX4IO_P_SETUP_RELAYS_PAD		5
-#endif
 
-#define PX4IO_P_SETUP_VBATT_SCALE		6	/* hardware rev [1] battery voltage correction factor (float) */
 #define PX4IO_P_SETUP_VSERVO_SCALE		6	/* hardware rev [2] servo voltage correction factor (float) */
 #define PX4IO_P_SETUP_DSM			7	/* DSM bind state */
 enum {							/* DSM bind states */

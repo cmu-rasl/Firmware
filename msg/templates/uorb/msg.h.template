@@ -65,12 +65,6 @@ topic_name = spec.short_name
 @##############################
 @# Generic Includes
 @##############################
-#include <stdint.h>
-#ifdef __cplusplus
-#include <cstring>
-#else
-#include <string.h>
-#endif
 
 #include <uORB/uORB.h>
 
@@ -108,8 +102,6 @@ def print_parsed_fields():
             print_field_def(field)
 }@
 
-struct microCDR;
-
 #ifdef __cplusplus
 @#class @(uorb_struct) {
 struct __EXPORT @(uorb_struct) {
@@ -136,10 +128,6 @@ for constant in spec.constants:
 }
 #endif
 };
-
-
-void serialize_@(topic_name)(const struct @(uorb_struct) *input, char *output, uint32_t *length, struct microCDR *microCDRWriter);
-void deserialize_@(topic_name)(struct @(uorb_struct) *output, char *input, struct microCDR *microCDRReader);
 
 /* register this as object request broker structure */
 @[for multi_topic in topics]@

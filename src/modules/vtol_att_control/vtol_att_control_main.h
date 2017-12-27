@@ -63,20 +63,21 @@
 #include <systemlib/param/param.h>
 #include <systemlib/systemlib.h>
 
-#include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/actuator_controls.h>
 #include <uORB/topics/airspeed.h>
 #include <uORB/topics/battery_status.h>
-#include <uORB/topics/control_state.h>
 #include <uORB/topics/manual_control_setpoint.h>
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/tecs_status.h>
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_attitude_setpoint.h>
 #include <uORB/topics/vehicle_command.h>
+#include <uORB/topics/vehicle_command_ack.h>
 #include <uORB/topics/vehicle_control_mode.h>
 #include <uORB/topics/vehicle_land_detected.h>
 #include <uORB/topics/vehicle_local_position.h>
+#include <uORB/topics/vehicle_local_position_setpoint.h>
+#include <uORB/topics/position_setpoint_triplet.h>
 #include <uORB/topics/vehicle_rates_setpoint.h>
 #include <uORB/topics/vtol_vehicle_status.h>
 #include <uORB/uORB.h>
@@ -114,8 +115,9 @@ public:
 	struct actuator_controls_s 			*get_actuators_out1() {return &_actuators_out_1;}
 	struct actuator_controls_s 			*get_actuators_mc_in() {return &_actuators_mc_in;}
 	struct actuator_controls_s 			*get_actuators_fw_in() {return &_actuators_fw_in;}
-	struct actuator_armed_s 			*get_armed() {return &_armed;}
 	struct vehicle_local_position_s 		*get_local_pos() {return &_local_pos;}
+	struct vehicle_local_position_setpoint_s	*get_local_pos_sp() {return &_local_pos_sp;}
+	struct position_setpoint_triplet_s		*get_pos_sp_triplet() {return &_pos_sp_triplet;}
 	struct airspeed_s 				*get_airspeed() {return &_airspeed;}
 	struct battery_status_s 			*get_batt_status() {return &_batt_status;}
 	struct tecs_status_s 				*get_tecs_status() {return &_tecs_status;}
@@ -140,8 +142,9 @@ private:
 	int	_v_control_mode_sub;	//vehicle control mode subscription
 	int	_params_sub;			//parameter updates subscription
 	int	_manual_control_sp_sub;	//manual control setpoint subscription
-	int	_armed_sub;				//arming status subscription
 	int	_local_pos_sub;			// sensor subscription
+	int	_local_pos_sp_sub;			// setpoint subscription
+	int	_pos_sp_triplet_sub;			// local position setpoint subscription
 	int	_airspeed_sub;			// airspeed subscription
 	int	_battery_status_sub;	// battery status subscription
 	int	_vehicle_cmd_sub;
@@ -157,6 +160,7 @@ private:
 	orb_advert_t	_vtol_vehicle_status_pub;
 	orb_advert_t	_v_rates_sp_pub;
 	orb_advert_t	_v_att_sp_pub;
+	orb_advert_t	_v_cmd_ack_pub;
 
 //*******************data containers***********************************************************
 	struct vehicle_attitude_s			_v_att;				//vehicle attitude
@@ -173,8 +177,9 @@ private:
 	struct actuator_controls_s			_actuators_out_1;	//actuator controls going to the fw mixer (used for elevons)
 	struct actuator_controls_s			_actuators_mc_in;	//actuator controls from mc_att_control
 	struct actuator_controls_s			_actuators_fw_in;	//actuator controls from fw_att_control
-	struct actuator_armed_s				_armed;				//actuator arming status
 	struct vehicle_local_position_s			_local_pos;
+	struct vehicle_local_position_setpoint_s	_local_pos_sp;
+	struct position_setpoint_triplet_s		_pos_sp_triplet;
 	struct airspeed_s 				_airspeed;			// airspeed
 	struct battery_status_s 			_batt_status; 		// battery status
 	struct vehicle_command_s			_vehicle_cmd;
@@ -197,10 +202,14 @@ private:
 		param_t vtol_type;
 		param_t elevons_mc_lock;
 		param_t fw_min_alt;
+		param_t fw_alt_err;
 		param_t fw_qc_max_pitch;
 		param_t fw_qc_max_roll;
 		param_t front_trans_time_openloop;
 		param_t front_trans_time_min;
+		param_t wv_takeoff;
+		param_t wv_loiter;
+		param_t wv_land;
 	} _params_handles;
 
 	/* for multicopters it is usual to have a non-zero idle speed of the engines
@@ -218,7 +227,6 @@ private:
 
 	void		vehicle_control_mode_poll();	//Check for changes in vehicle control mode.
 	void		vehicle_manual_poll();			//Check for changes in manual inputs.
-	void		arming_status_poll();			//Check for arming status updates.
 	void 		mc_virtual_att_sp_poll();
 	void 		fw_virtual_att_sp_poll();
 	void 		actuator_controls_mc_poll();	//Check for changes in mc_attitude_control output
@@ -226,6 +234,8 @@ private:
 	void 		vehicle_rates_sp_mc_poll();
 	void 		vehicle_rates_sp_fw_poll();
 	void 		vehicle_local_pos_poll();		// Check for changes in sensor values
+	void 		vehicle_local_pos_sp_poll();		// Check for changes in setpoint values
+	void 		pos_sp_triplet_poll();		// Check for changes in position setpoint values
 	void 		vehicle_airspeed_poll();		// Check for changes in airspeed
 	void		vehicle_attitude_setpoint_poll();  //Check for attitude setpoint updates.
 	void		vehicle_attitude_poll();  //Check for attitude updates.

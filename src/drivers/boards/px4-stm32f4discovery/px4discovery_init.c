@@ -52,7 +52,7 @@
 #include <debug.h>
 #include <errno.h>
 
-#include <nuttx/arch.h>
+#include "platform/cxxinitialize.h"
 #include <nuttx/board.h>
 #include <nuttx/spi/spi.h>
 #include <nuttx/i2c/i2c_master.h>
@@ -191,8 +191,4 @@ __EXPORT int board_app_initialize(uintptr_t arg)
 		       NULL);
 
 	return OK;
-}
-
-__EXPORT void board_crashdump(uintptr_t currentsp, FAR void *tcb, FAR const uint8_t *filename, int lineno)
-{
 }

@@ -10,12 +10,11 @@ add_definitions(
 
 set(config_module_list
 
-  # examples/px4_simple_app
-
 	#
 	# Board support modules
 	#
 	drivers/device
+	drivers/linux_sbus
 	modules/sensors
 	platforms/posix/drivers/df_ms5607_wrapper
 	platforms/posix/drivers/df_mpu6050_wrapper
@@ -59,7 +58,6 @@ set(config_module_list
 	modules/commander
 	modules/systemlib/param
 	modules/systemlib
-	modules/systemlib/mixer
 	modules/uORB
 	modules/dataman
 	modules/land_detector
@@ -75,20 +73,19 @@ set(config_module_list
 	# Libraries
 	#
 	lib/controllib
-	lib/mathlib
-	lib/mathlib/math/filter
-	lib/geo
+	lib/conversion
+	lib/DriverFramework/framework
 	lib/ecl
+	lib/geo
 	lib/geo_lookup
 	lib/launchdetection
-	lib/external_lgpl
-	lib/conversion
-	lib/terrain_estimation
+	lib/mathlib
+	lib/mathlib/math/filter
+	lib/mixer
 	lib/runway_takeoff
 	lib/tailsitter_recovery
+	lib/terrain_estimation
 	lib/version
-	lib/DriverFramework/framework
-	lib/micro-CDR
 
 	#
 	# POSIX

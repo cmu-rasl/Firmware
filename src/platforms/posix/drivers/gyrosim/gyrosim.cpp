@@ -291,7 +291,7 @@ public:
 protected:
 	friend class GYROSIM;
 
-	virtual void 		_measure() {};
+	virtual void 		_measure() {}
 private:
 	GYROSIM			*_parent;
 	orb_advert_t		_gyro_topic;
@@ -1480,6 +1480,11 @@ gyrosim_main(int argc, char *argv[])
 			gyrosim::usage();
 			return 0;
 		}
+	}
+
+	if (myoptind >= argc) {
+		gyrosim::usage();
+		return 1;
 	}
 
 	const char *verb = argv[myoptind];

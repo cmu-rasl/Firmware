@@ -2,8 +2,6 @@ include(nuttx/px4_impl_nuttx)
 
 px4_nuttx_configure(HWCLASS m4 CONFIG nsh ROMFS y ROMFSROOT px4fmu_common)
 
-set(CMAKE_TOOLCHAIN_FILE ${PX4_SOURCE_DIR}/cmake/toolchains/Toolchain-arm-none-eabi.cmake)
-
 set(config_uavcan_num_ifaces 2)
 
 set(config_module_list
@@ -16,11 +14,11 @@ set(config_module_list
 	drivers/stm32/tone_alarm
 	drivers/led
 	drivers/px4fmu
-	drivers/boards/aerocore2
+	drivers/boards
 	drivers/lsm303d
 	drivers/l3gd20
 	drivers/ms5611
-	drivers/trone
+	drivers/teraranger
 	drivers/gps
 	drivers/pwm_out_sim
 	drivers/airspeed
@@ -107,7 +105,6 @@ set(config_module_list
 	#
 	modules/systemlib/param
 	modules/systemlib
-	modules/systemlib/mixer
 	modules/uORB
 	modules/dataman
 
@@ -115,23 +112,22 @@ set(config_module_list
 	# Libraries
 	#
 	lib/controllib
-	lib/mathlib
-	lib/mathlib/math/filter
-	lib/rc
+	lib/conversion
+	lib/DriverFramework/framework
 	lib/ecl
-	lib/external_lgpl
 	lib/geo
 	lib/geo_lookup
-	lib/conversion
 	lib/launchdetection
 	lib/led
-	lib/terrain_estimation
+	lib/mathlib
+	lib/mathlib/math/filter
+	lib/mixer
+	lib/rc
 	lib/runway_takeoff
 	lib/tailsitter_recovery
+	lib/terrain_estimation
 	lib/version
-	lib/DriverFramework/framework
 	platforms/nuttx
-	lib/micro-CDR
 
 	# had to add for cmake, not sure why wasn't in original config
 	platforms/common
@@ -140,7 +136,7 @@ set(config_module_list
 	#
 	# OBC challenge
 	#
-	#modules/bottle_drop
+	#examples/bottle_drop
 
 	#
 	# Rover apps
@@ -170,28 +166,3 @@ set(config_module_list
 	# Hardware test
 	#examples/hwtest
 )
-
-set(config_extra_builtin_cmds
-	serdis
-	sercon
-	)
-
-set(config_extra_libs
-	uavcan
-	uavcan_stm32_driver
-	)
-
-set(config_io_extra_libs
-	)
-
-add_custom_target(sercon)
-set_target_properties(sercon PROPERTIES
-	PRIORITY "SCHED_PRIORITY_DEFAULT"
-	MAIN "sercon" STACK_MAIN "2048"
-	COMPILE_FLAGS "-Os")
-
-add_custom_target(serdis)
-set_target_properties(serdis PROPERTIES
-	PRIORITY "SCHED_PRIORITY_DEFAULT"
-	MAIN "serdis" STACK_MAIN "2048"
-	COMPILE_FLAGS "-Os")

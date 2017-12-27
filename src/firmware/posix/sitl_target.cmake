@@ -1,7 +1,6 @@
 
 function(px4_add_sitl_app)
-px4_parse_function_args(
-			NAME px4_add_sitl_app
+	px4_parse_function_args(NAME px4_add_sitl_app
 			ONE_VALUE APP_NAME MAIN_SRC UPLOAD_NAME
 			REQUIRED APP_NAME MAIN_SRC
 			ARGN ${ARGN}
@@ -27,7 +26,6 @@ px4_parse_function_args(
 			pthread m
 			)
 	endif()
-
 endfunction()
 
 #=============================================================================
@@ -58,10 +56,16 @@ add_custom_target(run_config
 			${config_sitl_model}
 			${PX4_SOURCE_DIR}
 			${PX4_BINARY_DIR}
-			WORKING_DIRECTORY ${SITL_WORKING_DIR}
-			USES_TERMINAL
+		WORKING_DIRECTORY ${SITL_WORKING_DIR}
+		USES_TERMINAL
 		DEPENDS px4 logs_symlink
 		)
+
+px4_add_git_submodule(TARGET git_gazebo PATH "${PX4_SOURCE_DIR}/Tools/sitl_gazebo")
+px4_add_git_submodule(TARGET git_jmavsim PATH "${PX4_SOURCE_DIR}/Tools/jMAVSim")
+
+# Add support for external project building
+include(ExternalProject)
 
 # project to build sitl_gazebo if necessary
 ExternalProject_Add(sitl_gazebo
@@ -69,18 +73,21 @@ ExternalProject_Add(sitl_gazebo
 	CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
 	BINARY_DIR ${PX4_BINARY_DIR}/build_gazebo
 	INSTALL_COMMAND ""
+	DEPENDS
+		git_gazebo
 	)
 set_target_properties(sitl_gazebo PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 ExternalProject_Add_Step(sitl_gazebo forceconfigure
 	DEPENDEES update
 	DEPENDERS configure
-	ALWAYS 1)
+	ALWAYS 1
+	)
 
 # create targets for each viewer/model/debugger combination
 set(viewers none jmavsim gazebo replay)
 set(debuggers none ide gdb lldb ddd valgrind callgrind)
-set(models none iris iris_opt_flow iris_rplidar standard_vtol plane solo tailsitter typhoon_h480 rover)
+set(models none iris iris_opt_flow iris_rplidar standard_vtol plane solo tailsitter typhoon_h480 rover hippocampus)
 set(all_posix_vmd_make_targets)
 foreach(viewer ${viewers})
 	foreach(debugger ${debuggers})
@@ -122,9 +129,10 @@ foreach(viewer ${viewers})
 						${model}
 						${PX4_SOURCE_DIR}
 						${PX4_BINARY_DIR}
-						WORKING_DIRECTORY ${SITL_WORKING_DIR}
-						USES_TERMINAL
-					DEPENDS logs_symlink
+					WORKING_DIRECTORY ${SITL_WORKING_DIR}
+					USES_TERMINAL
+					DEPENDS
+						logs_symlink
 					)
 			list(APPEND all_posix_vmd_make_targets ${_targ_name})
 			if (viewer STREQUAL "gazebo")
@@ -132,6 +140,8 @@ foreach(viewer ${viewers})
 				if (viewer STREQUAL "gazebo")
 					add_dependencies(${_targ_name} px4_${model})
 				endif()
+			elseif(viewer STREQUAL "jmavsim")
+				add_dependencies(${_targ_name} git_jmavsim)
 			endif()
 		endforeach()
 	endforeach()

@@ -2,8 +2,6 @@ include(nuttx/px4_impl_nuttx)
 
 px4_nuttx_configure(HWCLASS m7 CONFIG nsh ROMFS y ROMFSROOT px4fmu_common)
 
-set(CMAKE_TOOLCHAIN_FILE ${PX4_SOURCE_DIR}/cmake/toolchains/Toolchain-arm-none-eabi.cmake)
-
 set(config_uavcan_num_ifaces 2)
 
 set(config_module_list
@@ -16,7 +14,7 @@ set(config_module_list
 	drivers/bmi055
 	drivers/bmi160
 	drivers/bmp280
-	drivers/boards/px4fmu-v5
+	drivers/boards
 	drivers/bst
 	drivers/camera_trigger
 	drivers/device
@@ -28,6 +26,7 @@ set(config_module_list
 	drivers/hott/hott_sensors
 	drivers/hott/hott_telemetry
 	drivers/iridiumsbd
+	drivers/ist8310
 	drivers/led
 	drivers/lis3mdl
 	drivers/ll40ls
@@ -43,6 +42,7 @@ set(config_module_list
 	drivers/pwm_out_sim
 	drivers/px4flow
 	drivers/px4fmu
+	drivers/rgbled
 	drivers/rgbled_pwm
 	drivers/sdp3x_airspeed
 	drivers/sf0x
@@ -53,7 +53,7 @@ set(config_module_list
 	drivers/stm32/adc
 	drivers/stm32/tone_alarm
 	drivers/tap_esc
-	drivers/trone
+	drivers/teraranger
 	drivers/vmount
 	modules/sensors
 
@@ -89,7 +89,6 @@ set(config_module_list
 	lib/controllib/controllib_test
 	modules/mavlink/mavlink_tests
 	modules/mc_pos_control/mc_pos_control_tests
-	modules/unit_test
 	modules/uORB/uORB_tests
 	systemcmds/tests
 
@@ -137,7 +136,6 @@ set(config_module_list
 	modules/dataman
 	modules/systemlib/param
 	modules/systemlib
-	modules/systemlib/mixer
 	modules/uORB
 
 	#
@@ -147,19 +145,18 @@ set(config_module_list
 	lib/conversion
 	lib/DriverFramework/framework
 	lib/ecl
-	lib/external_lgpl
 	lib/geo
 	lib/geo_lookup
 	lib/launchdetection
 	lib/led
 	lib/mathlib
 	lib/mathlib/math/filter
+	lib/mixer
 	lib/rc
 	lib/runway_takeoff
 	lib/tailsitter_recovery
 	lib/terrain_estimation
 	lib/version
-	lib/micro-CDR
 
 	#
 	# Platform
@@ -171,7 +168,7 @@ set(config_module_list
 	#
 	# OBC challenge
 	#
-	#modules/bottle_drop
+	#examples/bottle_drop
 
 	#
 	# Rover apps
@@ -205,34 +202,4 @@ set(config_module_list
 
 	# Hardware test
 	#examples/hwtest
-
-	# EKF
-	#examples/ekf_att_pos_estimator
 )
-
-set(config_extra_builtin_cmds
-	serdis
-	sercon
-	)
-
-set(config_extra_libs
-	uavcan
-	uavcan_stm32_driver
-	)
-
-set(config_io_extra_libs
-	)
-
-add_custom_target(sercon)
-set_target_properties(sercon PROPERTIES
-	PRIORITY "SCHED_PRIORITY_DEFAULT"
-	MAIN "sercon"
-	STACK_MAIN "2048"
-	COMPILE_FLAGS "-Os")
-
-add_custom_target(serdis)
-set_target_properties(serdis PROPERTIES
-	PRIORITY "SCHED_PRIORITY_DEFAULT"
-	MAIN "serdis"
-	STACK_MAIN "2048"
-	COMPILE_FLAGS "-Os")
