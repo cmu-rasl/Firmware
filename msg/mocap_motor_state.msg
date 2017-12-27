@@ -1,2 +1,2 @@
-#uint64 timestamp
+uint64 mocap_motor_state_timestamp
 uint8 state

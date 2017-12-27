@@ -39,13 +39,28 @@
 #include <errno.h>
 #include <poll.h>
 
+ORB_DEFINE(orb_test, struct orb_test, sizeof(orb_test), "ORB_TEST:int val;hrt_abstime time;");
+ORB_DEFINE(orb_multitest, struct orb_test, sizeof(orb_test), "ORB_MULTITEST:int val;hrt_abstime time;");
+
+ORB_DEFINE(orb_test_medium, struct orb_test_medium, sizeof(orb_test_medium),
+	   "ORB_TEST_MEDIUM:int val;hrt_abstime time;char[64] junk;");
+ORB_DEFINE(orb_test_medium_multi, struct orb_test_medium, sizeof(orb_test_medium),
+	   "ORB_TEST_MEDIUM_MULTI:int val;hrt_abstime time;char[64] junk;");
+ORB_DEFINE(orb_test_medium_queue, struct orb_test_medium, sizeof(orb_test_medium),
+	   "ORB_TEST_MEDIUM_MULTI:int val;hrt_abstime time;char[64] junk;");
+ORB_DEFINE(orb_test_medium_queue_poll, struct orb_test_medium, sizeof(orb_test_medium),
+	   "ORB_TEST_MEDIUM_MULTI:int val;hrt_abstime time;char[64] junk;");
+
+ORB_DEFINE(orb_test_large, struct orb_test_large, sizeof(orb_test_large),
+	   "ORB_TEST_LARGE:int val;hrt_abstime time;char[512] junk;");
+
 uORBTest::UnitTest &uORBTest::UnitTest::instance()
 {
 	static uORBTest::UnitTest t;
 	return t;
 }
 
-int uORBTest::UnitTest::pubsublatency_main(void)
+int uORBTest::UnitTest::pubsublatency_main()
 {
 	/* poll on test topic and output latency */
 	float latency_integral = 0.0f;
@@ -74,6 +89,7 @@ int uORBTest::UnitTest::pubsublatency_main(void)
 	const unsigned maxruns = 1000;
 	unsigned timingsgroup = 0;
 
+	// timings has to be on the heap to keep frame size below 2048 bytes
 	unsigned *timings = new unsigned[maxruns];
 
 	for (unsigned i = 0; i < maxruns; i++) {
@@ -112,8 +128,9 @@ int uORBTest::UnitTest::pubsublatency_main(void)
 		sprintf(fname, PX4_ROOTFSDIR"/fs/microsd/timings%u.txt", timingsgroup);
 		FILE *f = fopen(fname, "w");
 
-		if (f == NULL) {
+		if (f == nullptr) {
 			warnx("Error opening file!\n");
+			delete[] timings;
 			return uORB::ERROR;
 		}
 
@@ -130,7 +147,7 @@ int uORBTest::UnitTest::pubsublatency_main(void)
 
 	pubsubtest_passed = true;
 
-	if (static_cast<float>(latency_integral / maxruns) > 80.0f) {
+	if (static_cast<float>(latency_integral / maxruns) > 100.0f) {
 		pubsubtest_res = uORB::ERROR;
 
 	} else {
@@ -300,7 +317,7 @@ int uORBTest::UnitTest::test_multi()
 	/* this routine tests the multi-topic support */
 	test_note("try multi-topic support");
 
-	struct orb_test t, u;
+	struct orb_test t {}, u {};
 	t.val = 0;
 	int instance0;
 	_pfd[0] = orb_advertise_multi(ORB_ID(orb_multitest), &t, &instance0, ORB_PRIO_MAX);
@@ -457,7 +474,7 @@ int uORBTest::UnitTest::test_multi2()
 		orb_data_fd[i] = orb_subscribe_multi(ORB_ID(orb_test_medium_multi), i);
 	}
 
-	char *const args[1] = { NULL };
+	char *const args[1] = { nullptr };
 	int pubsub_task = px4_task_spawn_cmd("uorb_test_multi",
 					     SCHED_DEFAULT,
 					     SCHED_PRIORITY_MAX - 5,
@@ -480,7 +497,13 @@ int uORBTest::UnitTest::test_multi2()
 		if (updated) {
 			struct orb_test_medium msg;
 			orb_copy(ORB_ID(orb_test_medium_multi), orb_data_cur_fd, &msg);
+
+// Relax timing requirement for Darwin CI system
+#ifdef __PX4_DARWIN
+			usleep(10000);
+#else
 			usleep(1000);
+#endif
 
 			if (last_time >= msg.time && last_time != 0) {
 				return test_fail("Timestamp not increasing! (%" PRIu64 " >= %" PRIu64 ")", last_time, msg.time);
@@ -513,7 +536,7 @@ int uORBTest::UnitTest::test_multi_reversed()
 		return test_fail("sub. id2: ret: %d", sfd2);
 	}
 
-	struct orb_test t, u;
+	struct orb_test t {}, u {};
 
 	t.val = 0;
 
@@ -740,7 +763,7 @@ int uORBTest::UnitTest::test_queue_poll_notify()
 
 	_thread_should_exit = false;
 
-	char *const args[1] = { NULL };
+	char *const args[1] = { nullptr };
 	int pubsub_task = px4_task_spawn_cmd("uorb_test_queue",
 					     SCHED_DEFAULT,
 					     SCHED_PRIORITY_MIN + 5,

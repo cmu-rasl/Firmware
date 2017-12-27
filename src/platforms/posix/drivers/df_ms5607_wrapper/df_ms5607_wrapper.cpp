@@ -53,6 +53,7 @@
 #include <systemlib/err.h>
 
 #include <drivers/drv_baro.h>
+#include <drivers/drv_hrt.h>
 
 #include <board_config.h>
 
@@ -192,9 +193,6 @@ int DfMS5607Wrapper::_publish(struct baro_sensor_data &data)
 			orb_publish(ORB_ID(sensor_baro), _baro_topic, &baro_report);
 		}
 	}
-
-	/* Notify anyone waiting for data. */
-	DevMgr::updateNotify(*this);
 
 	perf_end(_baro_sample_perf);
 

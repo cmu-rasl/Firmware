@@ -30,7 +30,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 ############################################################################
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/cmake_hexagon")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PX4_SOURCE_DIR}/cmake/cmake_hexagon")
 include(hexagon_sdk)
 
 include_directories(${HEXAGON_8074_INCLUDES})
@@ -42,7 +42,6 @@ set(QURT_LAYER_SRCS
 	../../posix/px4_layer/drv_hrt.c
 	qurt_stubs.c
 	main.cpp
-	params.c
 	shmem_qurt.c
 	)
 if ("${QURT_ENABLE_STUBS}" STREQUAL "1")
@@ -56,7 +55,6 @@ endif()
 px4_add_module(
 	MODULE platforms__qurt__px4_layer
 	COMPILE_FLAGS
-		-Os
 	SRCS
 		${QURT_LAYER_SRCS}
 		${CONFIG_SRC}

@@ -1,16 +1,11 @@
 include(posix/px4_impl_posix)
 
-set(CMAKE_TOOLCHAIN_FILE ${CMAKE_SOURCE_DIR}/cmake/toolchains/Toolchain-arm-linux-gnueabihf-raspbian.cmake)
+set(CMAKE_TOOLCHAIN_FILE ${PX4_SOURCE_DIR}/cmake/toolchains/Toolchain-arm-linux-gnueabihf.cmake)
 
 add_definitions(
-  -D__PX4_POSIX_BEBOP
-  -D__LINUX
-  -D__BEBOP
-	)
-
-set(CMAKE_PROGRAM_PATH
-	"${RPI_TOOLCHAIN_DIR}/gcc-linaro-arm-linux-gnueabihf-raspbian/bin"
-	${CMAKE_PROGRAM_PATH}
+	-D__PX4_POSIX_BEBOP
+	-D__DF_LINUX # Define needed DriverFramework
+	-D__DF_BEBOP # Define needed DriverFramework
 	)
 
 set(config_module_list
@@ -25,6 +20,9 @@ set(config_module_list
 	platforms/posix/drivers/df_ms5607_wrapper
 	platforms/posix/drivers/df_mpu6050_wrapper
 	platforms/posix/drivers/df_ak8963_wrapper
+	platforms/posix/drivers/df_bebop_bus_wrapper
+	platforms/posix/drivers/df_bebop_rangefinder_wrapper
+	platforms/posix/drivers/bebop_flow
 
 	#
 	# System commands
@@ -37,10 +35,8 @@ set(config_module_list
 	systemcmds/perf
 
 	#
-	# Estimation modules (EKF/ SO3 / other filters)
+	# Estimation modules
 	#
-	#modules/attitude_estimator_ekf
-	modules/ekf_att_pos_estimator
 	modules/attitude_estimator_q
 	modules/position_estimator_inav
 	modules/local_position_estimator
@@ -61,7 +57,7 @@ set(config_module_list
 	modules/sdlog2
 	modules/logger
 	modules/commander
-	modules/param
+	modules/systemlib/param
 	modules/systemlib
 	modules/systemlib/mixer
 	modules/uORB
@@ -73,6 +69,7 @@ set(config_module_list
 	#
 	# PX4 drivers
 	#
+	drivers/gps
 
 	#
 	# Libraries
@@ -89,7 +86,9 @@ set(config_module_list
 	lib/terrain_estimation
 	lib/runway_takeoff
 	lib/tailsitter_recovery
+	lib/version
 	lib/DriverFramework/framework
+	lib/micro-CDR
 
 	#
 	# POSIX
@@ -103,4 +102,7 @@ set(config_df_driver_list
 	ms5607
 	mpu6050
 	ak8963
+	bebop_bus
+	bebop_rangefinder
+	mt9v117
 )

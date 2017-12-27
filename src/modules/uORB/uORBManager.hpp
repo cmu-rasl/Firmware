@@ -78,6 +78,14 @@ public:
 		return _Instance;
 	}
 
+	/**
+	 * Get the DeviceMaster for a given Flavor. If it does not exist,
+	 * it will be created and initialized.
+	 * Note: the first call to this is not thread-safe.
+	 * @return nullptr if initialization failed (and errno will be set)
+	 */
+	uORB::DeviceMaster *get_device_master(Flavor flavor);
+
 	// ==== uORB interface methods ====
 	/**
 	 * Advertise as the publisher of a topic.
@@ -104,7 +112,10 @@ public:
 	 *      ORB_DEFINE with no corresponding ORB_DECLARE)
 	 *      this function will return nullptr and set errno to ENOENT.
 	 */
-	orb_advert_t orb_advertise(const struct orb_metadata *meta, const void *data, unsigned int queue_size = 1);
+	orb_advert_t orb_advertise(const struct orb_metadata *meta, const void *data, unsigned int queue_size = 1)
+	{
+		return orb_advertise_multi(meta, data, nullptr, ORB_PRIO_DEFAULT, queue_size);
+	}
 
 	/**
 	 * Advertise as the publisher of a topic.
@@ -287,7 +298,8 @@ public:
 	int  orb_stat(int handle, uint64_t *time) ;
 
 	/**
-	 * Check if a topic has already been created.
+	 * Check if a topic has already been created (a publisher or a subscriber exists with
+	 * the given instance).
 	 *
 	 * @param meta    ORB topic metadata.
 	 * @param instance  ORB instance
@@ -352,7 +364,7 @@ public:
 	/**
 	 * Gets the uORB Communicator instance.
 	 */
-	uORBCommunicator::IChannel *get_uorb_communicator(void);
+	uORBCommunicator::IChannel *get_uorb_communicator();
 
 	/**
 	 * Utility method to check if there is a remote subscriber present
@@ -398,9 +410,27 @@ private: // data members
 	// the communicator channel instance.
 	uORBCommunicator::IChannel *_comm_channel;
 	ORBSet _remote_subscriber_topics;
+	ORBSet _remote_topics;
+
+	DeviceMaster *_device_masters[Flavor_count]; ///< Allow at most one DeviceMaster per Flavor
 
 private: //class methods
 	Manager();
+	~Manager();
+
+	/**
+	 * Interface to process a received topic from remote.
+	 * @param topic_name
+	 * 	This represents the uORB message Name (topic); This message Name should be
+	 * 	globally unique.
+	 * @param isAdvertisement
+	 * 	Represents if the topic has been advertised or is no longer avialable.
+	 * @return
+	 *  0 = success; This means the messages is successfully handled in the
+	 *  	handler.
+	 *  otherwise = failure.
+	 */
+	virtual int16_t process_remote_topic(const char *topic_name, bool isAdvertisement);
 
 	/**
 	   * Interface to process a received AddSubscription from remote.

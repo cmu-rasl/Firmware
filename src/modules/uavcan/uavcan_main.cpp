@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2014 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2014-2017 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,11 +37,13 @@
  * Implements basic functionality of UAVCAN node.
  *
  * @author Pavel Kirienko <pavel.kirienko@gmail.com>
- *		 David Sidrane <david_s5@nscdg.com>
- *		 Andreas Jochum <Andreas@NicaDrone.com>
+ * @author David Sidrane <david_s5@nscdg.com>
+ * @author Andreas Jochum <Andreas@NicaDrone.com>
+ *
  */
 
 #include <px4_config.h>
+#include <px4_tasks.h>
 
 #include <cstdlib>
 #include <cstring>
@@ -51,8 +53,6 @@
 #include <systemlib/param/param.h>
 #include <systemlib/mixer/mixer.h>
 #include <systemlib/board_serial.h>
-#include <systemlib/scheduling_priorities.h>
-#include <systemlib/git_version.h>
 #include <version/version.h>
 #include <arch/board/board.h>
 #include <arch/chip/chip.h>
@@ -84,6 +84,7 @@ UavcanNode::UavcanNode(uavcan::ICanDriver &can_driver, uavcan::ISystemClock &sys
 	_hardpoint_controller(_node),
 	_time_sync_master(_node),
 	_time_sync_slave(_node),
+	_node_status_monitor(_node),
 	_master_timer(_node),
 	_setget_response(0)
 
@@ -108,18 +109,8 @@ UavcanNode::UavcanNode(uavcan::ICanDriver &can_driver, uavcan::ISystemClock &sys
 	if (res < 0) {
 		std::abort();
 	}
-
-	if (_perfcnt_node_spin_elapsed == nullptr) {
-		errx(1, "uavcan: couldn't allocate _perfcnt_node_spin_elapsed");
-	}
-
-	if (_perfcnt_esc_mixer_output_elapsed == nullptr) {
-		errx(1, "uavcan: couldn't allocate _perfcnt_esc_mixer_output_elapsed");
-	}
-
-	if (_perfcnt_esc_mixer_total_elapsed == nullptr) {
-		errx(1, "uavcan: couldn't allocate _perfcnt_esc_mixer_total_elapsed");
-	}
+	/* _server_command_sem use case is a signal */
+	px4_sem_setprotocol(&_server_command_sem, SEM_PRIO_NONE);
 }
 
 UavcanNode::~UavcanNode()
@@ -147,9 +138,9 @@ UavcanNode::~UavcanNode()
 		} while (_task != -1);
 	}
 
-	(void)::close(_armed_sub);
-	(void)::close(_test_motor_sub);
-	(void)::close(_actuator_direct_sub);
+	(void)orb_unsubscribe(_armed_sub);
+	(void)orb_unsubscribe(_test_motor_sub);
+	(void)orb_unsubscribe(_actuator_direct_sub);
 
 	// Removing the sensor bridges
 	auto br = _sensor_bridges.getHead();
@@ -162,9 +153,6 @@ UavcanNode::~UavcanNode()
 
 	_instance = nullptr;
 
-	perf_free(_perfcnt_node_spin_elapsed);
-	perf_free(_perfcnt_esc_mixer_output_elapsed);
-	perf_free(_perfcnt_esc_mixer_total_elapsed);
 	pthread_mutex_destroy(&_node_mutex);
 	px4_sem_destroy(&_server_command_sem);
 
@@ -179,19 +167,19 @@ int UavcanNode::getHardwareVersion(uavcan::protocol::HardwareVersion &hwver)
 	int rv = -1;
 
 	if (UavcanNode::instance()) {
-		if (!std::strncmp(HW_ARCH, "PX4FMU_V1", 9)) {
+		if (!std::strncmp(px4_board_name(), "PX4FMU_V1", 9)) {
 			hwver.major = 1;
 
-		} else if (!std::strncmp(HW_ARCH, "PX4FMU_V2", 9)) {
+		} else if (!std::strncmp(px4_board_name(), "PX4FMU_V2", 9)) {
 			hwver.major = 2;
 
 		} else {
-			; // All other values of HW_ARCH resolve to zero
+			; // All other values of px4_board_name() resolve to zero
 		}
 
-		uint8_t udid[12] = {};  // Someone seems to love magic numbers
-		get_board_serial(udid);
-		uavcan::copy(udid, udid + sizeof(udid), hwver.unique_id.begin());
+		mfguid_t mfgid = {};
+		board_get_mfguid(mfgid);
+		uavcan::copy(mfgid, mfgid + sizeof(mfgid), hwver.unique_id.begin());
 		rv = 0;
 	}
 
@@ -556,7 +544,6 @@ int UavcanNode::start(uavcan::NodeID node_id, uint32_t bitrate)
 	static CanInitHelper* can = nullptr;
 
 	if (can == nullptr) {
-		warnx("CAN driver init...");
 
 		can = new CanInitHelper();
 
@@ -617,15 +604,15 @@ void UavcanNode::fill_node_info()
 	/* software version */
 	uavcan::protocol::SoftwareVersion swver;
 
-	// Extracting the first 8 hex digits of GIT_VERSION and converting them to int
+	// Extracting the first 8 hex digits of the git hash and converting them to int
 	char fw_git_short[9] = {};
-	std::memmove(fw_git_short, px4_git_version, 8);
-	assert(fw_git_short[8] == '\0');
+	std::memmove(fw_git_short, px4_firmware_version_string(), 8);
 	char *end = nullptr;
 	swver.vcs_commit = std::strtol(fw_git_short, &end, 16);
 	swver.optional_field_flags |= swver.OPTIONAL_FIELD_FLAG_VCS_COMMIT;
 
-	warnx("SW version vcs_commit: 0x%08x", unsigned(swver.vcs_commit));
+	// Too verbose for normal operation
+	//warnx("SW version vcs_commit: 0x%08x", unsigned(swver.vcs_commit));
 
 	_node.setSoftwareVersion(swver);
 
@@ -660,6 +647,11 @@ int UavcanNode::init(uavcan::NodeID node_id)
 		return ret;
 	}
 
+	{
+		(void) param_get(param_find("UAVCAN_ESC_IDLT"), &_idle_throttle_when_armed);
+		_esc_controller.enable_idle_throttle_when_armed(_idle_throttle_when_armed > 0);
+	}
+
 	ret = _hardpoint_controller.init();
 
 	if (ret < 0) {
@@ -690,7 +682,6 @@ int UavcanNode::init(uavcan::NodeID node_id)
 
 void UavcanNode::node_spin_once()
 {
-	perf_begin(_perfcnt_node_spin_elapsed);
 	const int spin_res = _node.spinOnce();
 
 	if (spin_res < 0) {
@@ -701,8 +692,6 @@ void UavcanNode::node_spin_once()
 	if (_tx_injector != nullptr) {
 		_tx_injector->injectTxFramesInto(_node);
 	}
-
-	perf_end(_perfcnt_node_spin_elapsed);
 }
 
 /*
@@ -800,7 +789,7 @@ int UavcanNode::run()
 	_master_timer.setCallback(TimerCallback(this, &UavcanNode::handle_time_sync));
 	_master_timer.startPeriodic(uavcan::MonotonicDuration::fromMSec(1000));
 
-
+	_node_status_monitor.start();
 
 	const int busevent_fd = ::open(uavcan_stm32::BusEvent::DevName, 0);
 
@@ -861,11 +850,7 @@ int UavcanNode::run()
 		// Mutex is unlocked while the thread is blocked on IO multiplexing
 		(void)pthread_mutex_unlock(&_node_mutex);
 
-		perf_end(_perfcnt_esc_mixer_total_elapsed); // end goes first, it's not a mistake
-
 		const int poll_ret = ::poll(_poll_fds, _poll_fds_num, PollTimeoutMs);
-
-		perf_begin(_perfcnt_esc_mixer_total_elapsed);
 
 		(void)pthread_mutex_lock(&_node_mutex);
 
@@ -958,9 +943,7 @@ int UavcanNode::run()
 
 			// Output to the bus
 			_outputs.timestamp = hrt_absolute_time();
-			perf_begin(_perfcnt_esc_mixer_output_elapsed);
 			_esc_controller.update_outputs(_outputs.output, _outputs.noutputs);
-			perf_end(_perfcnt_esc_mixer_output_elapsed);
 		}
 
 
@@ -984,9 +967,16 @@ int UavcanNode::run()
 
 			// Update the armed status and check that we're not locked down and motor
 			// test is not running
-			bool set_armed = _armed.armed && !_armed.lockdown && !_test_in_progress;
+			bool set_armed = _armed.armed && !_armed.lockdown && !_armed.manual_lockdown && !_test_in_progress;
 
 			arm_actuators(set_armed);
+
+			if (_armed.soft_stop) {
+				_esc_controller.enable_idle_throttle_when_armed(false);
+
+			} else {
+				_esc_controller.enable_idle_throttle_when_armed(_idle_throttle_when_armed > 0);
+			}
 		}
 	}
 
@@ -1014,12 +1004,12 @@ UavcanNode::teardown()
 
 	for (unsigned i = 0; i < actuator_controls_s::NUM_ACTUATOR_CONTROL_GROUPS; i++) {
 		if (_control_subs[i] > 0) {
-			::close(_control_subs[i]);
+			orb_unsubscribe(_control_subs[i]);
 			_control_subs[i] = -1;
 		}
 	}
 
-	return (_armed_sub >= 0) ? ::close(_armed_sub) : 0;
+	return (_armed_sub >= 0) ? orb_unsubscribe(_armed_sub) : 0;
 }
 
 int
@@ -1046,7 +1036,7 @@ UavcanNode::subscribe()
 
 		if (unsub_groups & (1 << i)) {
 			warnx("unsubscribe from actuator_controls_%d", i);
-			::close(_control_subs[i]);
+			orb_unsubscribe(_control_subs[i]);
 			_control_subs[i] = -1;
 		}
 
@@ -1221,10 +1211,13 @@ UavcanNode::print_info()
 		printf("Addr\tV\tA\tTemp\tSetpt\tRPM\tErr\n");
 
 		for (uint8_t i = 0; i < _outputs.noutputs; i++) {
+			const float temp_celsius = (esc.esc[i].esc_temperature > 0) ?
+				(esc.esc[i].esc_temperature - 273.15F) : 0.0F;
+
 			printf("%d\t",    esc.esc[i].esc_address);
 			printf("%3.2f\t", (double)esc.esc[i].esc_voltage);
 			printf("%3.2f\t", (double)esc.esc[i].esc_current);
-			printf("%3.2f\t", (double)esc.esc[i].esc_temperature);
+			printf("%3.2f\t", (double)temp_celsius);
 			printf("%3.2f\t", (double)esc.esc[i].esc_setpoint);
 			printf("%d\t",    esc.esc[i].esc_rpm);
 			printf("%d",      esc.esc[i].esc_errorcount);
@@ -1243,6 +1236,18 @@ UavcanNode::print_info()
 		printf("\n");
 		br = br->getSibling();
 	}
+
+	// Printing all nodes that are online
+	std::printf("Online nodes (Node ID, Health, Mode):\n");
+	_node_status_monitor.forEachNode([](uavcan::NodeID nid, uavcan::NodeStatusMonitor::NodeStatus ns) {
+		static constexpr const char* HEALTH[] = {
+			"OK", "WARN", "ERR", "CRIT"
+		};
+		static constexpr const char* MODES[] = {
+			"OPERAT", "INIT", "MAINT", "SW_UPD", "?", "?", "?", "OFFLN"
+		};
+		std::printf("\t% 3d %-10s %-10s\n", int(nid.get()), HEALTH[ns.health], MODES[ns.mode]);
+	});
 
 	(void)pthread_mutex_unlock(&_node_mutex);
 }
@@ -1436,11 +1441,13 @@ int uavcan_main(int argc, char *argv[])
 
 			int rv = inst->fw_server(UavcanNode::Stop);
 
+			/* Let's recover any memory we can */
+
+			inst->shrink();
 			if (rv < 0) {
 				warnx("Firmware Server Failed to Stop %d", rv);
 				::exit(rv);
 			}
-
 			::exit(0);
 
 		} else {

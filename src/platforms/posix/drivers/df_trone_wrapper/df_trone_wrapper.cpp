@@ -56,6 +56,7 @@
 #include <systemlib/err.h>
 
 #include <drivers/drv_range_finder.h>
+#include <drivers/drv_hrt.h>
 
 #include <uORB/uORB.h>
 #include <uORB/topics/subsystem_info.h>
@@ -179,9 +180,6 @@ int DfTROneWrapper::_publish(struct range_sensor_data &data)
 	} else {
 		orb_publish(ORB_ID(distance_sensor), _range_topic, &d);
 	}
-
-	/* Notify anyone waiting for data. */
-	DevMgr::updateNotify(*this);
 
 	return 0;
 };

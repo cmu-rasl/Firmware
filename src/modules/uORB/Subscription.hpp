@@ -86,7 +86,14 @@ public:
 
 // accessors
 	const struct orb_metadata *getMeta() { return _meta; }
-	int getHandle() { return _handle; }
+	int getHandle() const { return _handle; }
+
+	unsigned getInterval() const
+	{
+		unsigned int interval;
+		orb_get_interval(getHandle(), &interval);
+		return interval;
+	}
 protected:
 // accessors
 	void setHandle(int handle) { _handle = handle; }
@@ -130,8 +137,7 @@ public:
 			 unsigned interval = 0,
 			 int instance = 0,
 			 List<SubscriptionNode *> *list = nullptr) :
-		SubscriptionBase(meta, interval, instance),
-		_interval(interval)
+		SubscriptionBase(meta, interval, instance)
 	{
 		if (list != nullptr) { list->add(this); }
 	}
@@ -141,11 +147,6 @@ public:
 	 * updates, a child class must implement it.
 	 */
 	virtual void update() = 0;
-// accessors
-	unsigned getInterval() { return _interval; }
-protected:
-// attributes
-	unsigned _interval;
 
 };
 
@@ -170,29 +171,50 @@ public:
 	Subscription(const struct orb_metadata *meta,
 		     unsigned interval = 0,
 		     int instance = 0,
-		     List<SubscriptionNode *> *list = nullptr);
+		     List<SubscriptionNode *> *list = nullptr):
+		SubscriptionNode(meta, interval, instance, list),
+		_data() // initialize data structure to zero
+	{}
 
-	Subscription(const Subscription &);
+
+	Subscription(const Subscription &other):
+		SubscriptionNode(other._meta, other.getInterval(), other._instance, nullptr),
+		_data() // initialize data structure to zero
+	{}
+
 
 	/**
 	 * Deconstructor
 	 */
-	virtual ~Subscription();
+	virtual ~Subscription()
+	{}
 
 
 	/**
 	 * Create an update function that uses the embedded struct.
 	 */
-	void update();
+	void update()
+	{
+		SubscriptionBase::update((void *)(&_data));
+	}
+
 
 	/**
 	 * Create an update function that uses the embedded struct.
 	 */
-	bool check_updated();
+	bool check_updated()
+	{
+		return SubscriptionBase::updated();
+	}
+
 	/*
 	 * This function gets the T struct data
 	 * */
-	const T &get();
+	const T &get() const
+	{
+		return _data;
+	}
+
 private:
 	T _data;
 };

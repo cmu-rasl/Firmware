@@ -35,6 +35,7 @@
  * @author Pavel Kirienko <pavel.kirienko@gmail.com>
  */
 
+#include <drivers/drv_hrt.h>
 #include "baro.hpp"
 #include <cmath>
 
@@ -163,6 +164,9 @@ void UavcanBarometerBridge::air_pressure_sub_cb(const
 	report.temperature = last_temperature_kelvin - 273.15F;
 	report.pressure    = msg.static_pressure / 100.0F;  // Convert to millibar
 	report.error_count = 0;
+
+	/* TODO get device ID for sensor */
+	report.device_id = 0;
 
 	/*
 	 * Altitude computation

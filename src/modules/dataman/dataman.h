@@ -36,12 +36,11 @@
  *
  * DATAMANAGER driver.
  */
-#ifndef _DATAMANAGER_H
-#define _DATAMANAGER_H
+#pragma once
 
+#include <string.h>
 #include <navigator/navigation.h>
 #include <uORB/topics/mission.h>
-#include <uORB/topics/fence.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,25 +54,34 @@ typedef enum {
 	DM_KEY_WAYPOINTS_OFFBOARD_1,	/* (alernate between 0 and 1) */
 	DM_KEY_WAYPOINTS_ONBOARD,	/* Mission way point coordinates generated onboard */
 	DM_KEY_MISSION_STATE,		/* Persistent mission state */
+	DM_KEY_COMPAT,
 	DM_KEY_NUM_KEYS			/* Total number of item types defined */
 } dm_item_t;
 
 #define DM_KEY_WAYPOINTS_OFFBOARD(_id) (_id == 0 ? DM_KEY_WAYPOINTS_OFFBOARD_0 : DM_KEY_WAYPOINTS_OFFBOARD_1)
 
+#if defined(MEMORY_CONSTRAINED_SYSTEM)
+enum {
+	DM_KEY_SAFE_POINTS_MAX = 8,
+	DM_KEY_FENCE_POINTS_MAX = 16,
+	DM_KEY_WAYPOINTS_OFFBOARD_0_MAX = NUM_MISSIONS_SUPPORTED,
+	DM_KEY_WAYPOINTS_OFFBOARD_1_MAX = NUM_MISSIONS_SUPPORTED,
+	DM_KEY_WAYPOINTS_ONBOARD_MAX = (NUM_MISSIONS_SUPPORTED / 10),
+	DM_KEY_MISSION_STATE_MAX = 1,
+	DM_KEY_COMPAT_MAX = 1
+};
+#else
 /** The maximum number of instances for each item type */
 enum {
 	DM_KEY_SAFE_POINTS_MAX = 8,
-#ifdef __cplusplus
-	DM_KEY_FENCE_POINTS_MAX = fence_s::GEOFENCE_MAX_VERTICES,
-#else
-	DM_KEY_FENCE_POINTS_MAX = GEOFENCE_MAX_VERTICES,
-#endif
+	DM_KEY_FENCE_POINTS_MAX = 64,
 	DM_KEY_WAYPOINTS_OFFBOARD_0_MAX = NUM_MISSIONS_SUPPORTED,
 	DM_KEY_WAYPOINTS_OFFBOARD_1_MAX = NUM_MISSIONS_SUPPORTED,
 	DM_KEY_WAYPOINTS_ONBOARD_MAX = NUM_MISSIONS_SUPPORTED,
-	DM_KEY_MISSION_STATE_MAX = 1
+	DM_KEY_MISSION_STATE_MAX = 1,
+	DM_KEY_COMPAT_MAX = 1
 };
-
+#endif
 /** Data persistence levels */
 typedef enum {
 	DM_PERSIST_POWER_ON_RESET = 0,	/* Data survives all resets */
@@ -88,14 +96,23 @@ typedef enum {
 	DM_INIT_REASON_VOLATILE			/* Data does not survive reset */
 } dm_reset_reason;
 
-/** Maximum size in bytes of a single item instance */
-#define DM_MAX_DATA_SIZE 126
+struct dataman_compat_s {
+	uint64_t key;
+};
+
+/* increment this define whenever a binary incompatible change is performed */
+#define DM_COMPAT_VERSION	1ULL
+
+#define DM_COMPAT_KEY ((DM_COMPAT_VERSION << 32) + (sizeof(struct mission_item_s) << 24) + \
+		       (sizeof(struct mission_s) << 16) + (sizeof(struct mission_stats_entry_s) << 12) + \
+		       (sizeof(struct mission_fence_point_s) << 8) + (sizeof(struct mission_save_point_s) << 4) + \
+		       sizeof(struct dataman_compat_s))
 
 /** Retrieve from the data manager store */
 __EXPORT ssize_t
 dm_read(
 	dm_item_t item,			/* The item type to retrieve */
-	unsigned char index,		/* The index of the item */
+	unsigned index,			/* The index of the item */
 	void *buffer,			/* Pointer to caller data buffer */
 	size_t buflen			/* Length in bytes of data to retrieve */
 );
@@ -104,22 +121,36 @@ dm_read(
 __EXPORT ssize_t
 dm_write(
 	dm_item_t  item,		/* The item type to store */
-	unsigned char index,		/* The index of the item */
+	unsigned index,			/* The index of the item */
 	dm_persitence_t persistence,	/* The persistence level of this item */
 	const void *buffer,		/* Pointer to caller data buffer */
 	size_t buflen			/* Length in bytes of data to retrieve */
 );
 
-/** Lock all items of this type */
-__EXPORT void
+/**
+ * Lock all items of a type. Can be used for atomic updates of multiple items (single items are always updated
+ * atomically).
+ * Note that this lock is independent from dm_read & dm_write calls.
+ * @return 0 on success and lock taken, -1 on error (lock not taken, errno set)
+ */
+__EXPORT int
 dm_lock(
-	dm_item_t item			/* The item type to clear */
+	dm_item_t item			/* The item type to lock */
 );
 
-/** Unlock all items of this type */
+/**
+ * Try to lock all items of a type (@see sem_trywait()).
+ * @return 0 if lock is taken, -1 otherwise (on error or if already locked. errno is set accordingly)
+ */
+__EXPORT int
+dm_trylock(
+	dm_item_t item			/* The item type to lock */
+);
+
+/** Unlock all items of a type */
 __EXPORT void
 dm_unlock(
-	dm_item_t item			/* The item type to clear */
+	dm_item_t item			/* The item type to unlock */
 );
 
 /** Erase all items of this type */
@@ -134,8 +165,26 @@ dm_restart(
 	dm_reset_reason restart_type	/* The last reset type */
 );
 
-#ifdef __cplusplus
-}
+#if defined(FLASH_BASED_DATAMAN)
+typedef struct dm_sector_descriptor_t {
+	uint8_t       page;
+	uint32_t      size;
+	uint32_t      address;
+} dm_sector_descriptor_t;
+
+/**
+ * Set the flash sector description were data should persist data
+ *
+ * Important: do not use a Flash sector from the same bank that STM32 read
+ * instructions or the CPU will held for sometime during Flash erase and write
+ * and this could cause your drone to fall.
+ */
+__EXPORT int
+dm_flash_sector_description_set(
+	const dm_sector_descriptor_t *description
+);
 #endif
 
+#ifdef __cplusplus
+}
 #endif

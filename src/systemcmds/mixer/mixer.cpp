@@ -38,6 +38,7 @@
  */
 
 #include <px4_config.h>
+#include <px4_module.h>
 #include <px4_posix.h>
 #include <string.h>
 #include <stdlib.h>
@@ -47,7 +48,6 @@
 #include <errno.h>
 #include <ctype.h>
 
-#include <systemlib/err.h>
 #include <systemlib/mixer/mixer.h>
 #include <uORB/topics/actuator_controls.h>
 
@@ -59,7 +59,7 @@
 extern "C" __EXPORT int mixer_main(int argc, char *argv[]);
 
 static void	usage(const char *reason);
-static int	load(const char *devname, const char *fname);
+static int	load(const char *devname, const char *fname, bool append);
 
 int
 mixer_main(int argc, char *argv[])
@@ -75,10 +75,23 @@ mixer_main(int argc, char *argv[])
 			return 1;
 		}
 
-		int ret = load(argv[2], argv[3]);
+		int ret = load(argv[2], argv[3], false);
 
 		if (ret != 0) {
-			warnx("failed to load mixer");
+			PX4_ERR("failed to load mixer");
+			return 1;
+		}
+
+	} else if (!strcmp(argv[1], "append")) {
+		if (argc < 4) {
+			usage("missing device or filename");
+			return 1;
+		}
+
+		int ret = load(argv[2], argv[3], true);
+
+		if (ret != 0) {
+			PX4_ERR("failed to append mixer");
 			return 1;
 		}
 
@@ -97,12 +110,25 @@ usage(const char *reason)
 		PX4_INFO("%s", reason);
 	}
 
-	PX4_INFO("usage:");
-	PX4_INFO("  mixer load <device> <filename>");
+	PRINT_MODULE_DESCRIPTION(
+		R"DESCR_STR(
+### Description
+Load or append mixer files to the ESC driver.
+
+Note that the driver must support the used ioctl's, which is the case on NuttX, but for example not on RPi.
+)DESCR_STR");
+
+
+	PRINT_MODULE_USAGE_NAME("mixer", "command");
+
+	PRINT_MODULE_USAGE_COMMAND("load");
+	PRINT_MODULE_USAGE_ARG("<file:dev> <file>", "Output device (eg. /dev/pwm_output0) and mixer file", false);
+	PRINT_MODULE_USAGE_COMMAND("append");
+	PRINT_MODULE_USAGE_ARG("<file:dev> <file>", "Output device (eg. /dev/pwm_output0) and mixer file", false);
 }
 
 static int
-load(const char *devname, const char *fname)
+load(const char *devname, const char *fname, bool append)
 {
 	// sleep a while to ensure device has been set up
 	usleep(20000);
@@ -111,20 +137,22 @@ load(const char *devname, const char *fname)
 
 	/* open the device */
 	if ((dev = px4_open(devname, 0)) < 0) {
-		warnx("can't open %s\n", devname);
+		PX4_ERR("can't open %s\n", devname);
 		return 1;
 	}
 
-	/* reset mixers on the device */
-	if (px4_ioctl(dev, MIXERIOCRESET, 0)) {
-		warnx("can't reset mixers on %s", devname);
-		return 1;
+	/* reset mixers on the device, but not if appending */
+	if (!append) {
+		if (px4_ioctl(dev, MIXERIOCRESET, 0)) {
+			PX4_ERR("can't reset mixers on %s", devname);
+			return 1;
+		}
 	}
 
 	char buf[2048];
 
 	if (load_mixer_file(fname, &buf[0], sizeof(buf)) < 0) {
-		warnx("can't load mixer: %s", fname);
+		PX4_ERR("can't load mixer file: %s", fname);
 		return 1;
 	}
 
@@ -132,7 +160,7 @@ load(const char *devname, const char *fname)
 	int ret = px4_ioctl(dev, MIXERIOCLOADBUF, (unsigned long)buf);
 
 	if (ret < 0) {
-		warnx("error loading mixers from %s", fname);
+		PX4_ERR("failed to load mixers from %s", fname);
 		return 1;
 	}
 

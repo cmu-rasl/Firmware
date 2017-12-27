@@ -80,7 +80,7 @@ warnerr_core(int errcode, const char *fmt, va_list args)
 
 	fprintf(stderr, "\n");
 #elif CONFIG_ARCH_LOWPUTC
-	lowsyslog("%s: ", px4_get_taskname());
+	syslog("%s: ", px4_get_taskname());
 	lowvsyslog(fmt, args);
 
 	/* convenience as many parts of NuttX use negative errno */
@@ -89,10 +89,10 @@ warnerr_core(int errcode, const char *fmt, va_list args)
 	}
 
 	if (errcode < NOCODE) {
-		lowsyslog(": %s", strerror(errcode));
+		syslog(": %s", strerror(errcode));
 	}
 
-	lowsyslog("\n");
+	syslog("\n");
 #endif
 }
 
@@ -102,7 +102,9 @@ err(int exitcode, const char *fmt, ...)
 	va_list	args;
 
 	va_start(args, fmt);
-	verr(exitcode, fmt, args);
+	warnerr_core(errno, fmt, args);
+	va_end(args);
+	exit(exitcode);
 }
 
 void
@@ -118,7 +120,9 @@ errc(int exitcode, int errcode, const char *fmt, ...)
 	va_list args;
 
 	va_start(args, fmt);
-	verrc(exitcode, errcode, fmt, args);
+	warnerr_core(errcode, fmt, args);
+	va_end(args);
+	exit(exitcode);
 }
 
 void
@@ -134,7 +138,9 @@ errx(int exitcode, const char *fmt, ...)
 	va_list args;
 
 	va_start(args, fmt);
-	verrx(exitcode, fmt, args);
+	warnerr_core(NOCODE, fmt, args);
+	va_end(args);
+	exit(exitcode);
 }
 
 void

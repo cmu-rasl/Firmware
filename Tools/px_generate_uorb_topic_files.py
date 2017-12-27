@@ -42,11 +42,12 @@ import os
 import shutil
 import filecmp
 import argparse
-
 import sys
+
 px4_tools_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(px4_tools_dir + "/genmsg/src")
 sys.path.append(px4_tools_dir + "/gencpp/src")
+px4_msg_dir = os.path.join(px4_tools_dir,"../msg")
 
 try:
         import em
@@ -81,7 +82,12 @@ OUTPUT_FILE_EXT = ['.h', '.cpp']
 INCL_DEFAULT = ['std_msgs:./msg/std_msgs']
 PACKAGE = 'px4'
 TOPICS_TOKEN = '# TOPICS '
+IDL_TEMPLATE_FILE = 'msg.idl.template'
 
+class MsgScope:
+    NONE = 0
+    SEND = 1
+    RECEIVE = 2
 
 def get_multi_topics(filename):
         """
@@ -140,12 +146,113 @@ def generate_output_from_file(format_idx, filename, outputdir, templatedir, incl
 
         return generate_by_template(output_file, template_file, em_globals)
 
+def generate_idl_file(filename_msg, outputdir, templatedir, includepath):
+        """
+        Generates an .idl from .msg file
+        """
+        em_globals = get_em_globals(filename_msg, includepath, MsgScope.NONE)
+        spec_short_name = em_globals["spec"].short_name
+
+        # Make sure output directory exists:
+        if not os.path.isdir(outputdir):
+                os.makedirs(outputdir)
+
+        template_file = os.path.join(templatedir, IDL_TEMPLATE_FILE)
+        output_file = os.path.join(outputdir, IDL_TEMPLATE_FILE.replace("msg.idl.template", str(spec_short_name + "_.idl")))
+
+        return generate_by_template(output_file, template_file, em_globals)
+
+def generate_uRTPS_general(filename_send_msgs, filename_received_msgs,
+                           outputdir, templatedir, includepath, template_name):
+        """
+        Generates source file by msg content
+        """
+        em_globals_list = []
+        if filename_send_msgs:
+            em_globals_list.extend([get_em_globals(f, includepath, MsgScope.SEND) for f in filename_send_msgs])
+
+        if filename_received_msgs:
+            em_globals_list.extend([get_em_globals(f, includepath, MsgScope.RECEIVE) for f in filename_received_msgs])
+
+        merged_em_globals = merge_em_globals_list(em_globals_list)
+        # Make sure output directory exists:
+        if not os.path.isdir(outputdir):
+                os.makedirs(outputdir)
+
+        template_file = os.path.join(templatedir, template_name)
+        output_file = os.path.join(outputdir, template_name.replace(".template", ""))
+
+        return generate_by_template(output_file, template_file, merged_em_globals)
+
+def generate_topic_file(filename_msg, outputdir, templatedir, includepath, template_name):
+        """
+        Generates an .idl from .msg file
+        """
+        em_globals = get_em_globals(filename_msg, includepath, MsgScope.NONE)
+        spec_short_name = em_globals["spec"].short_name
+
+        # Make sure output directory exists:
+        if not os.path.isdir(outputdir):
+                os.makedirs(outputdir)
+
+        template_file = os.path.join(templatedir, template_name)
+        output_file = os.path.join(outputdir, spec_short_name + "_" + template_name.replace(".template", ""))
+
+        return generate_by_template(output_file, template_file, em_globals)
+
+def get_em_globals(filename_msg, includepath, scope):
+        """
+        Generates em globals dictionary
+        """
+        msg_context = genmsg.msg_loader.MsgContext.create_default()
+        full_type_name = genmsg.gentools.compute_full_type_name(PACKAGE, os.path.basename(filename_msg))
+        spec = genmsg.msg_loader.load_msg_from_file(msg_context, filename_msg, full_type_name)
+        topics = get_multi_topics(filename_msg)
+        if includepath:
+                search_path = genmsg.command_line.includepath_to_dict(includepath)
+        else:
+                search_path = {}
+        genmsg.msg_loader.load_depends(msg_context, spec, search_path)
+        md5sum = genmsg.gentools.compute_md5(msg_context, spec)
+        if len(topics) == 0:
+                topics.append(spec.short_name)
+        em_globals = {
+            "file_name_in": filename_msg,
+            "md5sum": md5sum,
+            "search_path": search_path,
+            "msg_context": msg_context,
+            "spec": spec,
+            "topics": topics,
+            "scope": scope
+        }
+
+        return em_globals
+
+def merge_em_globals_list(em_globals_list):
+    """
+        Merges a list of em_globals to a single dictionary where each attribute is a list
+    """
+    if len(em_globals_list) < 1:
+        return {}
+
+    merged_em_globals = {}
+    for name in em_globals_list[0]:
+        merged_em_globals[name] = [em_globals[name] for em_globals in em_globals_list]
+
+    return merged_em_globals
+
+
 
 def generate_by_template(output_file, template_file, em_globals):
         """
         Invokes empy intepreter to geneate output_file by the
         given template_file and predefined em_globals dict
         """
+        # check if folder exists:
+        folder_name = os.path.dirname(output_file)
+        if not os.path.exists(folder_name):
+            os.makedirs(folder_name)
+
         ofile = open(output_file, 'w')
         # todo, reuse interpreter
         interpreter = em.Interpreter(output=ofile, globals=em_globals, options={em.RAW_OPT:True,em.BUFFERED_OPT:True})
@@ -171,7 +278,7 @@ def convert_dir(format_idx, inputdir, outputdir, templatedir):
                 if os.path.isfile(fni):
                     it = os.path.getmtime(fni)
                     if it > maxinputtime:
-                        maxinputtime = it;
+                        maxinputtime = it
 
         # Find the most recent modification time in output dir
         maxouttime = 0
@@ -181,7 +288,7 @@ def convert_dir(format_idx, inputdir, outputdir, templatedir):
                     if os.path.isfile(fni):
                         it = os.path.getmtime(fni)
                         if it > maxouttime:
-                            maxouttime = it;
+                            maxouttime = it
 
         # Do not generate if nothing changed on the input
         if (maxinputtime != 0 and maxouttime != 0 and maxinputtime < maxouttime):
@@ -253,10 +360,30 @@ def convert_dir_save(format_idx, inputdir, outputdir, templatedir, temporarydir,
 
 def generate_topics_list_file(msgdir, outputdir, templatedir):
         # generate cpp file with topics list
-        tl_globals = {"msgs" : get_msgs_list(msgdir)}
+        msgs = get_msgs_list(msgdir)
+        multi_topics = []
+        for msg in msgs:
+            msg_filename = os.path.join(msgdir, msg)
+            multi_topics.extend(get_multi_topics(msg_filename))
+        tl_globals = {"msgs" : msgs, "multi_topics" : multi_topics}
         tl_template_file = os.path.join(templatedir, TOPICS_LIST_TEMPLATE_FILE)
         tl_out_file = os.path.join(outputdir, TOPICS_LIST_TEMPLATE_FILE.replace(".template", ""))
         generate_by_template(tl_out_file, tl_template_file, tl_globals)
+
+def generate_topics_list_file_from_files(files, outputdir, templatedir):
+        # generate cpp file with topics list
+        filenames = [os.path.basename(p) for p in files if os.path.basename(p).endswith(".msg")]
+        multi_topics = []
+        for msg_filename in files:
+            multi_topics.extend(get_multi_topics(msg_filename))
+        tl_globals = {"msgs" : filenames, "multi_topics" : multi_topics}
+        tl_template_file = os.path.join(templatedir, TOPICS_LIST_TEMPLATE_FILE)
+        tl_out_file = os.path.join(outputdir, TOPICS_LIST_TEMPLATE_FILE.replace(".template", ""))
+        generate_by_template(tl_out_file, tl_template_file, tl_globals)
+
+def append_to_include_path(path_to_append, curr_include):
+    for p in path_to_append:
+        curr_include.append("%s:%s" % (PACKAGE, p))
 
 if __name__ == "__main__":
         parser = argparse.ArgumentParser(
@@ -269,6 +396,9 @@ if __name__ == "__main__":
         parser.add_argument('-f', dest='file',
                             help="files to convert (use only without -d)",
                             nargs="+")
+        parser.add_argument('-i', dest="include_paths",
+                            help='Additional Include Paths', nargs="*",
+                            default=None)
         parser.add_argument('-e', dest='templatedir',
                             help='directory with template files',)
         parser.add_argument('-o', dest='outputdir',
@@ -283,6 +413,9 @@ if __name__ == "__main__":
                             ' name when converting directories')
         args = parser.parse_args()
 
+        if args.include_paths:
+            append_to_include_path(args.include_paths, INCL_DEFAULT)
+
         if args.headers:
             generate_idx = 0
         elif args.sources:
@@ -290,12 +423,12 @@ if __name__ == "__main__":
         else:
             print('Error: either --headers or --sources must be specified')
             exit(-1)
-
         if args.file is not None:
             for f in args.file:
-                generate_output_from_file(generate_idx, f, args.outputdir, args.templatedir, INCL_DEFAULT)
+                generate_output_from_file(generate_idx, f, args.temporarydir, args.templatedir, INCL_DEFAULT)
             if generate_idx == 1:
-                generate_topics_list_file(args.dir, args.outputdir, args.templatedir)
+                generate_topics_list_file_from_files(args.file, args.outputdir, args.templatedir)
+            copy_changed(args.temporarydir, args.outputdir, args.prefix, args.quiet)
         elif args.dir is not None:
             convert_dir_save(
                     generate_idx,

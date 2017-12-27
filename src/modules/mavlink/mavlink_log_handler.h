@@ -40,8 +40,9 @@
 #include <queue.h>
 #include <time.h>
 #include <stdio.h>
+#include <cstdbool>
 #include <v2.0/mavlink_types.h>
-#include "mavlink_stream.h"
+#include <drivers/drv_hrt.h>
 
 class Mavlink;
 
@@ -53,13 +54,13 @@ public:
 	~LogListHelper();
 
 public:
-	static void delete_all(const char* dir);
+	static void delete_all(const char *dir);
 
 public:
 
-	bool        get_entry           (int idx, uint32_t& size, uint32_t& date, char* filename = 0);
+	bool        get_entry(int idx, uint32_t &size, uint32_t &date, char *filename = 0, int filename_len = 0);
 	bool        open_for_transmit();
-	size_t      get_log_data        (uint8_t len, uint8_t* buffer);
+	size_t      get_log_data(uint8_t len, uint8_t *buffer);
 
 	enum {
 		LOG_HANDLER_IDLE,
@@ -76,44 +77,43 @@ public:
 	uint32_t    current_log_size;
 	uint32_t    current_log_data_offset;
 	uint32_t    current_log_data_remaining;
-	FILE*       current_log_filep;
+	FILE       *current_log_filep;
 	char        current_log_filename[128];
 
 private:
-	void        _init                   ();
-	bool        _get_session_date       (const char* path, const char* dir, time_t& date);
-	void        _scan_logs              (FILE* f, const char* dir, time_t& date);
-	bool        _get_log_time_size      (const char* path, const char* file, time_t& date, uint32_t& size);
+	void        _init();
+	bool        _get_session_date(const char *path, const char *dir, time_t &date);
+	void        _scan_logs(FILE *f, const char *dir, time_t &date);
+	bool        _get_log_time_size(const char *path, const char *file, time_t &date, uint32_t &size);
 };
 
 // MAVLink LOG_* Message Handler
-class MavlinkLogHandler : public MavlinkStream
+class MavlinkLogHandler
 {
 public:
 	MavlinkLogHandler(Mavlink *mavlink);
 
-	static MavlinkLogHandler *new_instance(Mavlink *mavlink);
-
 	// Handle possible LOG message
-	void handle_message             (const mavlink_message_t *msg);
+	void handle_message(const mavlink_message_t *msg);
 
-	// Overrides from MavlinkStream
-	const char*     get_name        (void) const;
-	uint8_t         get_id          (void);
-	unsigned        get_size        (void);
-	void            send            (const hrt_abstime t);
+	/**
+	 * Handle sending of messages. Call this regularly at a fixed frequency.
+	 * @param t current time
+	 */
+	void send(const hrt_abstime t);
+
+	unsigned get_size();
 
 private:
-	void _log_message               (const mavlink_message_t *msg);
-	void _log_request_list          (const mavlink_message_t *msg);
-	void _log_request_data          (const mavlink_message_t *msg);
-	void _log_request_erase         (const mavlink_message_t *msg);
-	void _log_request_end           (const mavlink_message_t *msg);
+	void _log_message(const mavlink_message_t *msg);
+	void _log_request_list(const mavlink_message_t *msg);
+	void _log_request_data(const mavlink_message_t *msg);
+	void _log_request_erase(const mavlink_message_t *msg);
+	void _log_request_end(const mavlink_message_t *msg);
 
 	size_t _log_send_listing();
-	size_t _log_send_data   ();
+	size_t _log_send_data();
 
-private:
 	LogListHelper    *_pLogHandlerHelper;
-
+	Mavlink *_mavlink;
 };

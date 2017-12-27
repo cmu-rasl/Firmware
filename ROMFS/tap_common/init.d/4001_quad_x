@@ -3,6 +3,7 @@
 # @name Generic Quadrotor X config
 #
 # @type Quadrotor x
+# @class Copter
 #
 # @output AUX1 feed-through of RC AUX1 channel
 # @output AUX2 feed-through of RC AUX2 channel
@@ -12,7 +13,10 @@
 #
 
 sh /etc/init.d/rc.mc_defaults
+if tap_esc start -d /dev/ttyS4 -n 4
+then
+fi
+set OUTPUT_MODE tap_esc
+param set BAT_N_CELLS 4
 
 set MIXER quad_x
-
-set PWM_OUT 1234

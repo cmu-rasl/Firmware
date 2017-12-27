@@ -53,6 +53,7 @@
 #include <systemlib/err.h>
 
 #include <drivers/drv_mag.h>
+#include <drivers/drv_hrt.h>
 
 #include <uORB/topics/parameter_update.h>
 
@@ -277,11 +278,12 @@ int DfAK8963Wrapper::_publish(struct mag_sensor_data &data)
 
 	mag_report mag_report = {};
 	mag_report.timestamp = hrt_absolute_time();
+	mag_report.is_external = true;
 
 	// TODO: remove these (or get the values)
-	mag_report.x_raw = NAN;
-	mag_report.y_raw = NAN;
-	mag_report.z_raw = NAN;
+	mag_report.x_raw = 0;
+	mag_report.y_raw = 0;
+	mag_report.z_raw = 0;
 
 	math::Vector<3> mag_val(data.field_x_ga, data.field_y_ga, data.field_z_ga);
 
@@ -313,9 +315,6 @@ int DfAK8963Wrapper::_publish(struct mag_sensor_data &data)
 	}
 
 	perf_end(_mag_sample_perf);
-
-	/* Notify anyone waiting for data. */
-	DevMgr::updateNotify(*this);
 
 	return 0;
 };

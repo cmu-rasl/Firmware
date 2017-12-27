@@ -3,6 +3,7 @@
 import glob
 import os
 import sys
+import re
 
 # This script is run from Build/<target>_default.build/$(PX4_BASE)/Firmware/src/systemcmds/topic_listener
 
@@ -21,37 +22,39 @@ for index,m in enumerate(raw_messages):
 		temp_list = []
 		f = open(m,'r')
 		for line in f.readlines():
-			if ('float32[' in line.split(' ')[0]):
-				num_floats = int(line.split(" ")[0].split("[")[1].split("]")[0])
-				temp_list.append(("float_array",line.split(' ')[1].split('\t')[0].split('\n')[0],num_floats))
-			elif ('float64[' in line.split(' ')[0]):
-				num_floats = int(line.split(" ")[0].split("[")[1].split("]")[0])
-				temp_list.append(("double_array",line.split(' ')[1].split('\t')[0].split('\n')[0],num_floats))
-			elif ('uint64[' in line.split(' ')[0]):
-				num_floats = int(line.split(" ")[0].split("[")[1].split("]")[0])
-				temp_list.append(("uint64_array",line.split(' ')[1].split('\t')[0].split('\n')[0],num_floats))
-			elif(line.split(' ')[0] == "float32"):
-				temp_list.append(("float",line.split(' ')[1].split('\t')[0].split('\n')[0]))
-			elif(line.split(' ')[0] == "float64"):
-				temp_list.append(("double",line.split(' ')[1].split('\t')[0].split('\n')[0]))
-			elif(line.split(' ')[0] == "uint64") and len(line.split('=')) == 1:
-				temp_list.append(("uint64",line.split(' ')[1].split('\t')[0].split('\n')[0]))
-			elif(line.split(' ')[0] == "uint32") and len(line.split('=')) == 1:
-				temp_list.append(("uint32",line.split(' ')[1].split('\t')[0].split('\n')[0]))
-			elif(line.split(' ')[0] == "uint16") and len(line.split('=')) == 1:
-				temp_list.append(("uint16",line.split(' ')[1].split('\t')[0].split('\n')[0]))
-			elif(line.split(' ')[0] == "int64") and len(line.split('=')) == 1:
-				temp_list.append(("int64",line.split(' ')[1].split('\t')[0].split('\n')[0]))
-			elif(line.split(' ')[0] == "int32") and len(line.split('=')) == 1:
-				temp_list.append(("int32",line.split(' ')[1].split('\t')[0].split('\n')[0]))
-			elif(line.split(' ')[0] == "int16") and len(line.split('=')) == 1:
-				temp_list.append(("int16",line.split(' ')[1].split('\t')[0].split('\n')[0]))
-			elif (line.split(' ')[0] == "bool") and len(line.split('=')) == 1:
-				temp_list.append(("bool",line.split(' ')[1].split('\t')[0].split('\n')[0]))
-			elif (line.split(' ')[0] == "uint8") and len(line.split('=')) == 1:
-				temp_list.append(("uint8",line.split(' ')[1].split('\t')[0].split('\n')[0]))
-			elif (line.split(' ')[0] == "int8") and len(line.split('=')) == 1:
-				temp_list.append(("int8",line.split(' ')[1].split('\t')[0].split('\n')[0]))
+			items = re.split('\s+', line.strip())
+
+			if ('float32[' in items[0]):
+				num_floats = int(items[0].split("[")[1].split("]")[0])
+				temp_list.append(("float_array",items[1],num_floats))
+			elif ('float64[' in items[0]):
+				num_floats = int(items[0].split("[")[1].split("]")[0])
+				temp_list.append(("double_array",items[1],num_floats))
+			elif ('uint64[' in items[0]):
+				num_floats = int(items[0].split("[")[1].split("]")[0])
+				temp_list.append(("uint64_array",items[1],num_floats))
+			elif(items[0] == "float32"):
+				temp_list.append(("float",items[1]))
+			elif(items[0] == "float64"):
+				temp_list.append(("double",items[1]))
+			elif(items[0] == "uint64") and len(line.split('=')) == 1:
+				temp_list.append(("uint64",items[1]))
+			elif(items[0] == "uint32") and len(line.split('=')) == 1:
+				temp_list.append(("uint32",items[1]))
+			elif(items[0] == "uint16") and len(line.split('=')) == 1:
+				temp_list.append(("uint16",items[1]))
+			elif(items[0] == "int64") and len(line.split('=')) == 1:
+				temp_list.append(("int64",items[1]))
+			elif(items[0] == "int32") and len(line.split('=')) == 1:
+				temp_list.append(("int32",items[1]))
+			elif(items[0] == "int16") and len(line.split('=')) == 1:
+				temp_list.append(("int16",items[1]))
+			elif (items[0] == "bool") and len(line.split('=')) == 1:
+				temp_list.append(("bool",items[1]))
+			elif (items[0] == "uint8") and len(line.split('=')) == 1:
+				temp_list.append(("uint8",items[1]))
+			elif (items[0] == "int8") and len(line.split('=')) == 1:
+				temp_list.append(("int8",items[1]))
 
 		f.close()
 		(m_head, m_tail) = os.path.split(m)
@@ -145,19 +148,20 @@ int listener_main(int argc, char *argv[]) {
 	int sub = -1;
 	orb_id_t ID;
 	if(argc < 2) {
-		printf("need at least two arguments: topic name. [optional number of messages to print]\\n");
+		printf("need at least two arguments: topic name. [optional number of messages to print] [optional instance]\\n");
 		return 1;
 	}
 """)
 print("\tunsigned num_msgs = (argc > 2) ? atoi(argv[2]) : 1;")
+print("\tunsigned topic_instance = (argc > 3) ? atoi(argv[3]) : 0;")
 print("\tif (strncmp(argv[1],\"%s\",50) == 0) {" % messages[0])
-print("\t\tsub = orb_subscribe(ORB_ID(%s));" % messages[0])
+print("\t\tsub = orb_subscribe_multi(ORB_ID(%s), topic_instance);" % messages[0])
 print("\t\tID = ORB_ID(%s);" % messages[0])
 print("\t\tstruct %s_s container;" % messages[0])
 print("\t\tmemset(&container, 0, sizeof(container));")
 for index,m in enumerate(messages[1:]):
 	print("\t} else if (strncmp(argv[1],\"%s\",50) == 0) {" % m)
-	print("\t\tsub = orb_subscribe(ORB_ID(%s));" % m)
+	print("\t\tsub = orb_subscribe_multi(ORB_ID(%s), topic_instance);" % m)
 	print("\t\tID = ORB_ID(%s);" % m)
 	print("\t\tstruct %s_s container;" % m)
 	print("\t\tmemset(&container, 0, sizeof(container));")
@@ -170,7 +174,7 @@ for index,m in enumerate(messages[1:]):
 	print("\t\t\tif (updated) {")
 	print("\t\t\tstart_time = hrt_absolute_time();")
 	print("\t\t\ti++;")
-	print("\t\t\tprintf(\"\\nTOPIC: %s #%%d\\n\", i);" % m)
+	print("\t\t\tprintf(\"\\nTOPIC: %s instance %%d #%%d\\n\", topic_instance, i);" % m)
 	print("\t\t\torb_copy(ID,sub,&container);")
 	print("\t\t\tprintf(\"timestamp: %\" PRIu64 \"\\n\", container.timestamp);")
 	for item in message_elements[index+1]:

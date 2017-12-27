@@ -32,10 +32,19 @@
  ****************************************************************************/
 
 /**
+ * MAVLink base ID
+ * @group MAVLink
+ * @min 1
+ * @max 250
+*/
+PARAM_DEFINE_INT32(MAV_BASE_ID, 1);
+
+/**
  * MAVLink system ID
  * @group MAVLink
  * @min 1
  * @max 250
+ * @reboot_required true
  */
 PARAM_DEFINE_INT32(MAV_SYS_ID, 1);
 
@@ -44,6 +53,7 @@ PARAM_DEFINE_INT32(MAV_SYS_ID, 1);
  * @group MAVLink
  * @min 1
  * @max 250
+ * @reboot_required true
  */
 PARAM_DEFINE_INT32(MAV_COMP_ID, 1);
 
@@ -54,7 +64,7 @@ PARAM_DEFINE_INT32(MAV_COMP_ID, 1);
  * @value 1 Always use version 1
  * @value 2 Always use version 2
  */
-PARAM_DEFINE_INT32(MAV_PROTO_VER, 1);
+PARAM_DEFINE_INT32(MAV_PROTO_VER, 0);
 
 /**
  * MAVLink Radio ID

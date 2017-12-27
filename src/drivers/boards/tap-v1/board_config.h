@@ -48,18 +48,10 @@
 #include <nuttx/compiler.h>
 #include <stdint.h>
 
-__BEGIN_DECLS
-
-/* these headers are not C++ safe */
-#include <stm32.h>
-#include <arch/board/board.h>
-
 /****************************************************************************************************
  * Definitions
  ****************************************************************************************************/
 /* Configuration ************************************************************************************/
-
-#define UDID_START		0x1FFF7A10
 
 /* PX4FMU GPIOs ***********************************************************************************/
 /* LEDs
@@ -108,14 +100,21 @@ __BEGIN_DECLS
 
 #define PX4_I2C_OBDEV_HMC5883	0x1e
 
+#define PX4_I2C_BUS_ONBOARD_HZ      400000
+#define PX4_I2C_BUS_SONAR_HZ        400000
+#define PX4_I2C_BUS_EXPANSION_HZ    400000
+
+#define BOARD_NUMBER_I2C_BUSES  3
+#define BOARD_I2C_BUS_CLOCK_INIT {PX4_I2C_BUS_ONBOARD_HZ, PX4_I2C_BUS_SONAR_HZ, PX4_I2C_BUS_EXPANSION_HZ}
+
+
 /*
  * Devices on the onboard bus.
  *
  * Note that these are unshifted addresses (not includinf R/W).
  */
 
-/* todo:
- * Cannot tell from the schematic if there is one or 2 MPU6050
+/*
  * The slave address of the MPU-60X0 is b110100X which is 7 bits long.
  * The LSB bit of the 7 bit address is determined by the logic level
  * on pin AD0. This allows two MPU-60X0s to be connected to the same I2C bus.
@@ -123,8 +122,7 @@ __BEGIN_DECLS
  * should be b1101000 (pin AD0 is logic low) and the address of the other
  * should be b1101001 (pin AD0 is logic high).
  */
-#define PX4_I2C_ON_BOARD_MPU6050_ADDRS {0x68,0x69}
-
+#define PX4_I2C_MPU6050_ADDR 0x68
 
 /*
  * ADC channels
@@ -140,8 +138,13 @@ __BEGIN_DECLS
 #define ADC_BATTERY_VOLTAGE_CHANNEL	10
 #define ADC_BATTERY_CURRENT_CHANNEL	((uint8_t)(-1))
 
+/* Define Battery 1 Voltage Divider
+ * Use Default for A per V
+ */
 
-/* User GPIOs
+#define BOARD_BATTERY1_V_DIV (9.0f)
+
+/* No User GPIOs
  *
  * TIM3_CH1     PA6     LED_R                     JP2-23,24
  * TIM3_CH2     PA7     LED_G                     JP2-25,26
@@ -150,21 +153,7 @@ __BEGIN_DECLS
  *
  * I2C2_SDA     PB11    Sonar Echo/I2C_SDA        JP2-31,32
  * I2C2_SDL     PB10    Sonar Trig/I2C_SCL        JP2-29,30
- *
  */
-#define GPIO_GPIO0_INPUT	(GPIO_INPUT|GPIO_PULLUP|GPIO_PORTA|GPIO_PIN6)
-#define GPIO_GPIO1_INPUT	(GPIO_INPUT|GPIO_PULLUP|GPIO_PORTA|GPIO_PIN7)
-#define GPIO_GPIO2_INPUT	(GPIO_INPUT|GPIO_PULLUP|GPIO_PORTB|GPIO_PIN0)
-#define GPIO_GPIO3_INPUT	(GPIO_INPUT|GPIO_PULLUP|GPIO_PORTB|GPIO_PIN1)
-#define GPIO_GPIO4_INPUT	(GPIO_INPUT|GPIO_PULLUP|GPIO_PORTB|GPIO_PIN10)
-#define GPIO_GPIO5_INPUT	(GPIO_INPUT|GPIO_PULLUP|GPIO_PORTB|GPIO_PIN11)
-
-#define GPIO_GPIO0_OUTPUT	(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_CLEAR|GPIO_PORTA|GPIO_PIN6)
-#define GPIO_GPIO1_OUTPUT	(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_CLEAR|GPIO_PORTA|GPIO_PIN7)
-#define GPIO_GPIO2_OUTPUT	(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_CLEAR|GPIO_PORTB|GPIO_PIN0)
-#define GPIO_GPIO3_OUTPUT	(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_CLEAR|GPIO_PORTB|GPIO_PIN1)
-#define GPIO_GPIO4_OUTPUT	(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_CLEAR|GPIO_PORTB|GPIO_PIN10)
-#define GPIO_GPIO5_OUTPUT	(GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_CLEAR|GPIO_PORTB|GPIO_PIN11)
 
 /*
  * Tone alarm output
@@ -194,17 +183,29 @@ __BEGIN_DECLS
 #define GPIO_TIM3_CH4OUT	GPIO_TIM3_CH4OUT_1
 #define DIRECT_PWM_OUTPUT_CHANNELS	4
 
+#define GPIO_TIM3_CH1IN		GPIO_TIM3_CH1IN_1
+#define GPIO_TIM3_CH2IN		GPIO_TIM3_CH2IN_1
+#define GPIO_TIM3_CH3IN		GPIO_TIM3_CH3IN_1
+#define GPIO_TIM3_CH4IN		GPIO_TIM3_CH4IN_1
+#define DIRECT_INPUT_TIMER_CHANNELS  4
+
 #define BOARD_HAS_LED_PWM
+#define BOARD_HAS_SHARED_PWM_TIMERS
 #define LED_TIM3_CH1OUT  GPIO_TIM3_CH1OUT
 #define LED_TIM3_CH2OUT  GPIO_TIM3_CH2OUT
 #define LED_TIM3_CH3OUT  GPIO_TIM3_CH3OUT
 
+#define BOARD_PWM_DRIVE_ACTIVE_LOW 1
+
 
 /* USB OTG FS
  *
- * PA9  OTG_FS_VBUS VBUS sensing (also connected to the green LED)
+ * PA9  OTG_FS_VBUS VBUS sensing
  */
-#define GPIO_OTGFS_VBUS (GPIO_INPUT|GPIO_FLOAT|GPIO_SPEED_100MHz|GPIO_OPENDRAIN|GPIO_PORTA|GPIO_PIN9)
+#define GPIO_OTGFS_VBUS (GPIO_INPUT|GPIO_FLOAT|GPIO_PORTA|GPIO_PIN9)
+
+#define RC_SERIAL_PORT		"/dev/ttyS5"
+#define INVERT_RC_INPUT(_invert_true)		while(0)
 
 /* High-resolution timer
  */
@@ -225,16 +226,13 @@ __BEGIN_DECLS
 
 #define BOARD_HAS_PWM	DIRECT_PWM_OUTPUT_CHANNELS
 
-#define BOARD_FMU_GPIO_TAB { \
-		{GPIO_GPIO0_INPUT,       GPIO_GPIO0_OUTPUT,       0}, \
-		{GPIO_GPIO1_INPUT,       GPIO_GPIO1_OUTPUT,       0}, \
-		{GPIO_GPIO2_INPUT,       GPIO_GPIO2_OUTPUT,       0}, \
-		{GPIO_GPIO3_INPUT,       GPIO_GPIO3_OUTPUT,       0}, \
-		{GPIO_GPIO4_INPUT,       GPIO_GPIO4_OUTPUT,       0}, \
-		{GPIO_GPIO5_INPUT,       GPIO_GPIO5_OUTPUT,       0}, }
+#define BOARD_HAS_POWER_CONTROL	1
 
+/* This board provides a DMA pool and APIs */
 
-#define MS_PWR_BUTTON_DOWN 750
+#define BOARD_DMA_ALLOC_POOL_SIZE 5120
+
+#define MS_PWR_BUTTON_DOWN 200
 #define KEY_AD_GPIO    (GPIO_INPUT|GPIO_PULLDOWN|GPIO_EXTI|GPIO_PORTC|GPIO_PIN1)
 #define POWER_ON_GPIO  (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTA|GPIO_PIN4)
 #define POWER_OFF_GPIO (GPIO_INPUT|GPIO_PULLDOWN|GPIO_PORTA|GPIO_PIN4)
@@ -244,12 +242,15 @@ __BEGIN_DECLS
 #define GPIO_S2  (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_50MHz|GPIO_OUTPUT_CLEAR|GPIO_PORTC|GPIO_PIN13)
 
 #define GPIO_PCON_RADIO (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTC|GPIO_PIN3)
-#define RF_RADIO_CONTOL(_on_true)	px4_arch_gpiowrite(GPIO_PCON_RADIO, !(_on_true))
+#define RF_RADIO_POWER_CONTROL(_on_true)	px4_arch_gpiowrite(GPIO_PCON_RADIO, !(_on_true))
 
 #define GPIO_TEMP_CONT (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_CLEAR|GPIO_PORTB|GPIO_PIN4)
 #define TEMP_CONTROL(_on_true)	px4_arch_gpiowrite(GPIO_TEMP_CONT, (_on_true))
 
 #define  FLASH_BASED_PARAMS
+
+__BEGIN_DECLS
+
 /****************************************************************************************************
  * Public Types
  ****************************************************************************************************/
@@ -263,7 +264,6 @@ __BEGIN_DECLS
 /****************************************************************************************************
  * Public Functions
  ****************************************************************************************************/
-
 /****************************************************************************************************
  * Name: stm32_spiinitialize
  *
@@ -274,8 +274,34 @@ __BEGIN_DECLS
 
 extern void stm32_spiinitialize(void);
 
+/************************************************************************************
+ * Name: stm32_spi_bus_initialize
+ *
+ * Description:
+ *   Called to configure SPI Buses.
+ *
+ ************************************************************************************/
+
+extern int stm32_spi_bus_initialize(void);
+
+/****************************************************************************************************
+ * Name: board_spi_reset board_peripheral_reset
+ *
+ * Description:
+ *   Called to reset SPI and the perferal bus
+ *
+ ****************************************************************************************************/
+
 #define board_spi_reset(ms)
 #define board_peripheral_reset(ms)
+
+/****************************************************************************************************
+ * Name: stm32_usbinitialize
+ *
+ * Description:
+ *   Called to configure USB IO.
+ *
+ ****************************************************************************************************/
 
 extern void stm32_usbinitialize(void);
 
@@ -290,24 +316,14 @@ extern void stm32_usbinitialize(void);
 extern int board_sdio_initialize(void);
 
 /****************************************************************************
- * Name: nsh_archinitialize
+ * Name: board_i2c_initialize
  *
  * Description:
- *   Perform architecture specific initialization for NSH.
- *
- *   CONFIG_NSH_ARCHINIT=y :
- *     Called from the NSH library
- *
- *   CONFIG_BOARD_INITIALIZE=y, CONFIG_NSH_LIBRARY=y, &&
- *   CONFIG_NSH_ARCHINIT=n :
- *     Called from board_initialize().
+ *   Called to set I2C bus frequencies.
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NSH_LIBRARY
-int nsh_archinitialize(void);
-#endif
-
+int board_i2c_initialize(void);
 
 /************************************************************************************
  * Name: board_pwr_init()
@@ -331,15 +347,8 @@ void board_pwr_init(int stage);
 
 bool board_pwr_button_down(void);
 
-/****************************************************************************
- * Name: board_pwr
- *
- * Description:
- *   Called to turn on or off the TAP
- *
- ****************************************************************************/
-
-void board_pwr(bool on_not_off);
+#include "../common/board_common.h"
 
 #endif /* __ASSEMBLY__ */
+
 __END_DECLS

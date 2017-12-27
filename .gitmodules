@@ -1,14 +1,12 @@
 [submodule "mavlink/include/mavlink/v1.0"]
 	path = mavlink/include/mavlink/v1.0
-	url = https://github.com/cmu-rasl/c_library.git
-	branch = master
+	url = https://github.com/rislab/c_library_v1.git
 [submodule "mavlink/include/mavlink/v2.0"]
 	path = mavlink/include/mavlink/v2.0
-	url = https://github.com/cmu-rasl/c_library_v2.git
-	branch = master
+	url = https://github.com/rislab/c_library_v2.git
 [submodule "NuttX"]
 	path = NuttX
-	url = https://github.com/PX4/NuttX.git
+	url = https://github.com/PX4/PX4NuttX.git
 [submodule "src/modules/uavcan/libuavcan"]
 	path = src/modules/uavcan/libuavcan
 	url = https://github.com/UAVCAN/libuavcan.git
@@ -26,10 +24,6 @@
 [submodule "Tools/sitl_gazebo"]
 	path = Tools/sitl_gazebo
 	url = https://github.com/PX4/sitl_gazebo.git
-[submodule "unittests/googletest"]
-	path = unittests/googletest
-	url = https://github.com/google/googletest.git
-	ignore = untracked
 [submodule "src/lib/matrix"]
 	path = src/lib/matrix
 	url = https://github.com/PX4/Matrix.git
@@ -45,10 +39,13 @@
 [submodule "src/drivers/gps/devices"]
 	path = src/drivers/gps/devices
 	url = https://github.com/PX4/GpsDrivers.git
+[submodule "src/lib/micro-CDR"]
+	path = src/lib/micro-CDR
+	url = https://github.com/eProsima/micro-CDR.git
 [submodule "src/modules/mocap_control"]
 	path = src/modules/mocap_control
 	url = git@gitlab.rislab.org:nmichael/mocap_control.git
-  branch = feature/mocap_yaw
+	branch = feature/mocap_yaw
 [submodule "src/modules/mocap_status_monitor"]
 	path = src/modules/mocap_status_monitor
 	url = git@gitlab.rislab.org:nmichael/mocap_status_monitor.git

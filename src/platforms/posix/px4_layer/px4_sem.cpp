@@ -60,6 +60,11 @@ int px4_sem_init(px4_sem_t *s, int pshared, unsigned value)
 	return 0;
 }
 
+int px4_sem_setprotocol(px4_sem_t *s, int protocol)
+{
+	return 0;
+}
+
 int px4_sem_wait(px4_sem_t *s)
 {
 	int ret = pthread_mutex_lock(&(s->lock));
@@ -79,6 +84,27 @@ int px4_sem_wait(px4_sem_t *s)
 
 	if (ret) {
 		PX4_WARN("px4_sem_wait failure");
+	}
+
+	int mret = pthread_mutex_unlock(&(s->lock));
+
+	return (ret) ? ret : mret;
+}
+
+int px4_sem_trywait(px4_sem_t *s)
+{
+	int ret = pthread_mutex_lock(&(s->lock));
+
+	if (ret) {
+		return ret;
+	}
+
+	if (s->value <= 0) {
+		errno = EAGAIN;
+		ret = -1;
+
+	} else {
+		s->value--;
 	}
 
 	int mret = pthread_mutex_unlock(&(s->lock));
