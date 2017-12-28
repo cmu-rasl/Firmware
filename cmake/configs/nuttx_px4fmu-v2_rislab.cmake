@@ -34,18 +34,14 @@ set(config_module_list
 	systemcmds/bl_update
 	systemcmds/config
 	systemcmds/dumpfile
-	#systemcmds/esc_calib
 	systemcmds/mixer
-	#systemcmds/motor_ramp
 	systemcmds/mtd
 	systemcmds/nshterm
 	systemcmds/param
 	systemcmds/perf
 	systemcmds/pwm
 	systemcmds/reboot
-	#systemcmds/sd_bench
 	systemcmds/top
-	#systemcmds/topic_listener
 	systemcmds/ver
 
 	#
@@ -68,7 +64,6 @@ set(config_module_list
 	#
 	# Logging
 	#
-	#modules/logger
 	modules/sdlog2
 
 	#
