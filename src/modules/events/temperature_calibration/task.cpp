@@ -74,7 +74,7 @@ public:
 	/**
 	 * Destructor
 	 */
-	~TemperatureCalibration();
+	~TemperatureCalibration() = default;
 
 	/**
 	 * Start task.
@@ -107,14 +107,10 @@ TemperatureCalibration::TemperatureCalibration(bool accel, bool baro, bool gyro)
 {
 }
 
-TemperatureCalibration::~TemperatureCalibration()
-{
-}
-
 void TemperatureCalibration::task_main()
 {
 	// subscribe to all gyro instances
-	int gyro_sub[SENSOR_COUNT_MAX];
+	int gyro_sub[SENSOR_COUNT_MAX] = {};
 	px4_pollfd_struct_t fds[SENSOR_COUNT_MAX] = {};
 	unsigned num_gyro = orb_group_count(ORB_ID(sensor_gyro));
 
@@ -231,7 +227,13 @@ void TemperatureCalibration::task_main()
 		for (int i = 0; i < num_calibrators; ++i) {
 			ret = calibrators[i]->update();
 
-			if (ret == -TC_ERROR_INITIAL_TEMP_TOO_HIGH) {
+			if (ret == -TC_ERROR_COMMUNICATION) {
+				abort_calibration = true;
+				PX4_ERR("Calibration won't start - sensor bad or communication error");
+				_force_task_exit = true;
+				break;
+
+			} else if (ret == -TC_ERROR_INITIAL_TEMP_TOO_HIGH) {
 				abort_calibration = true;
 				PX4_ERR("Calibration won't start - sensor temperature too high");
 				_force_task_exit = true;

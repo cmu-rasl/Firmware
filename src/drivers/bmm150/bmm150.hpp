@@ -195,10 +195,9 @@ struct bmm150_data {
 class BMM150 : public device::I2C
 {
 public:
-	BMM150(int bus, const char *path, bool external, enum Rotation rotation);
+	BMM150(int bus, const char *path, enum Rotation rotation);
 	virtual ~BMM150();
 
-	bool is_external();
 	virtual int             init();
 	virtual ssize_t       read(struct file *filp, char *buffer, size_t buflen);
 	virtual int       ioctl(struct file *filp, int cmd, unsigned long arg);
@@ -219,8 +218,7 @@ protected:
 	virtual int       probe();
 
 private:
-	work_s            _work;
-	bool _external;
+	work_s            _work{};
 
 	bool _running;
 
@@ -228,6 +226,7 @@ private:
 	unsigned        _call_interval;
 
 
+	mag_report _report {};
 	ringbuffer::RingBuffer  *_reports;
 
 	bool            _collect_phase;
@@ -268,7 +267,7 @@ private:
 	enum Rotation       _rotation;
 	bool            _got_duplicate;
 
-	struct mag_report   _last_report;           /**< used for info() */
+	mag_report   _last_report {};          /**< used for info() */
 
 	int             init_trim_registers(void);
 

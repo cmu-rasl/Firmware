@@ -53,7 +53,7 @@
 #include <math.h>
 
 #include <systemlib/err.h>
-#include <systemlib/mixer/mixer.h>
+#include <lib/mixer/mixer.h>
 #include <systemlib/pwm_limit/pwm_limit.h>
 #include <drivers/drv_hrt.h>
 #include <drivers/drv_pwm_output.h>
@@ -64,7 +64,7 @@
 
 #include "tests_main.h"
 
-#include <unit_test/unit_test.h>
+#include <unit_test.h>
 
 static int	mixer_callback(uintptr_t handle,
 			       uint8_t control_group,
@@ -395,7 +395,7 @@ bool MixerTest::mixerTest()
 
 	/* mix */
 	should_prearm = true;
-	mixed = mixer_group.mix(&outputs[0], output_max, nullptr);
+	mixed = mixer_group.mix(&outputs[0], output_max);
 
 	pwm_limit_calc(should_arm, should_prearm, mixed, reverse_pwm_mask, r_page_servo_disarmed, r_page_servo_control_min,
 		       r_page_servo_control_max, outputs, r_page_servos, &pwm_limit);
@@ -436,7 +436,7 @@ bool MixerTest::mixerTest()
 	while (hrt_elapsed_time(&starttime) < INIT_TIME_US + RAMP_TIME_US + 2 * sleep_quantum_us) {
 
 		/* mix */
-		mixed = mixer_group.mix(&outputs[0], output_max, nullptr);
+		mixed = mixer_group.mix(&outputs[0], output_max);
 
 		pwm_limit_calc(should_arm, should_prearm, mixed, reverse_pwm_mask, r_page_servo_disarmed, r_page_servo_control_min,
 			       r_page_servo_control_max, outputs, r_page_servos, &pwm_limit);
@@ -480,7 +480,7 @@ bool MixerTest::mixerTest()
 		}
 
 		/* mix */
-		mixed = mixer_group.mix(&outputs[0], output_max, nullptr);
+		mixed = mixer_group.mix(&outputs[0], output_max);
 
 		pwm_limit_calc(should_arm, should_prearm, mixed, reverse_pwm_mask, r_page_servo_disarmed, r_page_servo_control_min,
 			       r_page_servo_control_max, outputs, r_page_servos, &pwm_limit);
@@ -508,7 +508,7 @@ bool MixerTest::mixerTest()
 	while (hrt_elapsed_time(&starttime) < 600000) {
 
 		/* mix */
-		mixed = mixer_group.mix(&outputs[0], output_max, nullptr);
+		mixed = mixer_group.mix(&outputs[0], output_max);
 
 		pwm_limit_calc(should_arm, should_prearm, mixed, reverse_pwm_mask, r_page_servo_disarmed, r_page_servo_control_min,
 			       r_page_servo_control_max, outputs, r_page_servos, &pwm_limit);
@@ -545,7 +545,7 @@ bool MixerTest::mixerTest()
 	while (hrt_elapsed_time(&starttime) < 600000 + RAMP_TIME_US) {
 
 		/* mix */
-		mixed = mixer_group.mix(&outputs[0], output_max, nullptr);
+		mixed = mixer_group.mix(&outputs[0], output_max);
 
 		pwm_limit_calc(should_arm, should_prearm, mixed, reverse_pwm_mask, r_page_servo_disarmed, r_page_servo_control_min,
 			       r_page_servo_control_max, outputs, r_page_servos, &pwm_limit);
@@ -590,6 +590,8 @@ bool MixerTest::mixerTest()
 static int
 mixer_callback(uintptr_t handle, uint8_t control_group, uint8_t control_index, float &control)
 {
+	control = 0.0f;
+
 	if (control_group != 0) {
 		return -1;
 	}

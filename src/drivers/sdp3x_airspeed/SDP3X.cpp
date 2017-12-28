@@ -58,15 +58,14 @@ bool
 SDP3X::init_sdp3x()
 {
 	// step 1 - reset on broadcast
-	uint16_t prev_addr = get_address();
-	set_address(SDP3X_RESET_ADDR);
+	uint16_t prev_addr = get_device_address();
+	set_device_address(SDP3X_RESET_ADDR);
 	uint8_t reset_cmd = SDP3X_RESET_CMD;
 	int ret = transfer(&reset_cmd, 1, nullptr, 0);
-	set_address(prev_addr);
+	set_device_address(prev_addr);
 
 	if (ret != PX4_OK) {
 		perf_count(_comms_errors);
-		PX4_ERR("reset failed");
 		return false;
 	}
 
@@ -101,6 +100,20 @@ SDP3X::init_sdp3x()
 	}
 
 	_scale = (((uint16_t)val[6]) << 8) | val[7];
+
+	switch (_scale) {
+	case SDP3X_SCALE_PRESSURE_SDP31:
+		_device_id.devid_s.devtype = DRV_DIFF_PRESS_DEVTYPE_SDP31;
+		break;
+
+	case SDP3X_SCALE_PRESSURE_SDP32:
+		_device_id.devid_s.devtype = DRV_DIFF_PRESS_DEVTYPE_SDP32;
+		break;
+
+	case SDP3X_SCALE_PRESSURE_SDP33:
+		_device_id.devid_s.devtype = DRV_DIFF_PRESS_DEVTYPE_SDP33;
+		break;
+	}
 
 	return true;
 }
@@ -141,15 +154,11 @@ SDP3X::collect()
 	report.temperature = temperature_c;
 	report.differential_pressure_filtered_pa = _filter.apply(diff_press_pa_raw) - _diff_pres_offset;
 	report.differential_pressure_raw_pa = diff_press_pa_raw - _diff_pres_offset;
+	report.device_id = _device_id.devid;
 
 	if (_airspeed_pub != nullptr && !(_pub_blocked)) {
 		orb_publish(ORB_ID(differential_pressure), _airspeed_pub, &report);
 	}
-
-	new_report(report);
-
-	// notify anyone waiting for data
-	poll_notify(POLLIN);
 
 	ret = OK;
 

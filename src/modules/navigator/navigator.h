@@ -36,6 +36,7 @@
  * @author Julian Oes <julian@oes.ch>
  * @author Anton Babushkin <anton.babushkin@me.com>
  * @author Thomas Gubler <thomasgubler@gmail.com>
+ * @author Lorenz Meier <lorenz@px4.io>
  */
 
 #ifndef NAVIGATOR_H
@@ -68,6 +69,7 @@
 #include <uORB/topics/vehicle_global_position.h>
 #include <uORB/topics/vehicle_gps_position.h>
 #include <uORB/topics/vehicle_land_detected.h>
+#include <uORB/topics/vehicle_local_position.h>
 #include <uORB/uORB.h>
 
 /**
@@ -105,13 +107,25 @@ public:
 	 */
 	void		publish_geofence_result();
 
-	/**
-	 * Publish the attitude sp, only to be used in very special modes when position control is deactivated
-	 * Example: mode that is triggered on gps failure
-	 */
-	void		publish_att_sp();
+	void		publish_vehicle_cmd(vehicle_command_s *vcmd);
 
-	void		publish_vehicle_cmd(const struct vehicle_command_s &vcmd);
+	/**
+	 * Generate an artificial traffic indication
+	 *
+	 * @param distance Horizontal distance to this vehicle
+	 * @param direction Direction in earth frame from this vehicle in radians
+	 * @param traffic_heading Travel direction of the traffic in earth frame in radians
+	 * @param altitude_diff Altitude difference, positive is up
+	 * @param hor_velocity Horizontal velocity of traffic, in m/s
+	 * @param ver_velocity Vertical velocity of traffic, in m/s
+	 */
+	void		fake_traffic(const char *callsign, float distance, float direction, float traffic_heading, float altitude_diff,
+				     float hor_velocity, float ver_velocity);
+
+	/**
+	 * Check nearby traffic for potential collisions
+	 */
+	void		check_traffic();
 
 	/**
 	 * Setters
@@ -129,18 +143,21 @@ public:
 	struct position_setpoint_triplet_s *get_position_setpoint_triplet() { return &_pos_sp_triplet; }
 	struct position_setpoint_triplet_s *get_reposition_triplet() { return &_reposition_triplet; }
 	struct position_setpoint_triplet_s *get_takeoff_triplet() { return &_takeoff_triplet; }
-	struct vehicle_attitude_setpoint_s *get_att_sp() { return &_att_sp; }
 	struct vehicle_global_position_s *get_global_position() { return &_global_pos; }
-	struct vehicle_gps_position_s *get_gps_position() { return &_gps_pos; }
 	struct vehicle_land_detected_s *get_land_detected() { return &_land_detected; }
 	struct vehicle_local_position_s *get_local_position() { return &_local_pos; }
 	struct vehicle_status_s *get_vstatus() { return &_vstatus; }
 
-	bool home_position_valid() { return (_home_pos.timestamp > 0); }
+	const vehicle_roi_s &get_vroi() { return _vroi; }
+
+	bool home_alt_valid() { return (_home_pos.timestamp > 0 && _home_pos.valid_alt); }
+	bool home_position_valid() { return (_home_pos.timestamp > 0 && _home_pos.valid_alt && _home_pos.valid_hpos); }
 
 	int		get_onboard_mission_sub() { return _onboard_mission_sub; }
 	int		get_offboard_mission_sub() { return _offboard_mission_sub; }
+
 	Geofence	&get_geofence() { return _geofence; }
+
 	bool		get_can_loiter_at_sp() { return _can_loiter_at_sp; }
 	float		get_loiter_radius() { return _param_loiter_radius.get(); }
 
@@ -188,6 +205,12 @@ public:
 	 */
 	void		reset_cruising_speed();
 
+
+	/**
+	 *  Set triplets to invalid
+	 */
+	void 		reset_triplets();
+
 	/**
 	 * Get the target throttle
 	 *
@@ -208,9 +231,10 @@ public:
 	 * @return the distance at which the next waypoint should be used
 	 */
 	float		get_acceptance_radius(float mission_item_radius);
+
 	orb_advert_t	*get_mavlink_log_pub() { return &_mavlink_log_pub; }
 
-	void		increment_mission_instance_count() { _mission_instance_count++; }
+	void		increment_mission_instance_count() { _mission_result.instance_count++; }
 
 	void 		set_mission_failure(const char *reason);
 
@@ -218,12 +242,14 @@ public:
 
 	bool		abort_landing();
 
+	float		get_loiter_min_alt() const { return _param_loiter_min_alt.get(); }
+
+	bool		force_vtol() const { return _vstatus.is_vtol && !_vstatus.is_rotary_wing && _param_force_vtol.get(); }
+
 private:
 
 	bool		_task_should_exit{false};	/**< if true, sensor task should exit */
 	int		_navigator_task{-1};		/**< task handle for sensor task */
-
-	orb_advert_t	_mavlink_log_pub{nullptr};	/**< the uORB advert to send messages over mavlink */
 
 	int		_fw_pos_ctrl_status_sub{-1};	/**< notification of vehicle capabilities updates */
 	int		_global_pos_sub{-1};		/**< global position subscription */
@@ -236,30 +262,34 @@ private:
 	int		_param_update_sub{-1};		/**< param update subscription */
 	int		_sensor_combined_sub{-1};	/**< sensor combined subscription */
 	int		_vehicle_command_sub{-1};	/**< vehicle commands (onboard and offboard) */
-	int		_vstatus_sub{-1};		/**< vehicle status subscription */
+	int		_vstatus_sub{-1};			/**< vehicle status subscription */
+	int		_traffic_sub{-1};			/**< traffic subscription */
 
-	orb_advert_t	_att_sp_pub{nullptr};
 	orb_advert_t	_geofence_result_pub{nullptr};
+	orb_advert_t	_mavlink_log_pub{nullptr};	/**< the uORB advert to send messages over mavlink */
 	orb_advert_t	_mission_result_pub{nullptr};
 	orb_advert_t	_pos_sp_triplet_pub{nullptr};
+	orb_advert_t	_vehicle_cmd_ack_pub{nullptr};
 	orb_advert_t	_vehicle_cmd_pub{nullptr};
+	orb_advert_t	_vehicle_roi_pub{nullptr};
 
+	// Subscriptions
 	fw_pos_ctrl_status_s				_fw_pos_ctrl_status{};	/**< fixed wing navigation capabilities */
-	geofence_result_s				_geofence_result{};
 	home_position_s					_home_pos{};		/**< home position for RTL */
 	mission_result_s				_mission_result{};
-	position_setpoint_triplet_s			_pos_sp_triplet{};	/**< triplet of position setpoints */
-	position_setpoint_triplet_s			_reposition_triplet{};	/**< triplet for non-mission direct position command */
-	position_setpoint_triplet_s			_takeoff_triplet{};	/**< triplet for non-mission direct takeoff command */
 	sensor_combined_s				_sensor_combined{};	/**< sensor values */
-	vehicle_attitude_setpoint_s			_att_sp{};
 	vehicle_global_position_s			_global_pos{};		/**< global vehicle position */
 	vehicle_gps_position_s				_gps_pos{};		/**< gps position */
 	vehicle_land_detected_s				_land_detected{};	/**< vehicle land_detected */
 	vehicle_local_position_s			_local_pos{};		/**< local vehicle position */
 	vehicle_status_s				_vstatus{};		/**< vehicle status */
 
-	int		_mission_instance_count{-1};	/**< instance count for the current mission */
+	// Publications
+	geofence_result_s				_geofence_result{};
+	position_setpoint_triplet_s			_pos_sp_triplet{};	/**< triplet of position setpoints */
+	position_setpoint_triplet_s			_reposition_triplet{};	/**< triplet for non-mission direct position command */
+	position_setpoint_triplet_s			_takeoff_triplet{};	/**< triplet for non-mission direct takeoff command */
+	vehicle_roi_s					_vroi{};		/**< vehicle ROI */
 
 	perf_counter_t	_loop_perf;			/**< loop performance counter */
 
@@ -285,11 +315,16 @@ private:
 
 	NavigatorMode *_navigation_mode_array[NAVIGATOR_MODE_ARRAY_SIZE];	/**< array of navigation modes */
 
+	// navigator parameters
 	control::BlockParamFloat _param_loiter_radius;	/**< loiter radius for fixedwing */
-
 	control::BlockParamFloat _param_acceptance_radius;	/**< acceptance for takeoff */
 	control::BlockParamFloat _param_fw_alt_acceptance_radius;	/**< acceptance radius for fixedwing altitude */
 	control::BlockParamFloat _param_mc_alt_acceptance_radius;	/**< acceptance radius for multicopter altitude */
+	control::BlockParamInt _param_force_vtol;	/**< acceptance radius for multicopter altitude */
+	control::BlockParamInt _param_traffic_avoidance_mode;	/**< avoiding other aircraft is enabled */
+
+	// non-navigator parameters
+	control::BlockParamFloat _param_loiter_min_alt;
 
 	float _mission_cruising_speed_mc{-1.0f};
 	float _mission_cruising_speed_fw{-1.0f};
@@ -317,11 +352,6 @@ private:
 	void		task_main();
 
 	/**
-	 * Translate mission item to a position setpoint.
-	 */
-	void		mission_item_to_position_setpoint(const mission_item_s *item, position_setpoint_s *sp);
-
-	/**
 	 * Publish a new position setpoint triplet for position controllers
 	 */
 	void		publish_position_setpoint_triplet();
@@ -330,5 +360,7 @@ private:
 	 * Publish the mission result so commander and mavlink know what is going on
 	 */
 	void		publish_mission_result();
+
+	void		publish_vehicle_command_ack(const vehicle_command_s &cmd, uint8_t result);
 };
 #endif

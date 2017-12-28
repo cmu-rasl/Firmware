@@ -31,90 +31,75 @@
 #
 ############################################################################
 
-if(NOT GENERATE_RTPS_BRIDGE MATCHES "off")
+set(msg_out_path ${CMAKE_CURRENT_BINARY_DIR})
 
-    find_program(FASTRTPSGEN fastrtpsgen
-                 PATHS $ENV{FASTRTPSGEN_DIR})
-    if(NOT FASTRTPSGEN)
-        message(WARNING "WARNING: Unable to find fastrtpsgen. Building PX4 without RTPS bridge support")
-        px4_add_module(
-            MODULE modules__micrortps_bridge__micrortps_client
-            MAIN micrortps_client
-            SRCS
-                microRTPS_client_dummy.cpp
-            DEPENDS
-                platforms__common
-        )
-        return()
-    endif()
+if (NOT "${config_rtps_send_topics}" STREQUAL "" OR NOT "${config_rtps_receive_topics}" STREQUAL "")
 
-    include_directories(.)
-    include_directories(${CMAKE_CURRENT_BINARY_DIR})
+	set(send_topic_files)
+	foreach(topic ${config_rtps_send_topics})
+		list(APPEND send_topic_files ${PX4_SOURCE_DIR}/msg/${topic}.msg)
+	endforeach()
 
-    # Do not delete everything in the current dir
-    set(msg_out_path ${CMAKE_CURRENT_BINARY_DIR})
-    set(topic_msg_path ${PX4_SOURCE_DIR}/msg)
+	set(receive_topic_files)
+	foreach(topic ${config_rtps_receive_topics})
+		list(APPEND receive_topic_files ${PX4_SOURCE_DIR}/msg/${topic}.msg)
+	endforeach()
 
-    set(send_topic_files)
-    foreach(topic ${config_rtps_send_topics})
-        list(APPEND send_topic_files ${PX4_SOURCE_DIR}/msg/${topic}.msg)
-    endforeach()
+	foreach(topic ${config_rtps_send_topics})
+		list(APPEND topic_bridge_files_out ${msg_out_path}/micrortps_agent/${topic}_Publisher.cpp)
+		list(APPEND topic_bridge_files_out ${msg_out_path}/micrortps_agent/${topic}_Publisher.h)
+	endforeach()
 
-    set(receive_topic_files)
-    foreach(topic ${config_rtps_receive_topics})
-        list(APPEND receive_topic_files ${PX4_SOURCE_DIR}/msg/${topic}.msg)
-    endforeach()
+	foreach(topic ${config_rtps_receive_topics})
+		list(APPEND topic_bridge_files_out ${msg_out_path}/micrortps_agent/${topic}_Subscriber.cpp)
+		list(APPEND topic_bridge_files_out ${msg_out_path}/micrortps_agent/${topic}_Subscriber.h)
+	endforeach()
 
-    foreach(topic ${config_rtps_send_topics})
-        list(APPEND topic_bridge_files_out ${msg_out_path}/${topic}_Publisher.cpp)
-        list(APPEND topic_bridge_files_out ${msg_out_path}/${topic}_Publisher.h)
-    endforeach()
+	set(send_topic_files_opt)
+	if (NOT "${send_topic_files}" STREQUAL "")
+		set(send_topic_opt "--send")
+	endif()
 
-    foreach(topic ${config_rtps_receive_topics})
-        list(APPEND topic_bridge_files_out ${msg_out_path}/${topic}_Subscriber.cpp)
-        list(APPEND topic_bridge_files_out ${msg_out_path}/${topic}_Subscriber.h)
-    endforeach()
+	set(receive_topic_files_opt)
+	if (NOT "${receive_topic_files}" STREQUAL "")
+		set(receive_topic_opt "--receive")
+	endif()
 
-    if (NOT "${config_rtps_send_topics}" STREQUAL "" OR NOT "${config_rtps_receive_topics}" STREQUAL "")
-        set(topic_bridge_files_out microRTPS_client.cpp microRTPS_transport.cpp microRTPS_transport.h)
+	list(APPEND topic_bridge_files_out
+		${msg_out_path}/micrortps_client/microRTPS_client.cpp
+		${msg_out_path}/micrortps_client/microRTPS_transport.cpp
+		${msg_out_path}/micrortps_client/microRTPS_transport.h
+		)
 
-        set(send_topic_files_opt)
-        if (NOT "${send_topic_files}" STREQUAL "")
-            set(send_topic_opt "-s")
-        endif()
+	add_custom_command(OUTPUT ${topic_bridge_files_out}
+		COMMAND ${PYTHON_EXECUTABLE} ${PX4_SOURCE_DIR}/msg/tools/generate_microRTPS_bridge.py
+			--fastrtpsgen-dir $ENV{FASTRTPSGEN_DIR}
+			${send_topic_opt} ${send_topic_files}
+			${receive_topic_opt} ${receive_topic_files}
+			--topic-msg-dir ${PX4_SOURCE_DIR}/msg
+			--agent-outdir ${CMAKE_CURRENT_BINARY_DIR}/micrortps_agent
+			--client-outdir ${CMAKE_CURRENT_BINARY_DIR}/micrortps_client
+			>micrortps_bridge.log 2>&1 || cat micrortps_bridge.log # quiet successful build output
+		DEPENDS ${send_topic_files} ${receive_topic_files}
+		COMMENT "Generating RTPS topic bridge"
+	)
+	add_custom_target(topic_bridge_files DEPENDS ${topic_bridge_files_out})
 
-        set(receive_topic_files_opt)
-        if (NOT "${receive_topic_files}" STREQUAL "")
-            set(receive_topic_opt "-r")
-        endif()
+	include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+	include_directories(${CMAKE_CURRENT_BINARY_DIR}/micrortps_client)
 
-        add_custom_command(OUTPUT ${topic_bridge_files_out}
-            COMMAND ${PYTHON_EXECUTABLE}
-            ${PX4_SOURCE_DIR}/Tools/generate_microRTPS_bridge.py
-            -f $ENV{FASTRTPSGEN_DIR}
-            ${send_topic_opt} ${send_topic_files}
-            ${receive_topic_opt} ${receive_topic_files}
-            -t ${topic_msg_path}
-            -u ${msg_out_path}
-            DEPENDS ${DEPENDS} ${send_topic_files} ${receive_topic_files}
-            COMMENT "Generating RTPS topic bridge"
-            VERBATIM
-            )
-    endif()
-
+	px4_add_module(
+		MODULE modules__micrortps_bridge__micrortps_client
+		MAIN micrortps_client
+		STACK_MAIN 4096
+		SRCS
+			microRTPS_client_main.cpp
+			${msg_out_path}/micrortps_client/microRTPS_client.cpp
+			${msg_out_path}/micrortps_client/microRTPS_transport.cpp
+		DEPENDS
+			platforms__common
+			topic_bridge_files
+			uorb_headers_microcdr
+	)
+	target_link_libraries(modules__micrortps_bridge__micrortps_client PRIVATE uorb_msgs_microcdr)
 endif()
-
-px4_add_module(
-    MODULE modules__micrortps_bridge__micrortps_client
-    MAIN micrortps_client
-    STACK_MAIN 4096
-    SRCS
-        microRTPS_transport.cpp
-        microRTPS_client.cpp
-        microRTPS_client.h
-        microRTPS_client_main.cpp
-    DEPENDS
-        platforms__common
-    )
-
-# vim: set noet ft=cmake fenc=utf-8 ff=unix :

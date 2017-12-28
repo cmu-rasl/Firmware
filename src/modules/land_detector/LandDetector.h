@@ -46,7 +46,9 @@
 #include <px4_module.h>
 #include <systemlib/hysteresis/hysteresis.h>
 #include <systemlib/param/param.h>
+#include <systemlib/perf_counter.h>
 #include <uORB/uORB.h>
+#include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/vehicle_land_detected.h>
 
 namespace land_detector
@@ -105,7 +107,6 @@ protected:
 	 */
 	virtual void _update_topics() = 0;
 
-
 	/**
 	 * Update parameters.
 	 */
@@ -119,17 +120,17 @@ protected:
 	/**
 	 * @return true if UAV is in almost landed state
 	 */
-	virtual bool _get_maybe_landed_state() = 0;
+	virtual bool _get_maybe_landed_state() { return false; }
 
 	/**
 	 * @return true if UAV is touching ground but not landed
 	 */
-	virtual bool _get_ground_contact_state()  = 0;
+	virtual bool _get_ground_contact_state() { return false; }
 
 	/**
 	 * @return true if UAV is in free-fall state.
 	 */
-	virtual bool _get_freefall_state() = 0;
+	virtual bool _get_freefall_state() { return false; }
 
 	/**
 	 *  @return maximum altitude that can be reached
@@ -146,47 +147,40 @@ protected:
 	/** Run main land detector loop at this rate in Hz. */
 	static constexpr uint32_t LAND_DETECTOR_UPDATE_RATE_HZ = 50;
 
-	/** Time in us that landing conditions have to hold before triggering a land. */
-	static constexpr uint64_t LAND_DETECTOR_TRIGGER_TIME_US = 300000;
+	orb_advert_t _landDetectedPub{nullptr};
+	vehicle_land_detected_s _landDetected{};
 
-	/** Time in us that almost landing conditions have to hold before triggering almost landed . */
-	static constexpr uint64_t MAYBE_LAND_DETECTOR_TRIGGER_TIME_US = 250000;
+	int _parameterSub{-1};
+	int _armingSub{-1};
 
-	/** Time in us that ground contact condition have to hold before triggering contact ground */
-	static constexpr uint64_t GROUND_CONTACT_TRIGGER_TIME_US = 350000;
+	LandDetectionState _state{LandDetectionState::LANDED};
 
-	/** Time interval in us in which wider acceptance thresholds are used after arming. */
-	static constexpr uint64_t LAND_DETECTOR_ARM_PHASE_TIME_US = 2000000;
+	systemlib::Hysteresis _freefall_hysteresis{false};
+	systemlib::Hysteresis _landed_hysteresis{true};
+	systemlib::Hysteresis _maybe_landed_hysteresis{true};
+	systemlib::Hysteresis _ground_contact_hysteresis{true};
 
-	orb_advert_t _landDetectedPub;
-	struct vehicle_land_detected_s _landDetected;
-
-	int _parameterSub;
-
-	LandDetectionState _state;
-
-	systemlib::Hysteresis _freefall_hysteresis;
-	systemlib::Hysteresis _landed_hysteresis;
-	systemlib::Hysteresis _maybe_landed_hysteresis;
-	systemlib::Hysteresis _ground_contact_hysteresis;
-
-	float _altitude_max;
+	struct actuator_armed_s	_arming {};
 
 private:
 	static void _cycle_trampoline(void *arg);
 
 	void _cycle();
 
-	void _check_params(const bool force);
+	void _check_params(bool force = false);
 
 	void _update_state();
 
-	param_t _p_total_flight_time_high;
-	param_t _p_total_flight_time_low;
-	uint64_t _total_flight_time; ///< in microseconds
-	hrt_abstime _takeoff_time;
+	param_t _p_total_flight_time_high{PARAM_INVALID};
+	param_t _p_total_flight_time_low{PARAM_INVALID};
+	uint64_t _total_flight_time{0}; ///< in microseconds
+	hrt_abstime _takeoff_time{0};
 
-	struct work_s	_work;
+	struct work_s	_work {};
+
+	perf_counter_t	_cycle_perf;
+
+	bool _previous_arming_state{false}; ///< stores the previous _arming.armed state
 };
 
 

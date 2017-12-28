@@ -33,17 +33,16 @@ set(config_module_list
 	#
 	modules/systemlib/param
 	modules/systemlib
-	modules/systemlib/mixer
 	modules/uORB
 
 	#
 	# Libraries
 	#
-	lib/mathlib
-	lib/mathlib/math/filter
 	lib/conversion
 	lib/DriverFramework/framework
-	lib/micro-CDR
+	lib/mathlib
+	lib/mathlib/math/filter
+	lib/mixer
 
 	#
 	# QuRT port

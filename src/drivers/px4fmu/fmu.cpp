@@ -34,80 +34,70 @@
 /**
  * @file fmu.cpp
  *
- * Driver/configurator for the PX4 FMU multi-purpose port on v1 and v2 boards.
+ * Driver/configurator for the PX4 FMU
  */
 
-#include <px4_config.h>
-#include <px4_log.h>
-#include <px4_module.h>
-#include <px4_getopt.h>
-
-#include <sys/types.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <float.h>
-#include <stdlib.h>
-#include <semaphore.h>
-#include <string.h>
-#include <fcntl.h>
-#include <poll.h>
-#include <errno.h>
-#include <stdio.h>
-#include <math.h>
-#include <unistd.h>
-
-#include <nuttx/arch.h>
-
-#include <drivers/device/device.h>
-#include <drivers/device/i2c.h>
-#include <drivers/drv_pwm_output.h>
-#include <drivers/drv_input_capture.h>
-#include <drivers/drv_gpio.h>
-#include <drivers/drv_hrt.h>
+#include <cfloat>
 
 #include <board_config.h>
-
-#include <systemlib/px4_macros.h>
-#include <systemlib/systemlib.h>
-#include <systemlib/mixer/mixer.h>
-#include <systemlib/pwm_limit/pwm_limit.h>
-#include <systemlib/board_serial.h>
-#include <systemlib/param/param.h>
-#include <systemlib/perf_counter.h>
-#include <drivers/drv_mixer.h>
-#include <drivers/drv_rc_input.h>
+#include <drivers/device/device.h>
+#include <drivers/device/i2c.h>
+#include <drivers/drv_gpio.h>
+#include <drivers/drv_hrt.h>
 #include <drivers/drv_input_capture.h>
-
-#include <lib/rc/sbus.h>
+#include <drivers/drv_mixer.h>
+#include <drivers/drv_pwm_output.h>
+#include <drivers/drv_rc_input.h>
 #include <lib/rc/dsm.h>
+#include <lib/rc/sbus.h>
 #include <lib/rc/st24.h>
 #include <lib/rc/sumd.h>
-
+#include <px4_config.h>
+#include <px4_getopt.h>
+#include <px4_log.h>
+#include <px4_module.h>
+#include <systemlib/board_serial.h>
+#include <systemlib/circuit_breaker.h>
+#include <lib/mixer/mixer.h>
+#include <systemlib/param/param.h>
+#include <systemlib/perf_counter.h>
+#include <systemlib/pwm_limit/pwm_limit.h>
+#include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/actuator_controls.h>
 #include <uORB/topics/actuator_outputs.h>
-#include <uORB/topics/actuator_armed.h>
-#include <uORB/topics/vehicle_command.h>
-#include <uORB/topics/parameter_update.h>
-#include <uORB/topics/safety.h>
 #include <uORB/topics/adc_report.h>
 #include <uORB/topics/multirotor_motor_limits.h>
+#include <uORB/topics/parameter_update.h>
+#include <uORB/topics/safety.h>
+#include <uORB/topics/vehicle_command.h>
+#include <uORB/topics/vehicle_status.h>
 
 #ifdef HRT_PPM_CHANNEL
 # include <systemlib/ppm_decode.h>
 #endif
 
-#include <systemlib/circuit_breaker.h>
-
 #define SCHEDULE_INTERVAL	2000	/**< The schedule interval in usec (500 Hz) */
-#define NAN_VALUE	(0.0f/0.0f)		/**< NaN value for throttle lock mode */
-#define BUTTON_SAFETY	px4_arch_gpioread(GPIO_BTN_SAFETY)
-#define CYCLE_COUNT 10			/* safety switch must be held for 1 second to activate */
+
+static constexpr uint8_t CYCLE_COUNT = 10; /* safety switch must be held for 1 second to activate */
+static constexpr uint8_t MAX_ACTUATORS = DIRECT_PWM_OUTPUT_CHANNELS;
+
+#if defined(PX4_CPU_UUID_WORD32_FORMAT)
+#  define CPU_UUID_FORMAT PX4_CPU_UUID_WORD32_FORMAT
+#else
+#  define CPU_UUID_FORMAT "%0X"
+#endif
+
+#if defined(PX4_CPU_UUID_WORD32_SEPARATOR)
+#  define CPU_UUID_SEPARATOR PX4_CPU_UUID_WORD32_SEPARATOR
+#else
+#  define CPU_UUID_SEPARATOR " "
+#endif
 
 /*
  * Define the various LED flash sequences for each system state.
  */
 #define LED_PATTERN_FMU_OK_TO_ARM 		0x0003		/**< slow blinking			*/
-#define LED_PATTERN_FMU_REFUSE_TO_ARM 	0x5555		/**< fast blinking			*/
+#define LED_PATTERN_FMU_REFUSE_TO_ARM 		0x5555		/**< fast blinking			*/
 #define LED_PATTERN_IO_ARMED 			0x5050		/**< long off, then double blink 	*/
 #define LED_PATTERN_FMU_ARMED 			0x5500		/**< long off, then quad blink 		*/
 #define LED_PATTERN_IO_FMU_ARMED 		0xffff		/**< constantly on			*/
@@ -116,12 +106,9 @@
 enum PortMode {
 	PORT_MODE_UNSET = 0,
 	PORT_FULL_GPIO,
-	PORT_FULL_SERIAL,
 	PORT_FULL_PWM,
 	PORT_RC_IN,
-	PORT_GPIO_AND_SERIAL,
-	PORT_PWM_AND_SERIAL,
-	PORT_PWM_AND_GPIO,
+	PORT_PWM6,
 	PORT_PWM4,
 	PORT_PWM3,
 	PORT_PWM2,
@@ -131,10 +118,10 @@ enum PortMode {
 	PORT_CAPTURE,
 };
 
-
 #if !defined(BOARD_HAS_PWM)
 #  error "board_config.h needs to define BOARD_HAS_PWM"
 #endif
+
 class PX4FMU : public device::CDev, public ModuleBase<PX4FMU>
 {
 public:
@@ -148,6 +135,7 @@ public:
 		MODE_4PWM,
 		MODE_6PWM,
 		MODE_8PWM,
+		MODE_14PWM,
 		MODE_4CAP,
 		MODE_5CAP,
 		MODE_6CAP,
@@ -189,8 +177,6 @@ public:
 	virtual ssize_t	write(file *filp, const char *buffer, size_t len);
 
 	virtual int	init();
-
-	void dsm_bind_ioctl();
 
 	int		set_mode(Mode mode);
 	Mode		get_mode() { return _mode; }
@@ -311,9 +297,8 @@ private:
 	int			set_pwm_rate(unsigned rate_map, unsigned default_rate, unsigned alt_rate);
 	int			pwm_ioctl(file *filp, int cmd, unsigned long arg);
 	void		update_pwm_rev_mask();
-	void		publish_pwm_outputs(uint16_t *values, size_t numvalues);
 	void		update_pwm_out_state(bool on);
-	void		pwm_output_set(unsigned i, unsigned value);
+
 	void		update_params();
 
 	struct GPIOConfig {
@@ -343,7 +328,7 @@ private:
 			uint16_t raw_rc_values_local[input_rc_s::RC_INPUT_MAX_CHANNELS],
 			hrt_abstime now, bool frame_drop, bool failsafe,
 			unsigned frame_drops, int rssi);
-	void dsm_bind_ioctl(int dsmMode);
+
 	void set_rc_scan_state(RC_SCAN _rc_scan_state);
 	void rc_io_invert();
 	void rc_io_invert(bool invert);
@@ -427,6 +412,8 @@ PX4FMU::PX4FMU(bool run_as_task) :
 
 	// rc input, published to ORB
 	_rc_in.input_source = input_rc_s::RC_INPUT_SOURCE_PX4FMU_PPM;
+	// initialize it as RC lost
+	_rc_in.rc_lost = true;
 
 	// initialize raw_rc values and count
 	for (unsigned i = 0; i < input_rc_s::RC_INPUT_MAX_CHANNELS; i++) {
@@ -556,7 +543,7 @@ PX4FMU::safety_check_button(void)
 	 * Debounce the safety button, change state if it has been held for long enough.
 	 *
 	 */
-	bool safety_button_pressed = BUTTON_SAFETY;
+	bool safety_button_pressed = px4_arch_gpioread(GPIO_BTN_SAFETY);
 
 	/*
 	 * Keep pressed for a while to arm.
@@ -740,6 +727,21 @@ PX4FMU::set_mode(Mode mode)
 		_pwm_mask = 0xff;
 		_pwm_initialized = false;
 		_num_outputs = 8;
+
+		break;
+#endif
+
+#if defined(BOARD_HAS_PWM) && BOARD_HAS_PWM >= 14
+
+	case MODE_14PWM:
+		DEVICE_DEBUG("MODE_14PWM");
+		/* default output rates */
+		_pwm_default_rate = 50;
+		_pwm_alt_rate = 50;
+		_pwm_alt_rate_channels = 0;
+		_pwm_mask = 0x3fff;
+		_pwm_initialized = false;
+		_num_outputs = 14;
 
 		break;
 #endif
@@ -957,26 +959,6 @@ PX4FMU::update_pwm_trims()
 	}
 }
 
-void
-PX4FMU::publish_pwm_outputs(uint16_t *values, size_t numvalues)
-{
-	actuator_outputs_s outputs = {};
-	outputs.noutputs = numvalues;
-	outputs.timestamp = hrt_absolute_time();
-
-	for (size_t i = 0; i < _max_actuators; ++i) {
-		outputs.output[i] = i < numvalues ? (float)values[i] : 0;
-	}
-
-	if (_outputs_pub == nullptr) {
-		int instance = _class_instance;
-		_outputs_pub = orb_advertise_multi(ORB_ID(actuator_outputs), &outputs, &instance, ORB_PRIO_DEFAULT);
-
-	} else {
-		orb_publish(ORB_ID(actuator_outputs), _outputs_pub, &outputs);
-	}
-}
-
 int
 PX4FMU::task_spawn(int argc, char *argv[])
 {
@@ -1012,7 +994,6 @@ PX4FMU::task_spawn(int argc, char *argv[])
 	if (!run_as_task) {
 
 		/* schedule a cycle to start things */
-
 		int ret = work_queue(HPWORK, &_work, (worker_t)&PX4FMU::cycle_trampoline, nullptr, 0);
 
 		if (ret < 0) {
@@ -1168,14 +1149,6 @@ void PX4FMU::rc_io_invert(bool invert)
 #endif
 
 void
-PX4FMU::pwm_output_set(unsigned i, unsigned value)
-{
-	if (_pwm_initialized) {
-		up_pwm_servo_set(i, value);
-	}
-}
-
-void
 PX4FMU::update_pwm_out_state(bool on)
 {
 	if (on && !_pwm_initialized && _pwm_mask != 0) {
@@ -1254,7 +1227,7 @@ PX4FMU::cycle()
 
 		/* wait for an update */
 		unsigned n_updates = 0;
-		int ret = ::poll(_poll_fds, _poll_fds_num, poll_timeout);
+		int ret = px4_poll(_poll_fds, _poll_fds_num, poll_timeout);
 
 		/* this would be bad... */
 		if (ret < 0) {
@@ -1267,81 +1240,59 @@ PX4FMU::cycle()
 		} else {
 			perf_begin(_ctl_latency);
 
-			/* get controls for required topics */
-			unsigned poll_id = 0;
+			if (_mixers != nullptr) {
+				/* get controls for required topics */
+				unsigned poll_id = 0;
 
-			for (unsigned i = 0; i < actuator_controls_s::NUM_ACTUATOR_CONTROL_GROUPS; i++) {
-				if (_control_subs[i] > 0) {
-					if (_poll_fds[poll_id].revents & POLLIN) {
-						if (i == 0) {
-							n_updates++;
-						}
+				for (unsigned i = 0; i < actuator_controls_s::NUM_ACTUATOR_CONTROL_GROUPS; i++) {
+					if (_control_subs[i] > 0) {
 
-						orb_copy(_control_topics[i], _control_subs[i], &_controls[i]);
-
-#if defined(DEBUG_BUILD)
-
-						static int main_out_latency = 0;
-						static int sum_latency = 0;
-						static uint64_t last_cycle_time = 0;
-
-						if (i == 0) {
-							uint64_t now = hrt_absolute_time();
-							uint64_t latency = now - _controls[i].timestamp;
-
-							if (latency > main_out_latency) { main_out_latency = latency; }
-
-							sum_latency += latency;
-
-							if ((now - last_cycle_time) >= 1000000) {
-								last_cycle_time = now;
-								PX4_DEBUG("pwm max latency: %d, avg: %5.3f", main_out_latency, (double)(sum_latency / 100.0));
-								main_out_latency = latency;
-								sum_latency = 0;
+						if (_poll_fds[poll_id].revents & POLLIN) {
+							if (i == 0) {
+								n_updates++;
 							}
+
+							orb_copy(_control_topics[i], _control_subs[i], &_controls[i]);
 						}
 
-#endif
+						poll_id++;
 					}
 
-					poll_id++;
-				}
+					/* During ESC calibration, we overwrite the throttle value. */
+					if (i == 0 && _armed.in_esc_calibration_mode) {
 
-				/* During ESC calibration, we overwrite the throttle value. */
-				if (i == 0 && _armed.in_esc_calibration_mode) {
+						/* Set all controls to 0 */
+						memset(&_controls[i], 0, sizeof(_controls[i]));
 
-					/* Set all controls to 0 */
-					memset(&_controls[i], 0, sizeof(_controls[i]));
+						/* except thrust to maximum. */
+						_controls[i].control[actuator_controls_s::INDEX_THROTTLE] = 1.0f;
 
-					/* except thrust to maximum. */
-					_controls[i].control[3] = 1.0f;
-
-					/* Switch off the PWM limit ramp for the calibration. */
-					_pwm_limit.state = PWM_LIMIT_STATE_ON;
+						/* Switch off the PWM limit ramp for the calibration. */
+						_pwm_limit.state = PWM_LIMIT_STATE_ON;
+					}
 				}
 			}
 		} // poll_fds
 
 		/* run the mixers on every cycle */
 		{
-			/* can we mix? */
 			if (_mixers != nullptr) {
 
-				hrt_abstime now = hrt_absolute_time();
-				float dt = (now - _time_last_mix) / 1e6f;
-				_time_last_mix = now;
-
-				if (dt < 0.0001f) {
-					dt = 0.0001f;
-
-				} else if (dt > 0.02f) {
-					dt = 0.02f;
-				}
-
 				if (_mot_t_max > FLT_EPSILON) {
-					// maximum value the ouputs of the multirotor mixer are allowed to change in this cycle
-					// factor 2 is needed because actuator ouputs are in the range [-1,1]
-					float delta_out_max = 2.0f * 1000.0f * dt / (_max_pwm[0] - _min_pwm[0]) / _mot_t_max;
+					hrt_abstime now = hrt_absolute_time();
+					float dt = (now - _time_last_mix) / 1e6f;
+					_time_last_mix = now;
+
+					if (dt < 0.0001f) {
+						dt = 0.0001f;
+
+					} else if (dt > 0.02f) {
+						dt = 0.02f;
+					}
+
+					// maximum value the outputs of the multirotor mixer are allowed to change in this cycle
+					// factor 2 is needed because actuator outputs are in the range [-1,1]
+					const float delta_out_max = 2.0f * 1000.0f * dt / (_max_pwm[0] - _min_pwm[0]) / _mot_t_max;
 					_mixers->set_max_delta_out_once(delta_out_max);
 				}
 
@@ -1351,36 +1302,13 @@ PX4FMU::cycle()
 
 				/* do mixing */
 				float outputs[_max_actuators];
-				size_t mixed_num_outputs = _mixers->mix(outputs, _num_outputs, NULL);
-
-				/* publish mixer status */
-				multirotor_motor_limits_s multirotor_motor_limits = {};
-				multirotor_motor_limits.saturation_status = _mixers->get_saturation_status();
-
-				if (_to_mixer_status == nullptr) {
-					/* publish limits */
-					int instance = _class_instance;
-					_to_mixer_status = orb_advertise_multi(ORB_ID(multirotor_motor_limits), &multirotor_motor_limits, &instance,
-									       ORB_PRIO_DEFAULT);
-
-				} else {
-					orb_publish(ORB_ID(multirotor_motor_limits), _to_mixer_status, &multirotor_motor_limits);
-
-				}
-
-				/* disable unused ports by setting their output to NaN */
-				for (size_t i = 0; i < sizeof(outputs) / sizeof(outputs[0]); i++) {
-					if (i >= mixed_num_outputs) {
-						outputs[i] = NAN_VALUE;
-					}
-				}
-
-				uint16_t pwm_limited[_max_actuators];
+				const unsigned mixed_num_outputs = _mixers->mix(outputs, _num_outputs);
 
 				/* the PWM limit call takes care of out of band errors, NaN and constrains */
+				uint16_t pwm_limited[MAX_ACTUATORS];
+
 				pwm_limit_calc(_throttle_armed, arm_nothrottle(), mixed_num_outputs, _reverse_pwm_mask,
 					       _disarmed_pwm, _min_pwm, _max_pwm, outputs, pwm_limited, &_pwm_limit);
-
 
 				/* overwrite outputs in case of force_failsafe with _failsafe_pwm PWM values */
 				if (_armed.force_failsafe) {
@@ -1397,19 +1325,43 @@ PX4FMU::cycle()
 				}
 
 				/* output to the servos */
-				for (size_t i = 0; i < mixed_num_outputs; i++) {
-					pwm_output_set(i, pwm_limited[i]);
+				if (_pwm_initialized) {
+					for (size_t i = 0; i < mixed_num_outputs; i++) {
+						up_pwm_servo_set(i, pwm_limited[i]);
+					}
 				}
 
 				/* Trigger all timer's channels in Oneshot mode to fire
 				 * the oneshots with updated values.
 				 */
-
 				if (n_updates > 0) {
 					up_pwm_update();
 				}
 
-				publish_pwm_outputs(pwm_limited, mixed_num_outputs);
+				actuator_outputs_s actuator_outputs = {};
+				actuator_outputs.timestamp = hrt_absolute_time();
+				actuator_outputs.noutputs = mixed_num_outputs;
+
+				// zero unused outputs
+				for (size_t i = 0; i < mixed_num_outputs; ++i) {
+					actuator_outputs.output[i] = pwm_limited[i];
+				}
+
+				orb_publish_auto(ORB_ID(actuator_outputs), &_outputs_pub, &actuator_outputs, &_class_instance, ORB_PRIO_DEFAULT);
+
+				/* publish mixer status */
+				MultirotorMixer::saturation_status saturation_status;
+				saturation_status.value = _mixers->get_saturation_status();
+
+				if (saturation_status.flags.valid) {
+					multirotor_motor_limits_s motor_limits;
+					motor_limits.timestamp = hrt_absolute_time();
+					motor_limits.saturation_status = saturation_status.value;
+
+					orb_publish_auto(ORB_ID(multirotor_motor_limits), &_to_mixer_status, &motor_limits, &_class_instance,
+							 ORB_PRIO_DEFAULT);
+				}
+
 				perf_end(_ctl_latency);
 			}
 		}
@@ -1470,16 +1422,15 @@ PX4FMU::cycle()
 			 * We also need to arm throttle for the ESC calibration. */
 			_throttle_armed = (_safety_off && _armed.armed && !_armed.lockdown) ||
 					  (_safety_off && _armed.in_esc_calibration_mode);
+		}
 
+		/* update PWM status if armed or if disarmed PWM values are set */
+		bool pwm_on = _armed.armed || _num_disarmed_set > 0 || _armed.in_esc_calibration_mode;
 
-			/* update PWM status if armed or if disarmed PWM values are set */
-			bool pwm_on = _armed.armed || _num_disarmed_set > 0 || _armed.in_esc_calibration_mode;
+		if (_pwm_on != pwm_on) {
+			_pwm_on = pwm_on;
 
-			if (_pwm_on != pwm_on) {
-				_pwm_on = pwm_on;
-
-				update_pwm_out_state(pwm_on);
-			}
+			update_pwm_out_state(pwm_on);
 		}
 
 #ifdef RC_SERIAL_PORT
@@ -1490,11 +1441,32 @@ PX4FMU::cycle()
 			struct vehicle_command_s cmd;
 			orb_copy(ORB_ID(vehicle_command), _vehicle_cmd_sub, &cmd);
 
-			// Check for a DSM pairing command
-			if (((unsigned int)cmd.command == vehicle_command_s::VEHICLE_CMD_START_RX_PAIR) && ((int)cmd.param1 == 0)) {
-				dsm_bind_ioctl((int)cmd.param2);
-			}
+			// Check for a pairing command
+			if ((unsigned int)cmd.command == vehicle_command_s::VEHICLE_CMD_START_RX_PAIR) {
+				if (!_armed.armed) {
+					if ((int)cmd.param1 == 0) {
+						// DSM binding command
+						int dsm_bind_mode = (int)cmd.param2;
 
+						int dsm_bind_pulses = 0;
+
+						if (dsm_bind_mode == 0) {
+							dsm_bind_pulses = DSM2_BIND_PULSES;
+
+						} else if (dsm_bind_mode == 1) {
+							dsm_bind_pulses = DSMX_BIND_PULSES;
+
+						} else {
+							dsm_bind_pulses = DSMX8_BIND_PULSES;
+						}
+
+						ioctl(nullptr, DSM_BIND_START, dsm_bind_pulses);
+					}
+
+				} else {
+					PX4_WARN("system armed, bind request rejected");
+				}
+			}
 		}
 
 #endif
@@ -1643,12 +1615,18 @@ PX4FMU::cycle()
 					// The st24 will keep outputting RC channels and RSSI even if RC has been lost.
 					// The only way to detect RC loss is therefore to look at the lost_count.
 
-					if (rc_updated && lost_count == 0) {
-						// we have a new ST24 frame. Publish it.
-						_rc_in.input_source = input_rc_s::RC_INPUT_SOURCE_PX4FMU_ST24;
-						fill_rc_in(raw_rc_count, raw_rc_values, _cycle_timestamp,
-							   false, false, frame_drops, st24_rssi);
-						_rc_scan_locked = true;
+					if (rc_updated) {
+						if (lost_count == 0) {
+							// we have a new ST24 frame. Publish it.
+							_rc_in.input_source = input_rc_s::RC_INPUT_SOURCE_PX4FMU_ST24;
+							fill_rc_in(raw_rc_count, raw_rc_values, _cycle_timestamp,
+								   false, false, frame_drops, st24_rssi);
+							_rc_scan_locked = true;
+
+						} else {
+							// if the lost count > 0 means that there is an RC loss
+							_rc_in.rc_lost = true;
+						}
 					}
 				}
 
@@ -1717,8 +1695,7 @@ PX4FMU::cycle()
 					// we have a new PPM frame. Publish it.
 					rc_updated = true;
 					_rc_in.input_source = input_rc_s::RC_INPUT_SOURCE_PX4FMU_PPM;
-					fill_rc_in(ppm_decoded_channels, ppm_buffer, _cycle_timestamp,
-						   false, false, 0);
+					fill_rc_in(ppm_decoded_channels, ppm_buffer, _cycle_timestamp, false, false, 0);
 					_rc_scan_locked = true;
 					_rc_in.rc_ppm_frame_length = ppm_frame_length;
 					_rc_in.timestamp_last_signal = ppm_last_valid_decode;
@@ -1778,10 +1755,8 @@ PX4FMU::cycle()
 				exit_and_cleanup();
 
 			} else {
-
 				/* schedule next cycle */
 				work_queue(HPWORK, &_work, (worker_t)&PX4FMU::cycle_trampoline, this, USEC2TICK(SCHEDULE_INTERVAL));
-				//																			  USEC2TICK(SCHEDULE_INTERVAL - main_out_latency));
 			}
 
 			break;
@@ -1797,17 +1772,7 @@ void PX4FMU::update_params()
 	update_pwm_rev_mask();
 	update_pwm_trims();
 
-	int32_t dsm_bind_val;
 	param_t param_handle;
-
-	/* see if bind parameter has been set, and reset it to -1 */
-	param_get(param_handle = param_find("RC_DSM_BIND"), &dsm_bind_val);
-
-	if (dsm_bind_val > -1) {
-		dsm_bind_ioctl(dsm_bind_val);
-		dsm_bind_val = -1;
-		param_set(param_handle, &dsm_bind_val);
-	}
 
 	// maximum motor slew rate parameter
 	param_handle = param_find("MOT_SLEW_MAX");
@@ -1861,7 +1826,7 @@ PX4FMU::control_callback(uintptr_t handle,
 		     control_group == actuator_controls_s::GROUP_INDEX_ATTITUDE_ALTERNATE) &&
 		    control_index == actuator_controls_s::INDEX_THROTTLE) {
 			/* set the throttle to an invalid value */
-			input = NAN_VALUE;
+			input = NAN;
 		}
 	}
 
@@ -1900,6 +1865,9 @@ PX4FMU::ioctl(file *filp, int cmd, unsigned long arg)
 #endif
 #if defined(BOARD_HAS_PWM) && BOARD_HAS_PWM >= 8
 	case MODE_8PWM:
+#endif
+#if defined(BOARD_HAS_PWM) && BOARD_HAS_PWM >= 14
+	case MODE_14PWM:
 #endif
 		ret = pwm_ioctl(filp, cmd, arg);
 		break;
@@ -2198,6 +2166,20 @@ PX4FMU::pwm_ioctl(file *filp, int cmd, unsigned long arg)
 			break;
 		}
 
+#if defined(BOARD_HAS_PWM) && BOARD_HAS_PWM >= 14
+
+	case PWM_SERVO_SET(13):
+	case PWM_SERVO_SET(12):
+	case PWM_SERVO_SET(11):
+	case PWM_SERVO_SET(10):
+	case PWM_SERVO_SET(9):
+	case PWM_SERVO_SET(8):
+		if (_mode < MODE_14PWM) {
+			ret = -EINVAL;
+			break;
+		}
+
+#endif
 #if defined(BOARD_HAS_PWM) && BOARD_HAS_PWM >= 8
 
 	case PWM_SERVO_SET(7):
@@ -2251,6 +2233,20 @@ PX4FMU::pwm_ioctl(file *filp, int cmd, unsigned long arg)
 
 		break;
 
+#if defined(BOARD_HAS_PWM) && BOARD_HAS_PWM >= 14
+
+	case PWM_SERVO_GET(13):
+	case PWM_SERVO_GET(12):
+	case PWM_SERVO_GET(11):
+	case PWM_SERVO_GET(10):
+	case PWM_SERVO_GET(9):
+	case PWM_SERVO_GET(8):
+		if (_mode < MODE_14PWM) {
+			ret = -EINVAL;
+			break;
+		}
+
+#endif
 #if defined(BOARD_HAS_PWM) && BOARD_HAS_PWM >= 8
 
 	/* FALLTHROUGH */
@@ -2307,12 +2303,27 @@ PX4FMU::pwm_ioctl(file *filp, int cmd, unsigned long arg)
 	case PWM_SERVO_GET_RATEGROUP(6):
 	case PWM_SERVO_GET_RATEGROUP(7):
 #endif
+#if defined(BOARD_HAS_PWM) && BOARD_HAS_PWM >= 14
+	case PWM_SERVO_GET_RATEGROUP(8):
+	case PWM_SERVO_GET_RATEGROUP(9):
+	case PWM_SERVO_GET_RATEGROUP(10):
+	case PWM_SERVO_GET_RATEGROUP(11):
+	case PWM_SERVO_GET_RATEGROUP(12):
+	case PWM_SERVO_GET_RATEGROUP(13):
+#endif
 		*(uint32_t *)arg = up_pwm_servo_get_rate_group(cmd - PWM_SERVO_GET_RATEGROUP(0));
 		break;
 
 	case PWM_SERVO_GET_COUNT:
 	case MIXERIOCGETOUTPUTCOUNT:
 		switch (_mode) {
+
+#if defined(BOARD_HAS_PWM) && BOARD_HAS_PWM >= 14
+
+		case MODE_14PWM:
+			*(unsigned *)arg = 14;
+			break;
+#endif
 
 #if defined(BOARD_HAS_PWM) && BOARD_HAS_PWM >= 8
 
@@ -2357,9 +2368,7 @@ PX4FMU::pwm_ioctl(file *filp, int cmd, unsigned long arg)
 			/* change the number of outputs that are enabled for
 			 * PWM. This is used to change the split between GPIO
 			 * and PWM under control of the flight config
-			 * parameters. Note that this does not allow for
-			 * changing a set of pins to be used for serial on
-			 * FMUv1
+			 * parameters.
 			 */
 			switch (arg) {
 			case 0:
@@ -2465,7 +2474,7 @@ PX4FMU::pwm_ioctl(file *filp, int cmd, unsigned long arg)
 
 	case DSM_BIND_START:
 		/* only allow DSM2, DSM-X and DSM-X with more than 7 channels */
-		PX4_INFO("pwm_ioctl: DSM_BIND_START, arg: %lu", arg);
+		PX4_INFO("DSM_BIND_START: DSM%s RX", (arg == 0) ? "2" : ((arg == 1) ? "-X" : "-X8"));
 
 		if (arg == DSM2_BIND_PULSES ||
 		    arg == DSMX_BIND_PULSES ||
@@ -2489,6 +2498,7 @@ PX4FMU::pwm_ioctl(file *filp, int cmd, unsigned long arg)
 			ret = OK;
 
 		} else {
+			PX4_ERR("DSM bind failed");
 			ret = -EINVAL;
 		}
 
@@ -2507,8 +2517,7 @@ PX4FMU::pwm_ioctl(file *filp, int cmd, unsigned long arg)
 	case MIXERIOCADDSIMPLE: {
 			mixer_simple_s *mixinfo = (mixer_simple_s *)arg;
 
-			SimpleMixer *mixer = new SimpleMixer(control_callback,
-							     (uintptr_t)_controls, mixinfo);
+			SimpleMixer *mixer = new SimpleMixer(control_callback, (uintptr_t)_controls, mixinfo);
 
 			if (mixer->check()) {
 				delete mixer;
@@ -2516,9 +2525,9 @@ PX4FMU::pwm_ioctl(file *filp, int cmd, unsigned long arg)
 				ret = -EINVAL;
 
 			} else {
-				if (_mixers == nullptr)
-					_mixers = new MixerGroup(control_callback,
-								 (uintptr_t)_controls);
+				if (_mixers == nullptr) {
+					_mixers = new MixerGroup(control_callback, (uintptr_t)_controls);
+				}
 
 				_mixers->add_mixer(mixer);
 				_mixers->groups_required(_groups_required);
@@ -2579,7 +2588,7 @@ ssize_t
 PX4FMU::write(file *filp, const char *buffer, size_t len)
 {
 	unsigned count = len / 2;
-	uint16_t values[8];
+	uint16_t values[len];
 
 #if BOARD_HAS_PWM == 0
 	return 0;
@@ -2657,24 +2666,6 @@ PX4FMU::gpio_set_function(uint32_t gpios, int function)
 #if !defined(BOARD_HAS_FMU_GPIO)
 	return -EINVAL;
 #else
-#  if defined(BOARD_GPIO_SHARED_BUFFERED_BITS) && defined(GPIO_GPIO_DIR)
-
-	/*
-	 * GPIOs 0 and 1 must have the same direction as they are buffered
-	 * by a shared 2-port driver.  Any attempt to set either sets both.
-	 */
-	if ((gpios & BOARD_GPIO_SHARED_BUFFERED_BITS)) {
-		gpios |= BOARD_GPIO_SHARED_BUFFERED_BITS;
-
-		/* flip the buffer to output mode if required */
-		if (GPIO_SET_OUTPUT == function ||
-		    GPIO_SET_OUTPUT_LOW == function ||
-		    GPIO_SET_OUTPUT_HIGH == function) {
-			px4_arch_gpiowrite(GPIO_GPIO_DIR, 1);
-		}
-	}
-
-#  endif
 
 	/* configure selected GPIOs as required */
 	for (unsigned i = 0; i < _ngpio; i++) {
@@ -2718,14 +2709,6 @@ PX4FMU::gpio_set_function(uint32_t gpios, int function)
 		}
 	}
 
-#  if defined(BOARD_GPIO_SHARED_BUFFERED_BITS) && defined(GPIO_GPIO_DIR)
-
-	/* flip buffer to input mode if required */
-	if ((GPIO_SET_INPUT == function) && (gpios & BOARD_GPIO_SHARED_BUFFERED_BITS)) {
-		px4_arch_gpiowrite(GPIO_GPIO_DIR, 0);
-	}
-
-#  endif
 	return OK;
 #endif // !defined(BOARD_HAS_FMU_GPIO)
 
@@ -2958,26 +2941,6 @@ PX4FMU::gpio_ioctl(struct file *filp, int cmd, unsigned long arg)
 	return ret;
 }
 
-void
-PX4FMU::dsm_bind_ioctl(int dsmMode)
-{
-	if (!_armed.armed) {
-//      mavlink_log_info(&_mavlink_log_pub, "[FMU] binding DSM%s RX", (dsmMode == 0) ? "2" : ((dsmMode == 1) ? "-X" : "-X8"));
-		PX4_INFO("[FMU] binding DSM%s RX", (dsmMode == 0) ? "2" : ((dsmMode == 1) ? "-X" : "-X8"));
-		int ret = ioctl(nullptr, DSM_BIND_START,
-				(dsmMode == 0) ? DSM2_BIND_PULSES : ((dsmMode == 1) ? DSMX_BIND_PULSES : DSMX8_BIND_PULSES));
-
-		if (ret) {
-//            mavlink_log_critical(&_mavlink_log_pub, "binding failed.");
-			PX4_ERR("binding failed.");
-		}
-
-	} else {
-//        mavlink_log_info(&_mavlink_log_pub, "[FMU] system armed, bind request rejected");
-		PX4_WARN("[FMU] system armed, bind request rejected");
-	}
-}
-
 int
 PX4FMU::fmu_new_mode(PortMode new_mode)
 {
@@ -2985,11 +2948,9 @@ PX4FMU::fmu_new_mode(PortMode new_mode)
 		return -1;
 	}
 
-	uint32_t gpio_bits;
 	PX4FMU::Mode servo_mode;
 	bool mode_with_input = false;
 
-	gpio_bits = 0;
 	servo_mode = PX4FMU::MODE_NONE;
 
 	switch (new_mode) {
@@ -3009,6 +2970,9 @@ PX4FMU::fmu_new_mode(PortMode new_mode)
 #if defined(BOARD_HAS_PWM) && BOARD_HAS_PWM == 8
 		servo_mode = PX4FMU::MODE_8PWM;
 #endif
+#if defined(BOARD_HAS_PWM) && BOARD_HAS_PWM == 14
+		servo_mode = PX4FMU::MODE_14PWM;
+#endif
 		break;
 
 	case PORT_RC_IN:
@@ -3020,6 +2984,13 @@ PX4FMU::fmu_new_mode(PortMode new_mode)
 		servo_mode = PX4FMU::MODE_1PWM;
 		break;
 
+#if defined(BOARD_HAS_PWM) && BOARD_HAS_PWM >= 8
+
+	case PORT_PWM6:
+		/* select 4-pin PWM mode */
+		servo_mode = PX4FMU::MODE_6PWM;
+		break;
+#endif
 #if defined(BOARD_HAS_PWM) && BOARD_HAS_PWM >= 6
 
 	case PORT_PWM4:
@@ -3050,36 +3021,6 @@ PX4FMU::fmu_new_mode(PortMode new_mode)
 		break;
 #endif
 
-		/* mixed modes supported on v1 board only */
-#if defined(BOARD_HAS_MULTI_PURPOSE_GPIO)
-
-	case PORT_FULL_SERIAL:
-		/* set all multi-GPIOs to serial mode */
-		gpio_bits = GPIO_MULTI_1 | GPIO_MULTI_2 | GPIO_MULTI_3 | GPIO_MULTI_4;
-		mode_with_input = true;
-		break;
-
-	case PORT_GPIO_AND_SERIAL:
-		/* set RX/TX multi-GPIOs to serial mode */
-		gpio_bits = GPIO_MULTI_3 | GPIO_MULTI_4;
-		mode_with_input = true;
-		break;
-
-	case PORT_PWM_AND_SERIAL:
-		/* select 2-pin PWM mode */
-		servo_mode = PX4FMU::MODE_2PWM;
-		/* set RX/TX multi-GPIOs to serial mode */
-		gpio_bits = GPIO_MULTI_3 | GPIO_MULTI_4;
-		mode_with_input = true;
-		break;
-
-	case PORT_PWM_AND_GPIO:
-		/* select 2-pin PWM mode */
-		servo_mode = PX4FMU::MODE_2PWM;
-		mode_with_input = true;
-		break;
-#endif
-
 	default:
 		return -1;
 	}
@@ -3091,11 +3032,6 @@ PX4FMU::fmu_new_mode(PortMode new_mode)
 		/* reset to all-inputs */
 		if (mode_with_input) {
 			object->ioctl(0, GPIO_RESET, 0);
-
-			/* adjust GPIO config for serial mode(s) */
-			if (gpio_bits != 0) {
-				object->ioctl(0, GPIO_SET_ALT_1, gpio_bits);
-			}
 		}
 
 		/* (re)set the PWM output mode */
@@ -3112,24 +3048,17 @@ namespace
 void
 bind_spektrum()
 {
-	int	 fd;
-
-	fd = open(PX4FMU_DEVICE_PATH, O_RDWR);
+	int fd = open(PX4FMU_DEVICE_PATH, O_RDWR);
 
 	if (fd < 0) {
 		PX4_ERR("open fail");
 		return;
 	}
 
-	PX4_INFO("bind_Spektrum RX");
-
 	/* specify 11ms DSMX. RX will automatically fall back to 22ms or DSM2 if necessary */
-	if (ioctl(fd, DSM_BIND_START, DSMX8_BIND_PULSES)) {
-		PX4_ERR("binding failed.");
-	}
+	ioctl(fd, DSM_BIND_START, DSMX8_BIND_PULSES);
 
 	close(fd);
-
 }
 
 int fmu_new_i2c_speed(unsigned bus, unsigned clock_hz)
@@ -3481,19 +3410,10 @@ int PX4FMU::custom_command(int argc, char *argv[])
 	} else if (!strcmp(verb, "mode_pwm2cap2")) {
 		new_mode = PORT_PWM2CAP2;
 #endif
-#if defined(BOARD_HAS_MULTI_PURPOSE_GPIO)
+#if defined(BOARD_HAS_PWM) && BOARD_HAS_PWM >= 8
 
-	} else if (!strcmp(verb, "mode_serial")) {
-		new_mode = PORT_FULL_SERIAL;
-
-	} else if (!strcmp(verb, "mode_gpio_serial")) {
-		new_mode = PORT_GPIO_AND_SERIAL;
-
-	} else if (!strcmp(verb, "mode_pwm_serial")) {
-		new_mode = PORT_PWM_AND_SERIAL;
-
-	} else if (!strcmp(verb, "mode_pwm_gpio")) {
-		new_mode = PORT_PWM_AND_GPIO;
+	} else if (!strcmp(verb, "mode_pwm6")) {
+		new_mode = PORT_PWM6;
 #endif
 	}
 
@@ -3581,13 +3501,9 @@ mixer files.
 	PRINT_MODULE_USAGE_COMMAND("mode_pwm3cap1");
 	PRINT_MODULE_USAGE_COMMAND("mode_pwm2cap2");
 #endif
-#if defined(BOARD_HAS_MULTI_PURPOSE_GPIO) // only used by px4fmu-v1 HW
-	PRINT_MODULE_USAGE_COMMAND("mode_serial");
-	PRINT_MODULE_USAGE_COMMAND("mode_gpio_serial");
-	PRINT_MODULE_USAGE_COMMAND("mode_pwm_serial");
-	PRINT_MODULE_USAGE_COMMAND("mode_pwm_gpio");
+#if defined(BOARD_HAS_PWM) && BOARD_HAS_PWM >= 8
+	PRINT_MODULE_USAGE_COMMAND("mode_pwm6");
 #endif
-
 	PRINT_MODULE_USAGE_COMMAND_DESCR("bind", "Send a DSM bind command (module must be running)");
 
 	PRINT_MODULE_USAGE_COMMAND_DESCR("sensor_reset", "Do a sensor reset (SPI bus)");

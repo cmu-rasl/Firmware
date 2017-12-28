@@ -470,7 +470,7 @@ static ssize_t _ram_write(dm_item_t item, unsigned index, dm_persitence_t persis
 	}
 
 	/* Make sure caller has not given us more data than we can handle */
-	if (count > g_per_item_size[item]) {
+	if (count > (g_per_item_size[item] - DM_SECTOR_HDR_SIZE)) {
 		return -E2BIG;
 	}
 
@@ -511,7 +511,7 @@ _file_write(dm_item_t item, unsigned index, dm_persitence_t persistence, const v
 	}
 
 	/* Make sure caller has not given us more data than we can handle */
-	if (count > g_per_item_size[item]) {
+	if (count > (g_per_item_size[item] - DM_SECTOR_HDR_SIZE)) {
 		return -E2BIG;
 	}
 
@@ -581,7 +581,7 @@ static ssize_t _ram_read(dm_item_t item, unsigned index, void *buf, size_t count
 	}
 
 	/* Make sure the caller hasn't asked for more data than we can handle */
-	if (count > g_per_item_size[item]) {
+	if (count > (g_per_item_size[item] - DM_SECTOR_HDR_SIZE)) {
 		return -E2BIG;
 	}
 
@@ -624,7 +624,7 @@ _file_read(dm_item_t item, unsigned index, void *buf, size_t count)
 	}
 
 	/* Make sure the caller hasn't asked for more data than we can handle */
-	if (count > g_per_item_size[item]) {
+	if (count > (g_per_item_size[item] - DM_SECTOR_HDR_SIZE)) {
 		return -E2BIG;
 	}
 
@@ -1453,8 +1453,9 @@ start()
 	px4_sem_setprotocol(&g_init_sema, SEM_PRIO_NONE);
 
 	/* start the worker thread with low priority for disk IO */
-	if ((task = px4_task_spawn_cmd("dataman", SCHED_DEFAULT, SCHED_PRIORITY_DEFAULT - 10, 1200, task_main, nullptr)) <= 0) {
-		warn("task start failed");
+	if ((task = px4_task_spawn_cmd("dataman", SCHED_DEFAULT, SCHED_PRIORITY_DEFAULT - 10, 1200, task_main, nullptr)) < 0) {
+		px4_sem_destroy(&g_init_sema);
+		PX4_ERR("task start failed");
 		return -1;
 	}
 

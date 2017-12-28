@@ -33,6 +33,9 @@
 
 #pragma once
 
+#include "subscriber_handler.h"
+#include "status_display.h"
+
 #include <px4_workqueue.h>
 #include <px4_module.h>
 #include <uORB/topics/vehicle_command.h>
@@ -79,6 +82,7 @@ private:
 	void answer_command(const vehicle_command_s &cmd, unsigned result);
 
 	static struct work_s _work;
-	int _vehicle_command_sub = -1;
+	events::SubscriberHandler _subscriber_handler;
+	status::StatusDisplay _status_display;
 	orb_advert_t _command_ack_pub = nullptr;
 };

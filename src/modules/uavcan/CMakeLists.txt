@@ -31,8 +31,14 @@
 #
 ############################################################################
 
+px4_add_git_submodule(TARGET git_uavcan PATH "libuavcan")
+
 set(UAVCAN_USE_CPP03 ON CACHE BOOL "uavcan cpp03")
 set(UAVCAN_PLATFORM stm32 CACHE STRING "uavcan platform")
+
+if(NOT config_uavcan_num_ifaces)
+	message(FATAL_ERROR "config_uavcan_num_ifaces not set")
+endif()
 
 string(TOUPPER "${OS}" OS_UPPER)
 add_definitions(
@@ -46,20 +52,19 @@ add_definitions(
 		)
 
 add_subdirectory(libuavcan EXCLUDE_FROM_ALL)
-add_dependencies(uavcan platforms__nuttx)
-
-include_directories(${PX4_SOURCE_DIR}/mavlink/include/mavlink)
-include_directories(libuavcan/libuavcan/include)
-include_directories(libuavcan/libuavcan/include/dsdlc_generated)
-include_directories(libuavcan/libuavcan_drivers/posix/include)
-include_directories(libuavcan/libuavcan_drivers/stm32/driver/include)
+add_dependencies(uavcan prebuild_targets)
 
 px4_add_module(
 	MODULE modules__uavcan
 	MAIN uavcan
 	STACK_MAIN 3200
 	STACK_MAX 1500
-	COMPILE_FLAGS
+	INCLUDES
+		${PX4_SOURCE_DIR}/mavlink/include/mavlink
+		libuavcan/libuavcan/include
+		libuavcan/libuavcan/include/dsdlc_generated
+		libuavcan/libuavcan_drivers/posix/include
+		libuavcan/libuavcan_drivers/stm32/driver/include
 	SRCS
 		# Main
 		uavcan_main.cpp
@@ -77,8 +82,10 @@ px4_add_module(
 		sensors/baro.cpp
 
 	DEPENDS
+		git_uavcan
 		platforms__common
 		uavcan
+		uavcan_stm32_driver
 	)
 
-## vim: set noet ft=cmake fenc=utf-8 ff=unix :
+target_link_libraries(modules__uavcan uavcan uavcan_stm32_driver)

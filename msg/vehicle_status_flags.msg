@@ -43,15 +43,9 @@ uint16 OFFBOARD_CONTROL_SIGNAL_WEAK_MASK = 8
 uint16 OFFBOARD_CONTROL_SET_BY_COMMAND_MASK = 16
 uint16 OFFBOARD_CONTROL_LOSS_TIMEOUT_MASK = 32
 uint16 RC_SIGNAL_FOUND_ONCE_MASK = 64
-uint16 RC_SIGNAL_LOST_CMD_MASK = 128
 uint16 RC_INPUT_BLOCKED_MASK = 256
-uint16 DATA_LINK_LOST_CMD_MASK = 512
 uint16 VTOL_TRANSITION_FAILURE_MASK = 1024
-uint16 VTOL_TRANSITION_FAILURE_CMD_MASK = 2048
 uint16 GPS_FAILURE_MASK = 4096
-uint16 GPS_FAILURE_CMD_MASK = 8192
-uint16 BAROMETER_FAILURE_MASK = 16384
-uint16 EVER_HAD_BAROMETER_DATA_MASK = 32768
 
 # 0x0001 usb_connected: status of the USB power supply
 # 0x0002 offboard_control_signal_found_once
@@ -60,14 +54,8 @@ uint16 EVER_HAD_BAROMETER_DATA_MASK = 32768
 # 0x0010 offboard_control_set_by_command: true if the offboard mode was set by a mavlink command and should not be overridden by RC
 # 0x0020 offboard_control_loss_timeout: true if offboard is lost for a certain amount of time
 # 0x0040 rc_signal_found_once
-# 0x0080 rc_signal_lost_cmd: true if RC lost mode is commanded
 # 0x0100 rc_input_blocked: set if RC input should be ignored temporarily
-# 0x0200 data_link_lost_cmd: datalink to GCS lost mode commanded
 # 0x0400 vtol_transition_failure: Set to true if vtol transition failed
-# 0x0800 vtol_transition_failure_cmd: Set to true if vtol transition failure mode is commanded
 # 0x1000 gps_failure: Set to true if a gps failure is detected
-# 0x2000 gps_failure_cmd: Set to true if a gps failure mode is commanded
-# 0x4000 barometer_failure: Set to true if a barometer failure is detected
-# 0x8000 ever_had_barometer_data: Set to true if ever had valid barometer data before
 
 uint16 other_flags

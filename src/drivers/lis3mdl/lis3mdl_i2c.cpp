@@ -112,12 +112,9 @@ LIS3MDL_I2C::ioctl(unsigned operation, unsigned &arg)
 	switch (operation) {
 
 	case MAGIOCGEXTERNAL:
-		if (_bus == PX4_I2C_BUS_EXPANSION) {
-			return 1;
+		external();
 
-		} else {
-			return 0;
-		}
+	/* FALLTHROUGH */
 
 	case DEVIOCGDEVICEID:
 		return CDev::ioctl(nullptr, operation, arg);

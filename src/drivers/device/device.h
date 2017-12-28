@@ -33,9 +33,5 @@
 
 #pragma once
 
-#ifdef __PX4_NUTTX
-#include "device_nuttx.h"
-#elif defined (__PX4_POSIX)
-#include "vdev.h"
-#endif
-
+#include "Device.hpp"
+#include "CDev.hpp"

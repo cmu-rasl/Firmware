@@ -42,6 +42,7 @@
 
 #include <px4_config.h>
 #include <px4_defines.h>
+#include <px4_getopt.h>
 
 #include <sys/types.h>
 #include <stdint.h>
@@ -175,8 +176,11 @@ static const int16_t IST8310_MIN_VAL_Z  = -IST8310_MAX_VAL_Z;
 
 enum IST8310_BUS {
 	IST8310_BUS_ALL           = 0,
-	IST8310_BUS_I2C_EXTERNAL = 1,
-	IST8310_BUS_I2C_INTERNAL = 2,
+	IST8310_BUS_I2C_EXTERNAL  = 1,
+	IST8310_BUS_I2C_EXTERNAL1 = 2,
+	IST8310_BUS_I2C_EXTERNAL2 = 3,
+	IST8310_BUS_I2C_EXTERNAL3 = 4,
+	IST8310_BUS_I2C_INTERNAL  = 5,
 };
 
 #ifndef CONFIG_SCHED_WORKQUEUE
@@ -748,7 +752,7 @@ IST8310::ioctl(struct file *filp, int cmd, unsigned long arg)
 
 	case MAGIOCGEXTERNAL:
 		DEVICE_DEBUG("MAGIOCGEXTERNAL in main driver");
-		return 1;
+		return external();
 
 	default:
 		/* give it to the superclass */
@@ -905,7 +909,7 @@ IST8310::collect()
 
 	perf_begin(_sample_perf);
 	struct mag_report new_report;
-	bool sensor_is_onboard = false;
+	const bool sensor_is_external = external();
 
 	float xraw_f;
 	float yraw_f;
@@ -913,7 +917,7 @@ IST8310::collect()
 
 	/* this should be fairly close to the end of the measurement, so the best approximation of the time */
 	new_report.timestamp = hrt_absolute_time();
-	new_report.is_external = !sensor_is_onboard;
+	new_report.is_external = sensor_is_external;
 	new_report.error_count = perf_event_count(_comms_errors);
 	new_report.scaling = _range_scale;
 	new_report.device_id = _device_id.devid;
@@ -984,7 +988,7 @@ IST8310::collect()
 
 		} else {
 			_mag_topic = orb_advertise_multi(ORB_ID(sensor_mag), &new_report,
-							 &_orb_class_instance, (sensor_is_onboard) ? ORB_PRIO_HIGH : ORB_PRIO_MAX);
+							 &_orb_class_instance, sensor_is_external ? ORB_PRIO_MAX : ORB_PRIO_HIGH);
 
 			if (_mag_topic == nullptr) {
 				DEVICE_DEBUG("ADVERT FAIL");
@@ -1025,9 +1029,9 @@ int IST8310::calibrate(struct file *filp, unsigned enable)
 	struct mag_report report;
 	ssize_t sz;
 	int ret = 1;
-	float total_x;
-	float total_y;
-	float total_z;
+	float total_x = 0.0f;
+	float total_y = 0.0f;
+	float total_z = 0.0f;
 
 	// XXX do something smarter here
 	int fd = (int)enable;
@@ -1084,7 +1088,7 @@ int IST8310::calibrate(struct file *filp, unsigned enable)
 		}
 
 
-		for (uint8_t i = 0; i < 60; i++) {
+		for (uint8_t i = 0; i < 30; i++) {
 
 
 			struct pollfd fds;
@@ -1117,9 +1121,9 @@ int IST8310::calibrate(struct file *filp, unsigned enable)
 		}
 	}
 
-	total_x = fabs(sum_in_test[0]) - fabs(sum_in_normal[0]);
-	total_y = fabs(sum_in_test[1]) - fabs(sum_in_normal[1]);
-	total_z = fabs(sum_in_test[2]) - fabs(sum_in_normal[2]);
+	total_x = fabsf(sum_in_test[0] - sum_in_normal[0]);
+	total_y = fabsf(sum_in_test[1] - sum_in_normal[1]);
+	total_z = fabsf(sum_in_test[2] - sum_in_normal[2]);
 
 	ret = ((total_x + total_y + total_z) < (float)0.000001);
 
@@ -1142,6 +1146,8 @@ out:
 			ret = PX4_ERROR;
 		}
 
+	} else {
+		PX4_ERR("FAILED: CALIBRATION SCALE %d, %d, %d", (int)total_x, (int)total_y, (int)total_z);
 	}
 
 	return ret;
@@ -1176,8 +1182,12 @@ int IST8310::check_calibration()
 	bool scale_valid  = (check_scale() == OK);
 
 	if (_calibrated != (offset_valid && scale_valid)) {
-		PX4_WARN("mag cal status changed %s%s", (scale_valid) ? "" : "scale invalid ",
-			 (offset_valid) ? "" : "offset invalid");
+
+		if (!scale_valid || !offset_valid) {
+			PX4_WARN("mag cal status changed %s%s", (scale_valid) ? "" : "scale invalid ",
+				 (offset_valid) ? "" : "offset invalid");
+		}
+
 		_calibrated = (offset_valid && scale_valid);
 	}
 
@@ -1277,6 +1287,15 @@ struct ist8310_bus_option {
 	IST8310 *dev;
 } bus_options[] = {
 	{ IST8310_BUS_I2C_EXTERNAL, "/dev/ist8310_ext", PX4_I2C_BUS_EXPANSION, NULL },
+#ifdef PX4_I2C_BUS_EXPANSION1
+	{ IST8310_BUS_I2C_EXTERNAL1, "/dev/ist8311_int", PX4_I2C_BUS_EXPANSION1, NULL },
+#endif
+#ifdef PX4_I2C_BUS_EXPANSION2
+	{ IST8310_BUS_I2C_EXTERNAL2, "/dev/ist8312_int", PX4_I2C_BUS_EXPANSION2, NULL },
+#endif
+#ifdef PX4_I2C_BUS_EXPANSION3
+	{ IST8310_BUS_I2C_EXTERNAL3, "/dev/ist8313_int", PX4_I2C_BUS_EXPANSION3, NULL },
+#endif
 #ifdef PX4_I2C_BUS_ONBOARD
 	{ IST8310_BUS_I2C_INTERNAL, "/dev/ist8310_int", PX4_I2C_BUS_ONBOARD, NULL },
 #endif
@@ -1548,7 +1567,7 @@ usage()
 	PX4_INFO("    -R rotation");
 	PX4_INFO("    -C calibrate on start");
 	PX4_INFO("    -a 12C Address (0x%02x)", IST8310_BUS_I2C_ADDR);
-	PX4_INFO("    -b 12C bus (%d|%d)", IST8310_BUS_I2C_EXTERNAL, IST8310_BUS_I2C_INTERNAL);
+	PX4_INFO("    -b 12C bus (%d-%d)", IST8310_BUS_I2C_EXTERNAL, IST8310_BUS_I2C_INTERNAL);
 }
 
 } // namespace
@@ -1556,26 +1575,27 @@ usage()
 int
 ist8310_main(int argc, char *argv[])
 {
-	int ch;
-
 	IST8310_BUS i2c_busid = IST8310_BUS_ALL;
 	int i2c_addr = IST8310_BUS_I2C_ADDR; /* 7bit */
 
 	enum Rotation rotation = ROTATION_NONE;
 	bool calibrate = false;
+	int myoptind = 1;
+	int ch;
+	const char *myoptarg = nullptr;
 
-	while ((ch = getopt(argc, argv, "R:Ca:b:")) != EOF) {
+	while ((ch = px4_getopt(argc, argv, "R:Ca:b:", &myoptind, &myoptarg)) != EOF) {
 		switch (ch) {
 		case 'R':
-			rotation = (enum Rotation)atoi(optarg);
+			rotation = (enum Rotation)atoi(myoptarg);
 			break;
 
 		case 'a':
-			i2c_addr = (int)strtol(optarg, NULL, 0);
+			i2c_addr = (int)strtol(myoptarg, NULL, 0);
 			break;
 
 		case 'b':
-			i2c_busid = (IST8310_BUS)strtol(optarg, NULL, 0);
+			i2c_busid = (IST8310_BUS)strtol(myoptarg, NULL, 0);
 			break;
 
 		case 'C':
@@ -1588,12 +1608,12 @@ ist8310_main(int argc, char *argv[])
 		}
 	}
 
-	if (optind >= argc) {
+	if (myoptind >= argc) {
 		ist8310::usage();
-		exit(1);
+		return 1;
 	}
 
-	const char *verb = argv[optind];
+	const char *verb = argv[myoptind];
 
 	/*
 	 * Start/load the driver.
@@ -1601,11 +1621,16 @@ ist8310_main(int argc, char *argv[])
 	if (!strcmp(verb, "start")) {
 		ist8310::start(i2c_busid, i2c_addr, rotation);
 
-		if (calibrate && ist8310::calibrate(i2c_busid) != 0) {
-			errx(1, "calibration failed");
+		if (i2c_busid == IST8310_BUS_ALL) {
+			PX4_ERR("calibration only feasible against one bus");
+			return 1;
+
+		} else if (calibrate && (ist8310::calibrate(i2c_busid) != 0)) {
+			PX4_ERR("calibration failed");
+			return 1;
 		}
 
-		exit(0);
+		return 0;
 	}
 
 	/*
@@ -1634,12 +1659,15 @@ ist8310_main(int argc, char *argv[])
 	 */
 	if (!strcmp(verb, "calibrate")) {
 		if (ist8310::calibrate(i2c_busid) == 0) {
-			errx(0, "calibration successful");
+			PX4_INFO("calibration successful");
+			return 0;
 
 		} else {
-			errx(1, "calibration failed");
+			PX4_ERR("calibration failed");
+			return 1;
 		}
 	}
 
-	errx(1, "unrecognized command, try 'start', 'test', 'reset' 'calibrate', 'tempoff', 'tempon' or 'info'");
+	ist8310::usage();
+	return 1;
 }

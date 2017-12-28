@@ -47,9 +47,9 @@
 
 #include <drivers/drv_hrt.h>
 #include <drivers/drv_mixer.h>
-#include <systemlib/mixer/mixer.h>
-#include <systemlib/mixer/mixer_load.h>
-#include <systemlib/mixer/mixer_multirotor.generated.h>
+#include <lib/mixer/mixer.h>
+#include <lib/mixer/mixer_load.h>
+#include <lib/mixer/mixer_multirotor_normalized.generated.h>
 #include <systemlib/param/param.h>
 #include <systemlib/pwm_limit/pwm_limit.h>
 #include <dev_fs_lib_pwm.h>
@@ -402,9 +402,7 @@ void task_main(int argc, char *argv[])
 		_outputs.timestamp = hrt_absolute_time();
 
 		/* do  mixing for virtual control group */
-		_outputs.noutputs = _mixer->mix(_outputs.output,
-						_outputs.NUM_ACTUATOR_OUTPUTS,
-						NULL);
+		_outputs.noutputs = _mixer->mix(_outputs.output, _outputs.NUM_ACTUATOR_OUTPUTS);
 
 		//set max, min and disarmed pwm
 		const uint16_t reverse_mask = 0;

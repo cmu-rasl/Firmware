@@ -54,18 +54,12 @@
 #include <uORB/topics/vehicle_command.h>
 #include <uORB/topics/vtol_vehicle_status.h>
 
-
-
 MissionBlock::MissionBlock(Navigator *navigator, const char *name) :
 	NavigatorMode(navigator, name),
-	_param_loiter_min_alt(this, "MIS_LTRMIN_ALT", false),
 	_param_yaw_timeout(this, "MIS_YAW_TMT", false),
 	_param_yaw_err(this, "MIS_YAW_ERR", false),
-	_param_vtol_wv_land(this, "VT_WV_LND_EN", false),
-	_param_vtol_wv_takeoff(this, "VT_WV_TKO_EN", false),
-	_param_vtol_wv_loiter(this, "VT_WV_LTR_EN", false),
-	_param_force_vtol(this, "NAV_FORCE_VT", false),
-	_param_back_trans_dur(this, "VT_B_TRANS_DUR", false)
+	_param_back_trans_dec_mss(this, "VT_B_DEC_MSS", false),
+	_param_reverse_delay(this, "VT_B_REV_DEL", false)
 {
 }
 
@@ -96,7 +90,6 @@ MissionBlock::is_mission_item_reached()
 	case NAV_CMD_DO_MOUNT_CONFIGURE:
 	case NAV_CMD_DO_MOUNT_CONTROL:
 	case NAV_CMD_DO_SET_ROI:
-	case NAV_CMD_ROI:
 	case NAV_CMD_DO_SET_CAM_TRIGG_DIST:
 	case NAV_CMD_DO_SET_CAM_TRIGG_INTERVAL:
 	case NAV_CMD_SET_CAMERA_MODE:
@@ -120,6 +113,7 @@ MissionBlock::is_mission_item_reached()
 		}
 
 	case NAV_CMD_DO_CHANGE_SPEED:
+	case NAV_CMD_DO_SET_HOME:
 		return true;
 
 	default:
@@ -296,12 +290,13 @@ MissionBlock::is_mission_item_reached()
 			/* for vtol back transition calculate acceptance radius based on time and ground speed */
 			if (_mission_item.vtol_back_transition) {
 
-				float groundspeed = sqrtf(_navigator->get_global_position()->vel_n * _navigator->get_global_position()->vel_n +
-							  _navigator->get_global_position()->vel_e * _navigator->get_global_position()->vel_e);
+				float velocity = sqrtf(_navigator->get_local_position()->vx * _navigator->get_local_position()->vx +
+						       _navigator->get_local_position()->vy * _navigator->get_local_position()->vy);
 
-				if (_param_back_trans_dur.get() > FLT_EPSILON && groundspeed > FLT_EPSILON
-				    && groundspeed * _param_back_trans_dur.get() > mission_acceptance_radius) {
-					mission_acceptance_radius = groundspeed * _param_back_trans_dur.get();
+				if (_param_back_trans_dec_mss.get() > FLT_EPSILON && velocity > FLT_EPSILON) {
+					mission_acceptance_radius = ((velocity / _param_back_trans_dec_mss.get() / 2) * velocity) + _param_reverse_delay.get() *
+								    velocity;
+
 				}
 
 			}
@@ -411,81 +406,53 @@ MissionBlock::reset_mission_item_reached()
 }
 
 void
-MissionBlock::mission_item_to_vehicle_command(const struct mission_item_s *item, struct vehicle_command_s *cmd)
+MissionBlock::issue_command(const mission_item_s &item)
 {
-	// we're expecting a mission command item here so assign the "raw" inputs to the command
-	// (MAV_FRAME_MISSION mission item)
-	cmd->param1 = item->params[0];
-	cmd->param2 = item->params[1];
-	cmd->param3 = item->params[2];
-	cmd->param4 = item->params[3];
-	cmd->param5 = item->params[4];
-	cmd->param6 = item->params[5];
-	cmd->param7 = item->params[6];
-	cmd->command = item->nav_cmd;
-
-	cmd->target_system = _navigator->get_vstatus()->system_id;
-
-	// The camera commands are not processed on the autopilot but will be
-	// sent to the mavlink links to other components.
-	switch (item->nav_cmd) {
-	case NAV_CMD_IMAGE_START_CAPTURE:
-	case NAV_CMD_IMAGE_STOP_CAPTURE:
-	case NAV_CMD_VIDEO_START_CAPTURE:
-	case NAV_CMD_VIDEO_STOP_CAPTURE:
-		cmd->target_component = 100; // MAV_COMP_ID_CAMERA
-		break;
-
-	default:
-		cmd->target_component = _navigator->get_vstatus()->component_id;
-		break;
-	}
-
-	cmd->source_system = _navigator->get_vstatus()->system_id;
-	cmd->source_component = _navigator->get_vstatus()->component_id;
-	cmd->confirmation = false;
-}
-
-void
-MissionBlock::issue_command(const struct mission_item_s *item)
-{
-
 	if (item_contains_position(item)) {
 		return;
 	}
 
 	// NAV_CMD_DO_LAND_START is only a marker
-	if (item->nav_cmd == NAV_CMD_DO_LAND_START) {
+	if (item.nav_cmd == NAV_CMD_DO_LAND_START) {
 		return;
 	}
 
-	if (item->nav_cmd == NAV_CMD_DO_SET_SERVO) {
-		PX4_INFO("do_set_servo command");
+	if (item.nav_cmd == NAV_CMD_DO_SET_SERVO) {
+		PX4_INFO("DO_SET_SERVO command");
+
 		// XXX: we should issue a vehicle command and handle this somewhere else
-		_actuators = {};
+		actuator_controls_s actuators = {};
+		actuators.timestamp = hrt_absolute_time();
+
 		// params[0] actuator number to be set 0..5 (corresponds to AUX outputs 1..6)
 		// params[1] new value for selected actuator in ms 900...2000
-		_actuators.control[(int)item->params[0]] = 1.0f / 2000 * -item->params[1];
-		_actuators.timestamp = hrt_absolute_time();
+		actuators.control[(int)item.params[0]] = 1.0f / 2000 * -item.params[1];
 
 		if (_actuator_pub != nullptr) {
-			orb_publish(ORB_ID(actuator_controls_2), _actuator_pub, &_actuators);
+			orb_publish(ORB_ID(actuator_controls_2), _actuator_pub, &actuators);
 
 		} else {
-			_actuator_pub = orb_advertise(ORB_ID(actuator_controls_2), &_actuators);
+			_actuator_pub = orb_advertise(ORB_ID(actuator_controls_2), &actuators);
 		}
 
 	} else {
-		const hrt_abstime now = hrt_absolute_time();
+		_action_start = hrt_absolute_time();
 
-		struct vehicle_command_s cmd = {
-			.timestamp = now
-		};
+		// mission_item -> vehicle_command
 
-		mission_item_to_vehicle_command(item, &cmd);
-		_action_start = now;
+		// we're expecting a mission command item here so assign the "raw" inputs to the command
+		// (MAV_FRAME_MISSION mission item)
+		vehicle_command_s vcmd = {};
+		vcmd.command = item.nav_cmd;
+		vcmd.param1 = item.params[0];
+		vcmd.param2 = item.params[1];
+		vcmd.param3 = item.params[2];
+		vcmd.param4 = item.params[3];
+		vcmd.param5 = item.params[4];
+		vcmd.param6 = item.params[5];
+		vcmd.param7 = item.params[6];
 
-		_navigator->publish_vehicle_cmd(cmd);
+		_navigator->publish_vehicle_cmd(&vcmd);
 	}
 }
 
@@ -500,41 +467,41 @@ MissionBlock::get_time_inside(const struct mission_item_s &item)
 }
 
 bool
-MissionBlock::item_contains_position(const struct mission_item_s *item)
+MissionBlock::item_contains_position(const mission_item_s &item)
 {
-	return item->nav_cmd == NAV_CMD_WAYPOINT ||
-	       item->nav_cmd == NAV_CMD_LOITER_UNLIMITED ||
-	       item->nav_cmd == NAV_CMD_LOITER_TIME_LIMIT ||
-	       item->nav_cmd == NAV_CMD_LAND ||
-	       item->nav_cmd == NAV_CMD_TAKEOFF ||
-	       item->nav_cmd == NAV_CMD_LOITER_TO_ALT ||
-	       item->nav_cmd == NAV_CMD_VTOL_TAKEOFF ||
-	       item->nav_cmd == NAV_CMD_VTOL_LAND;
+	return item.nav_cmd == NAV_CMD_WAYPOINT ||
+	       item.nav_cmd == NAV_CMD_LOITER_UNLIMITED ||
+	       item.nav_cmd == NAV_CMD_LOITER_TIME_LIMIT ||
+	       item.nav_cmd == NAV_CMD_LAND ||
+	       item.nav_cmd == NAV_CMD_TAKEOFF ||
+	       item.nav_cmd == NAV_CMD_LOITER_TO_ALT ||
+	       item.nav_cmd == NAV_CMD_VTOL_TAKEOFF ||
+	       item.nav_cmd == NAV_CMD_VTOL_LAND ||
+	       item.nav_cmd == NAV_CMD_DO_FOLLOW_REPOSITION;
 }
 
 bool
-MissionBlock::mission_item_to_position_setpoint(const struct mission_item_s *item, struct position_setpoint_s *sp)
+MissionBlock::mission_item_to_position_setpoint(const mission_item_s &item, position_setpoint_s *sp)
 {
 	/* don't change the setpoint for non-position items */
 	if (!item_contains_position(item)) {
 		return false;
 	}
 
-	sp->lat = item->lat;
-	sp->lon = item->lon;
-	sp->alt = item->altitude_is_relative ? item->altitude + _navigator->get_home_position()->alt : item->altitude;
-	sp->yaw = item->yaw;
-	sp->yaw_valid = PX4_ISFINITE(item->yaw);
-	sp->loiter_radius = (fabsf(item->loiter_radius) > NAV_EPSILON_POSITION) ? fabsf(item->loiter_radius) :
+	sp->lat = item.lat;
+	sp->lon = item.lon;
+	sp->alt = item.altitude_is_relative ? item.altitude + _navigator->get_home_position()->alt : item.altitude;
+	sp->yaw = item.yaw;
+	sp->yaw_valid = PX4_ISFINITE(item.yaw);
+	sp->loiter_radius = (fabsf(item.loiter_radius) > NAV_EPSILON_POSITION) ? fabsf(item.loiter_radius) :
 			    _navigator->get_loiter_radius();
-	sp->loiter_direction = (item->loiter_radius > 0) ? 1 : -1;
-	sp->acceptance_radius = item->acceptance_radius;
-	sp->disable_mc_yaw_control = item->disable_mc_yaw;
+	sp->loiter_direction = (item.loiter_radius > 0) ? 1 : -1;
+	sp->acceptance_radius = item.acceptance_radius;
 
 	sp->cruising_speed = _navigator->get_cruising_speed();
 	sp->cruising_throttle = _navigator->get_cruising_throttle();
 
-	switch (item->nav_cmd) {
+	switch (item.nav_cmd) {
 	case NAV_CMD_IDLE:
 		sp->type = position_setpoint_s::SETPOINT_TYPE_IDLE;
 		break;
@@ -551,36 +518,26 @@ MissionBlock::mission_item_to_position_setpoint(const struct mission_item_s *ite
 			sp->type = position_setpoint_s::SETPOINT_TYPE_TAKEOFF;
 
 			// set pitch and ensure that the hold time is zero
-			sp->pitch_min = item->pitch_min;
+			sp->pitch_min = item.pitch_min;
 		}
 
 		break;
 
 	case NAV_CMD_VTOL_TAKEOFF:
 		sp->type = position_setpoint_s::SETPOINT_TYPE_TAKEOFF;
-
-		if (_navigator->get_vstatus()->is_vtol && _param_vtol_wv_takeoff.get()) {
-			sp->disable_mc_yaw_control = true;
-		}
-
 		break;
 
 	case NAV_CMD_LAND:
 	case NAV_CMD_VTOL_LAND:
 		sp->type = position_setpoint_s::SETPOINT_TYPE_LAND;
-
-		if (_navigator->get_vstatus()->is_vtol && _param_vtol_wv_land.get()) {
-			sp->disable_mc_yaw_control = true;
-		}
-
 		break;
 
 	case NAV_CMD_LOITER_TO_ALT:
 
 		// initially use current altitude, and switch to mission item altitude once in loiter position
-		if (_param_loiter_min_alt.get() > 0.0f) { // ignore _param_loiter_min_alt if smaller then 0 (-1)
+		if (_navigator->get_loiter_min_alt() > 0.0f) { // ignore _param_loiter_min_alt if smaller then 0 (-1)
 			sp->alt = math::max(_navigator->get_global_position()->alt,
-					    _navigator->get_home_position()->alt + _param_loiter_min_alt.get());
+					    _navigator->get_home_position()->alt + _navigator->get_loiter_min_alt());
 
 		} else {
 			sp->alt = _navigator->get_global_position()->alt;
@@ -590,11 +547,6 @@ MissionBlock::mission_item_to_position_setpoint(const struct mission_item_s *ite
 	case NAV_CMD_LOITER_TIME_LIMIT:
 	case NAV_CMD_LOITER_UNLIMITED:
 		sp->type = position_setpoint_s::SETPOINT_TYPE_LOITER;
-
-		if (_navigator->get_vstatus()->is_vtol && _param_vtol_wv_loiter.get()) {
-			sp->disable_mc_yaw_control = true;
-		}
-
 		break;
 
 	default:
@@ -657,40 +609,6 @@ MissionBlock::set_loiter_item(struct mission_item_s *item, float min_clearance)
 }
 
 void
-MissionBlock::set_follow_target_item(struct mission_item_s *item, float min_clearance, follow_target_s &target,
-				     float yaw)
-{
-	if (_navigator->get_land_detected()->landed) {
-		/* landed, don't takeoff, but switch to IDLE mode */
-		item->nav_cmd = NAV_CMD_IDLE;
-
-	} else {
-
-		item->nav_cmd = NAV_CMD_DO_FOLLOW_REPOSITION;
-
-		/* use current target position */
-		item->lat = target.lat;
-		item->lon = target.lon;
-		item->altitude = _navigator->get_home_position()->alt;
-
-		if (min_clearance > 8.0f) {
-			item->altitude += min_clearance;
-
-		} else {
-			item->altitude += 8.0f; // if min clearance is bad set it to 8.0 meters (well above the average height of a person)
-		}
-	}
-
-	item->altitude_is_relative = false;
-	item->yaw = yaw;
-	item->loiter_radius = _navigator->get_loiter_radius();
-	item->acceptance_radius = _navigator->get_acceptance_radius();
-	item->time_inside = 0.0f;
-	item->autocontinue = false;
-	item->origin = ORIGIN_ONBOARD;
-}
-
-void
 MissionBlock::set_takeoff_item(struct mission_item_s *item, float abs_altitude, float min_pitch)
 {
 	item->nav_cmd = NAV_CMD_TAKEOFF;
@@ -712,25 +630,13 @@ MissionBlock::set_takeoff_item(struct mission_item_s *item, float abs_altitude, 
 void
 MissionBlock::set_land_item(struct mission_item_s *item, bool at_current_location)
 {
-
 	/* VTOL transition to RW before landing */
-	if (_navigator->get_vstatus()->is_vtol &&
-	    !_navigator->get_vstatus()->is_rotary_wing &&
-	    _param_force_vtol.get() == 1) {
+	if (_navigator->force_vtol()) {
 
-		struct vehicle_command_s cmd = {
-			.timestamp = hrt_absolute_time(),
-			.param5 = 0.0f,
-			.param6 = 0.0f,
-			.param1 = vtol_vehicle_status_s::VEHICLE_VTOL_STATE_MC,
-			.param2 = 0.0f,
-			.param3 = 0.0f,
-			.param4 = 0.0f,
-			.param7 = 0.0f,
-			.command = NAV_CMD_DO_VTOL_TRANSITION
-		};
-
-		_navigator->publish_vehicle_cmd(cmd);
+		vehicle_command_s vcmd = {};
+		vcmd.command = NAV_CMD_DO_VTOL_TRANSITION;
+		vcmd.param1 = vtol_vehicle_status_s::VEHICLE_VTOL_STATE_MC;
+		_navigator->publish_vehicle_cmd(&vcmd);
 	}
 
 	/* set the land item */
@@ -788,4 +694,33 @@ MissionBlock::set_idle_item(struct mission_item_s *item)
 	item->time_inside = 0.0f;
 	item->autocontinue = true;
 	item->origin = ORIGIN_ONBOARD;
+}
+
+void
+MissionBlock::mission_apply_limitation(mission_item_s &item)
+{
+	/*
+	 * Limit altitude
+	 */
+
+	/* do nothing if altitude max is negative */
+	if (_navigator->get_land_detected()->alt_max > 0.0f) {
+
+		/* absolute altitude */
+		float altitude_abs = item.altitude_is_relative
+				     ? item.altitude + _navigator->get_home_position()->alt
+				     : item.altitude;
+
+		/* limit altitude to maximum allowed altitude */
+		if ((_navigator->get_land_detected()->alt_max + _navigator->get_home_position()->alt) < altitude_abs) {
+			item.altitude = item.altitude_is_relative ?
+					_navigator->get_land_detected()->alt_max :
+					_navigator->get_land_detected()->alt_max + _navigator->get_home_position()->alt;
+
+		}
+	}
+
+	/*
+	 * Add other limitations here
+	 */
 }

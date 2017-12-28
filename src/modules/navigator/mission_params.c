@@ -100,6 +100,22 @@ PARAM_DEFINE_INT32(MIS_ONBOARD_EN, 1);
 PARAM_DEFINE_FLOAT(MIS_DIST_1WP, 900);
 
 /**
+ * Maximal horizontal distance between waypoint
+ *
+ * Failsafe check to prevent running missions which are way too big.
+ * Set a value of zero or less to disable. The mission will not be started if any distance between
+ * two subsequent waypoints is greater than MIS_DIST_WPS.
+ *
+ * @unit m
+ * @min 0
+ * @max 10000
+ * @decimal 1
+ * @increment 100
+ * @group Mission
+ */
+PARAM_DEFINE_FLOAT(MIS_DIST_WPS, 900);
+
+/**
  * Altitude setpoint mode
  *
  * 0: the system will follow a zero order hold altitude setpoint
@@ -125,6 +141,7 @@ PARAM_DEFINE_INT32(MIS_ALTMODE, 1);
  * @value 1 Heading towards waypoint
  * @value 2 Heading towards home
  * @value 3 Heading away from home
+ * @value 4 Heading towards ROI
  * @group Mission
  */
 PARAM_DEFINE_INT32(MIS_YAWMODE, 1);
@@ -157,41 +174,3 @@ PARAM_DEFINE_FLOAT(MIS_YAW_TMT, -1.0f);
  * @group Mission
  */
 PARAM_DEFINE_FLOAT(MIS_YAW_ERR, 12.0f);
-
-/**
- * Weather-vane mode landings for missions
- *
- * @boolean
- * @group Mission
- */
-PARAM_DEFINE_INT32(VT_WV_LND_EN, 0);
-
-/**
- * Enable weather-vane mode takeoff for missions
- *
- * @boolean
- * @group Mission
- */
-PARAM_DEFINE_INT32(VT_WV_TKO_EN, 0);
-
-/**
- * Weather-vane mode for loiter
- *
- * @boolean
- * @group Mission
- */
-PARAM_DEFINE_INT32(VT_WV_LTR_EN, 0);
-
-/**
- * Cruise Airspeed
- *
- * The fixed wing controller tries to fly at this airspeed.
- *
- * @unit m/s
- * @min 0.0
- * @max 40
- * @decimal 1
- * @increment 0.5
- * @group FW TECS
- */
-PARAM_DEFINE_FLOAT(FW_AIRSPD_TRIM, 15.0f);

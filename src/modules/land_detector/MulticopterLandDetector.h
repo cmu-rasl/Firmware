@@ -42,19 +42,20 @@
 
 #pragma once
 
+#include "LandDetector.h"
+
 #include <systemlib/param/param.h>
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_local_position_setpoint.h>
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/actuator_controls.h>
-#include <uORB/topics/actuator_armed.h>
-#include <uORB/topics/parameter_update.h>
-#include <uORB/topics/manual_control_setpoint.h>
-#include <uORB/topics/control_state.h>
-#include <uORB/topics/vehicle_control_mode.h>
+#include <uORB/topics/actuator_controls.h>
 #include <uORB/topics/battery_status.h>
-
-#include "LandDetector.h"
+#include <uORB/topics/parameter_update.h>
+#include <uORB/topics/sensor_bias.h>
+#include <uORB/topics/vehicle_attitude.h>
+#include <uORB/topics/vehicle_control_mode.h>
+#include <uORB/topics/vehicle_local_position.h>
 
 namespace land_detector
 {
@@ -82,6 +83,18 @@ protected:
 	virtual float _get_max_altitude() override;
 private:
 
+	/** Time in us that landing conditions have to hold before triggering a land. */
+	static constexpr uint64_t LAND_DETECTOR_TRIGGER_TIME_US = 300000;
+
+	/** Time in us that almost landing conditions have to hold before triggering almost landed . */
+	static constexpr uint64_t MAYBE_LAND_DETECTOR_TRIGGER_TIME_US = 250000;
+
+	/** Time in us that ground contact condition have to hold before triggering contact ground */
+	static constexpr uint64_t GROUND_CONTACT_TRIGGER_TIME_US = 350000;
+
+	/** Time interval in us in which wider acceptance thresholds are used after landed. */
+	static constexpr uint64_t LAND_DETECTOR_LAND_PHASE_TIME_US = 2000000;
+
 	/**
 	* @brief Handles for interesting parameters
 	**/
@@ -95,9 +108,7 @@ private:
 		param_t minManThrottle;
 		param_t freefall_acc_threshold;
 		param_t freefall_trigger_time;
-		param_t manual_stick_down_threshold;
 		param_t altitude_max;
-		param_t manual_stick_up_position_takeoff_threshold;
 		param_t landSpeed;
 	} _paramHandle;
 
@@ -111,40 +122,33 @@ private:
 		float minManThrottle;
 		float freefall_acc_threshold;
 		float freefall_trigger_time;
-		float manual_stick_down_threshold;
 		float altitude_max;
-		float manual_stick_up_position_takeoff_threshold;
 		float landSpeed;
 	} _params;
 
 	int _vehicleLocalPositionSub;
 	int _vehicleLocalPositionSetpointSub;
 	int _actuatorsSub;
-	int _armingSub;
 	int _attitudeSub;
-	int _manualSub;
-	int _ctrl_state_sub;
+	int _sensor_bias_sub;
 	int _vehicle_control_mode_sub;
 	int _battery_sub;
 
 	struct vehicle_local_position_s				_vehicleLocalPosition;
 	struct vehicle_local_position_setpoint_s	_vehicleLocalPositionSetpoint;
 	struct actuator_controls_s					_actuators;
-	struct actuator_armed_s						_arming;
 	struct vehicle_attitude_s					_vehicleAttitude;
-	struct manual_control_setpoint_s			_manual;
-	struct control_state_s						_ctrl_state;
+	struct sensor_bias_s					_sensors;
 	struct vehicle_control_mode_s				_control_mode;
 	struct battery_status_s						_battery;
 
 	uint64_t _min_trust_start;		///< timestamp when minimum trust was applied first
-	uint64_t _arming_time;
+	uint64_t _landed_time;
 
 	/* get control mode dependent pilot throttle threshold with which we should quit landed state and take off */
 	float _get_takeoff_throttle();
 	bool _has_altitude_lock();
 	bool _has_position_lock();
-	bool _has_manual_control_present();
 	bool _has_minimal_thrust();
 	bool _has_low_thrust();
 	bool _is_climb_rate_enabled();

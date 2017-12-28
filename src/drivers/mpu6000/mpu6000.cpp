@@ -34,7 +34,7 @@
 /**
  * @file mpu6000.cpp
  *
- * Driver for the Invensense MPU6000, MPU6050 and the ICM2608 connected via
+ * Driver for the Invensense MPU6000, MPU6050, ICM20608, and ICM20602 connected via
  * SPI or I2C.
  *
  * When the device is on the SPI bus the hrt is used to provide thread of
@@ -44,11 +44,11 @@
  * execution to the driver.
  *
  * The I2C code is only included in the build if USE_I2C is defined by the
- * existance of any of PX4_I2C_MPU6050_ADDR, PX4_I2C_MPU6000_ADDR or
+ * existance of any of PX4_I2C_MPU6050_ADDR, PX4_I2C_MPU6000_ADDR
  * PX4_I2C_ICM_20608_G_ADDR in the board_config.h file.
  *
- * The command line option -T 6000|20608 (default 6000) selects between
- * MPU60x0 or the ICM20608G;
+ * The command line option -T 6000|20608|20602 (default 6000) selects between
+ * MPU60x0, ICM20608G, or ICM20602G;
  *
  * @author Andrew Tridgell
  * @author Pat Hickey
@@ -101,9 +101,9 @@
   accelerometer values. This time reduction is enough to cope with
   worst case timing jitter due to other timers
 
-  I2C bus is running at 100 kHz Transaction time is 2.163Ms
- I2C bus is running at 400 kHz (304 kHz acutal) Transaction time
- is 583 uS
+  I2C bus is running at 100 kHz Transaction time is 2.163ms
+  I2C bus is running at 400 kHz (304 kHz actual) Transaction time
+  is 583 us
 
  */
 #define MPU6000_TIMER_REDUCTION				200
@@ -658,19 +658,19 @@ MPU6000::init()
 	_accel_reports = new ringbuffer::RingBuffer(2, sizeof(accel_report));
 
 	if (_accel_reports == nullptr) {
-		goto out;
+		return ret;
 	}
 
 	_gyro_reports = new ringbuffer::RingBuffer(2, sizeof(gyro_report));
 
 	if (_gyro_reports == nullptr) {
-		goto out;
+		return ret;
 	}
 
 	ret = -EIO;
 
 	if (reset() != OK) {
-		goto out;
+		return ret;
 	}
 
 	/* Initialize offsets and scales */
@@ -688,6 +688,34 @@ MPU6000::init()
 	_gyro_scale.z_offset = 0;
 	_gyro_scale.z_scale  = 1.0f;
 
+	// set software low pass filter for controllers
+	param_t accel_cut_ph = param_find("IMU_ACCEL_CUTOFF");
+	float accel_cut = MPU6000_ACCEL_DEFAULT_DRIVER_FILTER_FREQ;
+
+	if (accel_cut_ph != PARAM_INVALID && param_get(accel_cut_ph, &accel_cut) == PX4_OK) {
+		PX4_INFO("accel cutoff set to %.2f Hz", double(accel_cut));
+
+		_accel_filter_x.set_cutoff_frequency(MPU6000_ACCEL_DEFAULT_RATE, accel_cut);
+		_accel_filter_y.set_cutoff_frequency(MPU6000_ACCEL_DEFAULT_RATE, accel_cut);
+		_accel_filter_z.set_cutoff_frequency(MPU6000_ACCEL_DEFAULT_RATE, accel_cut);
+
+	} else {
+		PX4_ERR("IMU_ACCEL_CUTOFF param invalid");
+	}
+
+	param_t gyro_cut_ph = param_find("IMU_GYRO_CUTOFF");
+	float gyro_cut = MPU6000_GYRO_DEFAULT_DRIVER_FILTER_FREQ;
+
+	if (gyro_cut_ph != PARAM_INVALID && param_get(gyro_cut_ph, &gyro_cut) == PX4_OK) {
+		PX4_INFO("gyro cutoff set to %.2f Hz", double(gyro_cut));
+
+		_gyro_filter_x.set_cutoff_frequency(MPU6000_GYRO_DEFAULT_RATE, gyro_cut);
+		_gyro_filter_y.set_cutoff_frequency(MPU6000_GYRO_DEFAULT_RATE, gyro_cut);
+		_gyro_filter_z.set_cutoff_frequency(MPU6000_GYRO_DEFAULT_RATE, gyro_cut);
+
+	} else {
+		PX4_ERR("IMU_GYRO_CUTOFF param invalid");
+	}
 
 	/* do CDev init for the gyro device node, keep it optional */
 	ret = _gyro->init();
@@ -711,9 +739,8 @@ MPU6000::init()
 					   &_accel_orb_class_instance, (is_external()) ? ORB_PRIO_MAX : ORB_PRIO_HIGH);
 
 	if (_accel_topic == nullptr) {
-		warnx("ADVERT FAIL");
+		PX4_WARN("ADVERT FAIL");
 	}
-
 
 	/* advertise sensor topic, measure manually to initialize valid report */
 	struct gyro_report grp;
@@ -723,10 +750,9 @@ MPU6000::init()
 			     &_gyro->_gyro_orb_class_instance, (is_external()) ? ORB_PRIO_MAX : ORB_PRIO_HIGH);
 
 	if (_gyro->_gyro_topic == nullptr) {
-		warnx("ADVERT FAIL");
+		PX4_WARN("ADVERT FAIL");
 	}
 
-out:
 	return ret;
 }
 
@@ -879,6 +905,7 @@ MPU6000::probe()
 	case ICM20608_REV_FF:
 	case ICM20689_REV_FE:
 	case ICM20689_REV_03:
+	case ICM20602_REV_01:
 	case ICM20602_REV_02:
 	case MPU6050_REV_D8:
 		unknown_product_id = false;
@@ -2137,6 +2164,10 @@ MPU6000::print_info()
 	}
 
 	::printf("temperature: %.1f\n", (double)_last_temperature);
+	float accel_cut = _accel_filter_x.get_cutoff_freq();
+	::printf("accel cutoff set to %10.2f Hz\n", double(accel_cut));
+	float gyro_cut = _gyro_filter_x.get_cutoff_freq();
+	::printf("gyro cutoff set to %10.2f Hz\n", double(gyro_cut));
 }
 
 void

@@ -48,8 +48,8 @@ uint8 hil_state				# current hil state
 bool failsafe				# true if system is in failsafe state
 
 uint8 system_type			# system type, contains mavlink MAV_TYPE
-uint32 system_id			# system id, contains MAVLink's system ID field
-uint32 component_id			# subsystem / component id, contains MAVLink's component ID field
+uint8 system_id			# system id, contains MAVLink's system ID field
+uint8 component_id			# subsystem / component id, contains MAVLink's component ID field
 
 bool is_rotary_wing			# True if system is in rotary wing configuration, so for a VTOL this is only true while flying as a multicopter
 bool is_vtol				# True if the system is VTOL capable
@@ -63,7 +63,6 @@ uint8 rc_input_mode				# set to 1 to disable the RC input, 2 to enable manual co
 bool data_link_lost				# datalink to GCS lost
 uint8 data_link_lost_counter			# counts unique data link lost events
 bool engine_failure				# Set to true if an engine failure is detected
-bool engine_failure_cmd				# Set to true if an engine failure mode is commanded
 bool mission_failure				# Set to true if mission could not continue/finish
 
 # see SYS_STATUS mavlink message for the following

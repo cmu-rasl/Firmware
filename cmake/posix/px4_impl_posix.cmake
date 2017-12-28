@@ -37,10 +37,7 @@
 #
 # 	OS Specific Functions
 #
-#		* px4_posix_add_firmware
 #		* px4_posix_generate_builtin_commands
-#		* px4_posix_add_export
-#		* px4_posix_generate_romfs
 #
 # 	Required OS Interface Functions
 #
@@ -167,8 +164,10 @@ function(px4_os_add_flags)
 		LINK_DIRS ${LINK_DIRS}
 		DEFINITIONS ${DEFINITIONS})
 
-	set(added_include_dirs
+        set(added_include_dirs
+		src/modules/systemlib
 		src/platforms/posix/include
+		mavlink/include/mavlink
 		)
 
 	# This block sets added_definitions and added_cxx_flags.
@@ -225,7 +224,7 @@ function(px4_os_add_flags)
 		endif()
 
 		# Add the toolchain specific flags
-		set(added_cflags ${POSIX_CMAKE_C_FLAGS} --sysroot=${HEXAGON_ARM_SYSROOT})
+		set(added_c_flags ${POSIX_CMAKE_C_FLAGS} --sysroot=${HEXAGON_ARM_SYSROOT})
 
 		list(APPEND added_cxx_flags
 			${POSIX_CMAKE_CXX_FLAGS}
@@ -248,7 +247,7 @@ function(px4_os_add_flags)
 
 		# Add the toolchain specific flags
 
-		set(added_cflags ${POSIX_CMAKE_C_FLAGS} --sysroot=${HEXAGON_ARM_SYSROOT}/lib32-apq8096  -mfloat-abi=softfp -mfpu=neon -mthumb-interwork)
+		set(added_c_flags ${POSIX_CMAKE_C_FLAGS} --sysroot=${HEXAGON_ARM_SYSROOT}/lib32-apq8096  -mfloat-abi=softfp -mfpu=neon -mthumb-interwork)
 
 		list(APPEND added_cxx_flags
 			${POSIX_CMAKE_CXX_FLAGS}
@@ -331,5 +330,6 @@ function(px4_os_prebuild_targets)
 			ONE_VALUE OUT BOARD THREADS
 			REQUIRED OUT BOARD
 			ARGN ${ARGN})
-	add_custom_target(${OUT})
+
+	add_custom_target(${OUT} DEPENDS uorb_headers)
 endfunction()

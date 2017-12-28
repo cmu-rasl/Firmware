@@ -18,7 +18,7 @@ const uint8_t BMI160::_checked_registers[BMI160_NUM_CHECKED_REGISTERS] = {    BM
 									      BMIREG_NV_CONF
 									 };
 
-BMI160::BMI160(int bus, const char *path_accel, const char *path_gyro, spi_dev_e device, enum Rotation rotation) :
+BMI160::BMI160(int bus, const char *path_accel, const char *path_gyro, uint32_t device, enum Rotation rotation) :
 	SPI("BMI160", path_accel, bus, device, SPIDEV_MODE3, BMI160_BUS_SPEED),
 	_gyro(new BMI160_gyro(this, path_gyro)),
 	_whoami(0),
@@ -190,7 +190,7 @@ BMI160::init()
 
 	/* measurement will have generated a report, publish */
 	_accel_topic = orb_advertise_multi(ORB_ID(sensor_accel), &arp,
-					   &_accel_orb_class_instance, (is_external()) ? ORB_PRIO_MAX - 1 : ORB_PRIO_HIGH - 1);
+					   &_accel_orb_class_instance, (external()) ? ORB_PRIO_MAX - 1 : ORB_PRIO_HIGH - 1);
 
 	if (_accel_topic == nullptr) {
 		warnx("ADVERT FAIL");
@@ -202,7 +202,7 @@ BMI160::init()
 	_gyro_reports->get(&grp);
 
 	_gyro->_gyro_topic = orb_advertise_multi(ORB_ID(sensor_gyro), &grp,
-			     &_gyro->_gyro_orb_class_instance, (is_external()) ? ORB_PRIO_MAX - 1 : ORB_PRIO_HIGH - 1);
+			     &_gyro->_gyro_orb_class_instance, (external()) ? ORB_PRIO_MAX - 1 : ORB_PRIO_HIGH - 1);
 
 	if (_gyro->_gyro_topic == nullptr) {
 		warnx("ADVERT FAIL");
@@ -303,10 +303,6 @@ BMI160::accel_set_sample_rate(float frequency)
 	if (frequency <= 25 / 32) {
 		setbits |= BMI_ACCEL_RATE_25_32;
 		_accel_sample_rate = 25 / 32;
-
-	} else if (frequency <= 25 / 16) {
-		setbits |= BMI_ACCEL_RATE_25_16;
-		_accel_sample_rate = 25 / 16;
 
 	} else if (frequency <= 25 / 16) {
 		setbits |= BMI_ACCEL_RATE_25_16;
@@ -1131,7 +1127,7 @@ BMI160::measure()
 
 	check_registers();
 
-	if ((!(status && (0x80)))  && (!(status && (0x04)))) {
+	if ((!(status & (0x80))) && (!(status & (0x04)))) {
 		perf_end(_sample_perf);
 		perf_count(_duplicates);
 		_got_duplicate = true;

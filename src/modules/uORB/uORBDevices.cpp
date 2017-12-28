@@ -39,9 +39,6 @@
 #include <systemlib/px4_macros.h>
 
 #ifdef __PX4_NUTTX
-#include <nuttx/arch.h>
-#define ATOMIC_ENTER irqstate_t flags = px4_enter_critical_section()
-#define ATOMIC_LEAVE px4_leave_critical_section(flags)
 #define FILE_FLAGS(filp) filp->f_oflags
 #define FILE_PRIV(filp) filp->f_priv
 #define ITERATE_NODE_MAP() \
@@ -55,8 +52,6 @@
 #include <algorithm>
 #define FILE_FLAGS(filp) filp->flags
 #define FILE_PRIV(filp) filp->priv
-#define ATOMIC_ENTER lock()
-#define ATOMIC_LEAVE unlock()
 #define ITERATE_NODE_MAP() \
 	for (const auto &node_iter : _node_map)
 #define INIT_NODE_MAP_VARS(node_obj, node_name_str) \
@@ -88,7 +83,7 @@ uORB::DeviceNode::SubscriberData *uORB::DeviceNode::filp_to_sd(device::file_t *f
 
 uORB::DeviceNode::DeviceNode(const struct orb_metadata *meta, const char *name, const char *path,
 			     int priority, unsigned int queue_size) :
-	VDev(name, path),
+	CDev(name, path),
 	_meta(meta),
 	_data(nullptr),
 	_last_update(0),
@@ -99,8 +94,6 @@ uORB::DeviceNode::DeviceNode(const struct orb_metadata *meta, const char *name, 
 	_subscriber_count(0),
 	_publisher(0)
 {
-	// enable debug() calls
-	//_debug_enabled = true;
 }
 
 uORB::DeviceNode::~DeviceNode()
@@ -134,7 +127,7 @@ uORB::DeviceNode::open(device::file_t *filp)
 
 		/* now complete the open */
 		if (ret == PX4_OK) {
-			ret = VDev::open(filp);
+			ret = CDev::open(filp);
 
 			/* open failed - not the publisher anymore */
 			if (ret != PX4_OK) {
@@ -165,16 +158,20 @@ uORB::DeviceNode::open(device::file_t *filp)
 
 		FILE_PRIV(filp) = (void *)sd;
 
-		ret = VDev::open(filp);
+		ret = CDev::open(filp);
 
 		add_internal_subscriber();
 
 		if (ret != PX4_OK) {
-			PX4_ERR("VDev::open failed");
+			PX4_ERR("CDev::open failed");
 			delete sd;
 		}
 
 		return ret;
+	}
+
+	if (FILE_FLAGS(filp) == 0) {
+		return CDev::open(filp);
 	}
 
 	/* can only be pub or sub, not both */
@@ -202,7 +199,7 @@ uORB::DeviceNode::close(device::file_t *filp)
 		}
 	}
 
-	return VDev::close(filp);
+	return CDev::close(filp);
 }
 
 ssize_t
@@ -412,9 +409,14 @@ uORB::DeviceNode::ioctl(device::file_t *filp, int cmd, unsigned long arg)
 
 		return OK;
 
+	case ORBIOCISPUBLISHED:
+		*(unsigned long *)arg = _published;
+
+		return OK;
+
 	default:
 		/* give it to the superclass */
-		return VDev::ioctl(filp, cmd, arg);
+		return CDev::ioctl(filp, cmd, arg);
 	}
 }
 
@@ -535,7 +537,7 @@ uORB::DeviceNode::poll_notify_one(px4_pollfd_struct_t *fds, pollevent_t events)
 	 * If the topic looks updated to the subscriber, go ahead and notify them.
 	 */
 	if (appears_updated(sd)) {
-		VDev::poll_notify_one(fds, events);
+		CDev::poll_notify_one(fds, events);
 	}
 }
 
@@ -834,12 +836,10 @@ int16_t uORB::DeviceNode::process_received_message(int32_t length, uint8_t *data
 }
 
 uORB::DeviceMaster::DeviceMaster(Flavor f) :
-	VDev((f == PUBSUB) ? "obj_master" : "param_master",
+	CDev((f == PUBSUB) ? "obj_master" : "param_master",
 	     (f == PUBSUB) ? TOPIC_MASTER_DEVICE_PATH : PARAM_MASTER_DEVICE_PATH),
 	_flavor(f)
 {
-	// enable debug() calls
-	//_debug_enabled = true;
 	_last_statistics_output = hrt_absolute_time();
 }
 
@@ -959,7 +959,7 @@ uORB::DeviceMaster::ioctl(device::file_t *filp, int cmd, unsigned long arg)
 
 	default:
 		/* give it to the superclass */
-		return VDev::ioctl(filp, cmd, arg);
+		return CDev::ioctl(filp, cmd, arg);
 	}
 }
 

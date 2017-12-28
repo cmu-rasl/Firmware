@@ -65,6 +65,8 @@
 #include <uORB/topics/camera_capture.h>
 #include <uORB/topics/cpuload.h>
 #include <uORB/topics/debug_key_value.h>
+#include <uORB/topics/debug_value.h>
+#include <uORB/topics/debug_vect.h>
 #include <uORB/topics/differential_pressure.h>
 #include <uORB/topics/distance_sensor.h>
 #include <uORB/topics/estimator_status.h>
@@ -74,13 +76,16 @@
 #include <uORB/topics/mavlink_log.h>
 #include <uORB/topics/optical_flow.h>
 #include <uORB/topics/position_setpoint_triplet.h>
+#include <uORB/topics/rc_channels.h>
 #include <uORB/topics/sensor_combined.h>
+#include <uORB/topics/sensor_bias.h>
 #include <uORB/topics/tecs_status.h>
 #include <uORB/topics/telemetry_status.h>
 #include <uORB/topics/transponder_report.h>
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_attitude_setpoint.h>
 #include <uORB/topics/vehicle_command.h>
+#include <uORB/topics/vehicle_control_mode.h>
 #include <uORB/topics/vehicle_global_position.h>
 #include <uORB/topics/vehicle_gps_position.h>
 #include <uORB/topics/vehicle_land_detected.h>
@@ -460,7 +465,7 @@ protected:
 		struct vehicle_command_s cmd;
 		bool sent = false;
 
-		if (_cmd_sub->update(&_cmd_time, &cmd)) {
+		if (_cmd_sub->update_if_changed(&cmd)) {
 
 			if (!cmd.from_external) {
 				if (_mavlink->verbose()) {
@@ -629,6 +634,9 @@ private:
 	MavlinkOrbSubscription *_sensor_sub;
 	uint64_t _sensor_time;
 
+	MavlinkOrbSubscription *_bias_sub;
+	uint64_t _bias_time;
+
 	MavlinkOrbSubscription *_differential_pressure_sub;
 	uint64_t _differential_pressure_time;
 
@@ -645,6 +653,8 @@ protected:
 	explicit MavlinkStreamHighresIMU(Mavlink *mavlink) : MavlinkStream(mavlink),
 		_sensor_sub(_mavlink->add_orb_subscription(ORB_ID(sensor_combined))),
 		_sensor_time(0),
+		_bias_sub(_mavlink->add_orb_subscription(ORB_ID(sensor_bias))),
+		_bias_time(0),
 		_differential_pressure_sub(_mavlink->add_orb_subscription(ORB_ID(differential_pressure))),
 		_differential_pressure_time(0),
 		_accel_timestamp(0),
@@ -656,6 +666,7 @@ protected:
 	bool send(const hrt_abstime t)
 	{
 		struct sensor_combined_s sensor = {};
+		struct sensor_bias_s bias = {};
 		struct differential_pressure_s differential_pressure = {};
 
 		if (_sensor_sub->update(&_sensor_time, &sensor)) {
@@ -685,20 +696,21 @@ protected:
 				_baro_timestamp = sensor.timestamp + sensor.baro_timestamp_relative;
 			}
 
+			_bias_sub->update(&_bias_time, &bias);
 			_differential_pressure_sub->update(&_differential_pressure_time, &differential_pressure);
 
 			mavlink_highres_imu_t msg = {};
 
 			msg.time_usec = sensor.timestamp;
-			msg.xacc = sensor.accelerometer_m_s2[0];
-			msg.yacc = sensor.accelerometer_m_s2[1];
-			msg.zacc = sensor.accelerometer_m_s2[2];
-			msg.xgyro = sensor.gyro_rad[0];
-			msg.ygyro = sensor.gyro_rad[1];
-			msg.zgyro = sensor.gyro_rad[2];
-			msg.xmag = sensor.magnetometer_ga[0];
-			msg.ymag = sensor.magnetometer_ga[1];
-			msg.zmag = sensor.magnetometer_ga[2];
+			msg.xacc = sensor.accelerometer_m_s2[0] - bias.accel_x_bias;
+			msg.yacc = sensor.accelerometer_m_s2[1] - bias.accel_y_bias;
+			msg.zacc = sensor.accelerometer_m_s2[2] - bias.accel_z_bias;
+			msg.xgyro = sensor.gyro_rad[0] - bias.gyro_x_bias;
+			msg.ygyro = sensor.gyro_rad[1] - bias.gyro_y_bias;
+			msg.zgyro = sensor.gyro_rad[2] - bias.gyro_z_bias;
+			msg.xmag = sensor.magnetometer_ga[0] - bias.mag_x_bias;
+			msg.ymag = sensor.magnetometer_ga[1] - bias.mag_y_bias;
+			msg.zmag = sensor.magnetometer_ga[2] - bias.mag_z_bias;
 			msg.abs_pressure = 0;
 			msg.diff_pressure = differential_pressure.differential_pressure_raw_pa;
 			msg.pressure_alt = sensor.baro_alt_meter;
@@ -2059,31 +2071,31 @@ protected:
 			struct home_position_s home;
 
 			if (_home_sub->update(&home)) {
-				mavlink_home_position_t msg = {};
+				if (home.valid_hpos) {
+					mavlink_home_position_t msg;
 
-				msg.latitude = home.lat * 1e7;
-				msg.longitude = home.lon * 1e7;
-				msg.altitude = home.alt * 1e3f;
+					msg.latitude = home.lat * 1e7;
+					msg.longitude = home.lon * 1e7;
+					msg.altitude = home.alt * 1e3f;
 
-				msg.x = home.x;
-				msg.y = home.y;
-				msg.z = home.z;
+					msg.x = home.x;
+					msg.y = home.y;
+					msg.z = home.z;
 
-				matrix::Eulerf euler(0.0f, 0.0f, home.yaw);
-				matrix::Quatf q(euler);
+					matrix::Quatf q(matrix::Eulerf(0.0f, 0.0f, home.yaw));
+					msg.q[0] = q(0);
+					msg.q[1] = q(1);
+					msg.q[2] = q(2);
+					msg.q[3] = q(3);
 
-				msg.q[0] = q(0);
-				msg.q[1] = q(1);
-				msg.q[2] = q(2);
-				msg.q[3] = q(3);
+					msg.approach_x = 0.0f;
+					msg.approach_y = 0.0f;
+					msg.approach_z = 0.0f;
 
-				msg.approach_x = 0.0f;
-				msg.approach_y = 0.0f;
-				msg.approach_z = 0.0f;
+					mavlink_msg_home_position_send_struct(_mavlink->get_channel(), &msg);
 
-				mavlink_msg_home_position_send_struct(_mavlink->get_channel(), &msg);
-
-				return true;
+					return true;
+				}
 			}
 		}
 
@@ -2946,6 +2958,89 @@ protected:
 	}
 };
 
+class MavlinkStreamRCChannelsScaled : public MavlinkStream
+{
+public:
+  const char *get_name() const
+  {
+    return MavlinkStreamRCChannelsScaled::get_name_static();
+  }
+
+  static const char *get_name_static()
+  {
+    return "RC_CHANNELS_SCALED";
+  }
+
+  static uint16_t get_id_static()
+  {
+    return MAVLINK_MSG_ID_RC_CHANNELS_SCALED;
+  }
+
+  uint16_t get_id()
+  {
+    return get_id_static();
+  }
+
+
+  static MavlinkStream *new_instance(Mavlink *mavlink)
+  {
+    return new MavlinkStreamRCChannelsScaled(mavlink);
+  }
+
+  unsigned get_size()
+  {
+    return _rc_scaled_sub->is_published() ? (MAVLINK_MSG_ID_RC_CHANNELS_SCALED_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES) : 0;
+  }
+
+private:
+  MavlinkOrbSubscription *_rc_scaled_sub;
+  uint64_t _rc_time;
+
+  /* do not allow top copying this class */
+  MavlinkStreamRCChannelsScaled(MavlinkStreamRCChannelsScaled &);
+  MavlinkStreamRCChannelsScaled& operator = (const MavlinkStreamRCChannelsScaled &);
+
+protected:
+  explicit MavlinkStreamRCChannelsScaled(Mavlink *mavlink) :
+    MavlinkStream(mavlink),
+    _rc_scaled_sub(_mavlink->add_orb_subscription(ORB_ID(rc_channels))),
+    _rc_time(0) { }
+
+  bool send(const hrt_abstime t)
+  {
+    struct rc_channels_s rc_scaled;
+
+    if (_rc_scaled_sub->update(&_rc_time, &rc_scaled))
+    {
+      mavlink_rc_channels_scaled_t msg;
+
+      msg.time_boot_ms = rc_scaled.timestamp_last_valid / 1000;
+      msg.chan1_scaled =
+        (rc_scaled.channel_count > 0) ? rc_scaled.channels[0] * 10000 : INT16_MAX;
+      msg.chan2_scaled =
+        (rc_scaled.channel_count > 1) ? rc_scaled.channels[1] * 10000 : INT16_MAX;
+      msg.chan3_scaled =
+        (rc_scaled.channel_count > 2) ? rc_scaled.channels[2] * 10000 : INT16_MAX;
+      msg.chan4_scaled =
+        (rc_scaled.channel_count > 3) ? rc_scaled.channels[3] * 10000 : INT16_MAX;
+      msg.chan5_scaled =
+        (rc_scaled.channel_count > 4) ? rc_scaled.channels[4] * 10000 : INT16_MAX;
+      msg.chan6_scaled =
+        (rc_scaled.channel_count > 5) ? rc_scaled.channels[5] * 10000 : INT16_MAX;
+      msg.chan7_scaled =
+        (rc_scaled.channel_count > 6) ? rc_scaled.channels[6] * 10000 : INT16_MAX;
+      msg.chan8_scaled =
+        (rc_scaled.channel_count > 7) ? rc_scaled.channels[7] * 10000 : INT16_MAX;
+      msg.rssi = rc_scaled.rssi;
+
+      mavlink_msg_rc_channels_scaled_send_struct(_mavlink->get_channel(), &msg);
+
+      return true;
+    }
+
+    return false;
+  }
+};
 
 class MavlinkStreamManualControl : public MavlinkStream
 {
@@ -3162,6 +3257,144 @@ protected:
 			msg.value = debug.value;
 
 			mavlink_msg_named_value_float_send_struct(_mavlink->get_channel(), &msg);
+
+			return true;
+		}
+
+		return false;
+	}
+};
+
+class MavlinkStreamDebug : public MavlinkStream
+{
+public:
+	const char *get_name() const
+	{
+		return MavlinkStreamDebug::get_name_static();
+	}
+
+	static const char *get_name_static()
+	{
+		return "DEBUG";
+	}
+
+	static uint16_t get_id_static()
+	{
+		return MAVLINK_MSG_ID_DEBUG;
+	}
+
+	uint16_t get_id()
+	{
+		return get_id_static();
+	}
+
+	static MavlinkStream *new_instance(Mavlink *mavlink)
+	{
+		return new MavlinkStreamDebug(mavlink);
+	}
+
+	unsigned get_size()
+	{
+		return (_debug_time > 0) ? MAVLINK_MSG_ID_DEBUG_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES : 0;
+	}
+
+private:
+	MavlinkOrbSubscription *_debug_sub;
+	uint64_t _debug_time;
+
+	/* do not allow top copying this class */
+	MavlinkStreamDebug(MavlinkStreamDebug &);
+	MavlinkStreamDebug &operator = (const MavlinkStreamDebug &);
+
+protected:
+	explicit MavlinkStreamDebug(Mavlink *mavlink) : MavlinkStream(mavlink),
+		_debug_sub(_mavlink->add_orb_subscription(ORB_ID(debug_value))),
+		_debug_time(0)
+	{}
+
+	bool send(const hrt_abstime t)
+	{
+		struct debug_value_s debug = {};
+
+		if (_debug_sub->update(&_debug_time, &debug)) {
+			mavlink_debug_t msg = {};
+
+			msg.time_boot_ms = debug.timestamp_ms;
+			msg.ind = debug.ind;
+			msg.value = debug.value;
+
+			mavlink_msg_debug_send_struct(_mavlink->get_channel(), &msg);
+
+			return true;
+		}
+
+		return false;
+	}
+};
+
+class MavlinkStreamDebugVect : public MavlinkStream
+{
+public:
+	const char *get_name() const
+	{
+		return MavlinkStreamDebugVect::get_name_static();
+	}
+
+	static const char *get_name_static()
+	{
+		return "DEBUG_VECT";
+	}
+
+	static uint16_t get_id_static()
+	{
+		return MAVLINK_MSG_ID_DEBUG_VECT;
+	}
+
+	uint16_t get_id()
+	{
+		return get_id_static();
+	}
+
+	static MavlinkStream *new_instance(Mavlink *mavlink)
+	{
+		return new MavlinkStreamDebugVect(mavlink);
+	}
+
+	unsigned get_size()
+	{
+		return (_debug_time > 0) ? MAVLINK_MSG_ID_DEBUG_VECT_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES : 0;
+	}
+
+private:
+	MavlinkOrbSubscription *_debug_sub;
+	uint64_t _debug_time;
+
+	/* do not allow top copying this class */
+	MavlinkStreamDebugVect(MavlinkStreamDebugVect &);
+	MavlinkStreamDebugVect &operator = (const MavlinkStreamDebugVect &);
+
+protected:
+	explicit MavlinkStreamDebugVect(Mavlink *mavlink) : MavlinkStream(mavlink),
+		_debug_sub(_mavlink->add_orb_subscription(ORB_ID(debug_vect))),
+		_debug_time(0)
+	{}
+
+	bool send(const hrt_abstime t)
+	{
+		struct debug_vect_s debug = {};
+
+		if (_debug_sub->update(&_debug_time, &debug)) {
+			mavlink_debug_vect_t msg = {};
+
+			msg.time_usec = debug.timestamp_us;
+			memcpy(msg.name, debug.name, sizeof(msg.name));
+			/* enforce null termination */
+			msg.name[sizeof(msg.name) - 1] = '\0';
+			msg.x = debug.x;
+			msg.y = debug.y;
+			msg.z = debug.z;
+
+			mavlink_msg_debug_vect_send_struct(_mavlink->get_channel(), &msg);
 
 			return true;
 		}
@@ -3737,7 +3970,7 @@ protected:
 			msg.wind_y = wind_estimate.windspeed_east;
 			msg.wind_z = 0.0f;
 
-			msg.var_horiz = wind_estimate.covariance_north + wind_estimate.covariance_east;
+			msg.var_horiz = wind_estimate.variance_north + wind_estimate.variance_east;
 			msg.var_vert = 0.0f;
 
 			struct vehicle_global_position_s global_pos = {};
@@ -3914,7 +4147,7 @@ protected:
 		_actuator_time(0),
 		_airspeed_sub(_mavlink->add_orb_subscription(ORB_ID(airspeed))),
 		_airspeed_time(0),
-		_attitude_sp_sub(_mavlink->add_orb_subscription(ORB_ID(fw_pos_ctrl_status))),
+		_attitude_sp_sub(_mavlink->add_orb_subscription(ORB_ID(vehicle_attitude_setpoint))),
 		_attitude_sp_time(0),
 		_attitude_sub(_mavlink->add_orb_subscription(ORB_ID(vehicle_attitude))),
 		_attitude_time(0),
@@ -4231,6 +4464,7 @@ const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamLocalPositionSetpoint::new_instance, &MavlinkStreamLocalPositionSetpoint::get_name_static, &MavlinkStreamLocalPositionSetpoint::get_id_static),
 	new StreamListItem(&MavlinkStreamAttitudeTarget::new_instance, &MavlinkStreamAttitudeTarget::get_name_static, &MavlinkStreamAttitudeTarget::get_id_static),
 	new StreamListItem(&MavlinkStreamRCChannels::new_instance, &MavlinkStreamRCChannels::get_name_static, &MavlinkStreamRCChannels::get_id_static),
+	new StreamListItem(&MavlinkStreamRCChannelsScaled::new_instance, &MavlinkStreamRCChannelsScaled::get_name_static, &MavlinkStreamRCChannelsScaled::get_id_static),
 	new StreamListItem(&MavlinkStreamManualControl::new_instance, &MavlinkStreamManualControl::get_name_static, &MavlinkStreamManualControl::get_id_static),
 	new StreamListItem(&MavlinkStreamOpticalFlowRad::new_instance, &MavlinkStreamOpticalFlowRad::get_name_static, &MavlinkStreamOpticalFlowRad::get_id_static),
 	new StreamListItem(&MavlinkStreamActuatorControlTarget<0>::new_instance, &MavlinkStreamActuatorControlTarget<0>::get_name_static, &MavlinkStreamActuatorControlTarget<0>::get_id_static),
@@ -4238,6 +4472,8 @@ const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamActuatorControlTarget<2>::new_instance, &MavlinkStreamActuatorControlTarget<2>::get_name_static, &MavlinkStreamActuatorControlTarget<2>::get_id_static),
 	new StreamListItem(&MavlinkStreamActuatorControlTarget<3>::new_instance, &MavlinkStreamActuatorControlTarget<3>::get_name_static, &MavlinkStreamActuatorControlTarget<3>::get_id_static),
 	new StreamListItem(&MavlinkStreamNamedValueFloat::new_instance, &MavlinkStreamNamedValueFloat::get_name_static, &MavlinkStreamNamedValueFloat::get_id_static),
+	new StreamListItem(&MavlinkStreamDebug::new_instance, &MavlinkStreamDebug::get_name_static, &MavlinkStreamDebug::get_id_static),
+	new StreamListItem(&MavlinkStreamDebugVect::new_instance, &MavlinkStreamDebugVect::get_name_static, &MavlinkStreamDebugVect::get_id_static),
 	new StreamListItem(&MavlinkStreamNavControllerOutput::new_instance, &MavlinkStreamNavControllerOutput::get_name_static, &MavlinkStreamNavControllerOutput::get_id_static),
 	new StreamListItem(&MavlinkStreamCameraCapture::new_instance, &MavlinkStreamCameraCapture::get_name_static, &MavlinkStreamCameraCapture::get_id_static),
 	new StreamListItem(&MavlinkStreamCameraTrigger::new_instance, &MavlinkStreamCameraTrigger::get_name_static, &MavlinkStreamCameraTrigger::get_id_static),
@@ -4251,6 +4487,6 @@ const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamMountOrientation::new_instance, &MavlinkStreamMountOrientation::get_name_static, &MavlinkStreamMountOrientation::get_id_static),
 	new StreamListItem(&MavlinkStreamHighLatency::new_instance, &MavlinkStreamHighLatency::get_name_static, &MavlinkStreamWind::get_id_static),
 	new StreamListItem(&MavlinkStreamGroundTruth::new_instance, &MavlinkStreamGroundTruth::get_name_static, &MavlinkStreamGroundTruth::get_id_static),
-        new StreamListItem(&MavlinkStreamBatteryStatus::new_instance, &MavlinkStreamBatteryStatus::get_name_static, &MavlinkStreamBatteryStatus::get_id_static),
+	new StreamListItem(&MavlinkStreamBatteryStatus::new_instance, &MavlinkStreamBatteryStatus::get_name_static, &MavlinkStreamBatteryStatus::get_id_static),
 	nullptr
 };

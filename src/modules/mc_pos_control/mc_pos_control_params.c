@@ -229,7 +229,7 @@ PARAM_DEFINE_FLOAT(MPC_XY_VEL_I, 0.02f);
 PARAM_DEFINE_FLOAT(MPC_XY_VEL_D, 0.01f);
 
 /**
- * Nominal horizontal velocity in mission
+ * Maximum horizontal velocity in mission
  *
  * Normal horizontal velocity in AUTO modes (includes
  * also RTL / hold / etc.) and endpoint for
@@ -245,7 +245,24 @@ PARAM_DEFINE_FLOAT(MPC_XY_VEL_D, 0.01f);
 PARAM_DEFINE_FLOAT(MPC_XY_CRUISE, 5.0f);
 
 /**
- * Nominal horizontal velocity for manual controlled mode
+ * Cruise speed when angle prev-current/current-next setpoint
+ * is 90 degrees. It should be lower than MPC_XY_CRUISE.
+ *
+ * Applies only in AUTO modes (includes
+ * also RTL / hold / etc.)
+ *
+ * @unit m/s
+ * @min 1.0
+ * @increment 1
+ * @decimal 2
+ * @group Multicopter Position Control
+ */
+PARAM_DEFINE_FLOAT(MPC_CRUISE_90, 3.0f);
+
+/**
+ * Maximum horizontal velocity setpoint for manual controlled mode
+ * If velocity setpoint larger than MPC_XY_VEL_MAX is set, then
+ * the setpoint will be capped to MPC_XY_VEL_MAX
  *
  * @unit m/s
  * @min 3.0
@@ -254,23 +271,7 @@ PARAM_DEFINE_FLOAT(MPC_XY_CRUISE, 5.0f);
  * @decimal 2
  * @group Multicopter Position Control
  */
-PARAM_DEFINE_FLOAT(MPC_VEL_MAN_MAX, 10.0f);
-
-/**
- * Distance Threshold Horizontal Auto
- *
- * The distance defines at which point the vehicle
- * has to slow down to reach target if no direct
- * passing to the next target is desired
- *
- * @unit m
- * @min 1.0
- * @max 50.0
- * @increment 1
- * @decimal 2
- * @group Multicopter Position Control
- */
-PARAM_DEFINE_FLOAT(MPC_TARGET_THRE, 15.0f);
+PARAM_DEFINE_FLOAT(MPC_VEL_MANUAL, 10.0f);
 
 /**
  * Maximum horizontal velocity
@@ -285,7 +286,7 @@ PARAM_DEFINE_FLOAT(MPC_TARGET_THRE, 15.0f);
  * @decimal 2
  * @group Multicopter Position Control
  */
-PARAM_DEFINE_FLOAT(MPC_XY_VEL_MAX, 8.0f);
+PARAM_DEFINE_FLOAT(MPC_XY_VEL_MAX, 12.0f);
 
 /**
  * Maximum tilt angle in air
@@ -400,7 +401,7 @@ PARAM_DEFINE_FLOAT(MPC_HOLD_MAX_Z, 0.6f);
 PARAM_DEFINE_FLOAT(MPC_VELD_LP, 5.0f);
 
 /**
- * Maximum horizonal acceleration in velocity controlled modes
+ * Maximum horizontal acceleration for auto mode and maximum deceleration for manual mode
  *
  * @unit m/s/s
  * @min 2.0
@@ -409,10 +410,10 @@ PARAM_DEFINE_FLOAT(MPC_VELD_LP, 5.0f);
  * @decimal 2
  * @group Multicopter Position Control
  */
-PARAM_DEFINE_FLOAT(MPC_ACC_HOR_MAX, 5.0f);
+PARAM_DEFINE_FLOAT(MPC_ACC_HOR_MAX, 10.0f);
 
 /**
- * Maximum horizonal braking deceleration in velocity controlled modes
+ * Acceleration for auto and for manual
  *
  * @unit m/s/s
  * @min 2.0
@@ -421,7 +422,20 @@ PARAM_DEFINE_FLOAT(MPC_ACC_HOR_MAX, 5.0f);
  * @decimal 2
  * @group Multicopter Position Control
  */
-PARAM_DEFINE_FLOAT(MPC_DEC_HOR_MAX, 10.0f);
+
+PARAM_DEFINE_FLOAT(MPC_ACC_HOR, 5.0f);
+
+/**
+ * Slow horizontal manual deceleration for manual mode
+ *
+ * @unit m/s/s
+ * @min 0.5
+ * @max 10.0
+ * @increment 1
+ * @decimal 2
+ * @group Multicopter Position Control
+ */
+PARAM_DEFINE_FLOAT(MPC_DEC_HOR_SLOW, 5.0f);
 
 /**
  * Maximum vertical acceleration in velocity controlled modes upward
@@ -433,7 +447,7 @@ PARAM_DEFINE_FLOAT(MPC_DEC_HOR_MAX, 10.0f);
  * @decimal 2
  * @group Multicopter Position Control
  */
-PARAM_DEFINE_FLOAT(MPC_ACC_UP_MAX, 5.0f);
+PARAM_DEFINE_FLOAT(MPC_ACC_UP_MAX, 10.0f);
 
 /**
  * Maximum vertical acceleration in velocity controlled modes down
@@ -445,7 +459,36 @@ PARAM_DEFINE_FLOAT(MPC_ACC_UP_MAX, 5.0f);
  * @decimal 2
  * @group Multicopter Position Control
  */
-PARAM_DEFINE_FLOAT(MPC_ACC_DOWN_MAX, 5.0f);
+PARAM_DEFINE_FLOAT(MPC_ACC_DOWN_MAX, 10.0f);
+
+/**
+ * Maximum jerk in manual controlled mode for BRAKING to zero.
+ * If this value is below MPC_JERK_MIN, the acceleration limit in xy and z
+ * is MPC_ACC_HOR_MAX and MPC_ACC_UP_MAX respectively instantaneously when the
+ * user demands brake (=zero stick input).
+ * Otherwise the acceleration limit increases from current acceleration limit
+ * towards MPC_ACC_HOR_MAX/MPC_ACC_UP_MAX with jerk limit
+ *
+ * @unit m/s/s/s
+ * @min 0.0
+ * @max 15.0
+ * @increment 1
+ * @decimal 2
+ * @group Multicopter Position Control
+ */
+PARAM_DEFINE_FLOAT(MPC_JERK_MAX, 0.0f);
+
+/**
+ * Minimum jerk in manual controlled mode for BRAKING to zero
+ *
+ * @unit m/s/s/s
+ * @min 0.5
+ * @max 10.0
+ * @increment 1
+ * @decimal 2
+ * @group Multicopter Position Control
+ */
+PARAM_DEFINE_FLOAT(MPC_JERK_MIN, 1.0f);
 
 /**
  * Altitude control mode, note mode 1 only tested with LPE

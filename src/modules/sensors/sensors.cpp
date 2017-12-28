@@ -157,39 +157,39 @@ public:
 private:
 	DevHandle 	_h_adc;				/**< ADC driver handle */
 
-	hrt_abstime	_last_adc;			/**< last time we took input from the ADC */
+	hrt_abstime	_last_adc{0};			/**< last time we took input from the ADC */
 
 	const bool	_hil_enabled;			/**< if true, HIL is active */
-	bool		_armed;				/**< arming status of the vehicle */
+	bool		_armed{false};				/**< arming status of the vehicle */
 
-	int		_actuator_ctrl_0_sub;		/**< attitude controls sub */
-	int		_diff_pres_sub;			/**< raw differential pressure subscription */
-	int		_vcontrol_mode_sub;		/**< vehicle control mode subscription */
-	int 		_params_sub;			/**< notification of parameter updates */
+	int		_actuator_ctrl_0_sub{-1};		/**< attitude controls sub */
+	int		_diff_pres_sub{-1};			/**< raw differential pressure subscription */
+	int		_vcontrol_mode_sub{-1};		/**< vehicle control mode subscription */
+	int 		_params_sub{-1};			/**< notification of parameter updates */
 
-	orb_advert_t	_sensor_pub;			/**< combined sensor data topic */
-	orb_advert_t	_battery_pub[BOARD_NUMBER_BRICKS] = {nullptr};			/**< battery status */
+	orb_advert_t	_sensor_pub{nullptr};			/**< combined sensor data topic */
+	orb_advert_t	_battery_pub[BOARD_NUMBER_BRICKS] {};			/**< battery status */
 
 #if BOARD_NUMBER_BRICKS > 1
-	int 			_battery_pub_intance0ndx = 0; /**< track the index of instance 0 */
+	int 			_battery_pub_intance0ndx {0}; /**< track the index of instance 0 */
 #endif
 
-	orb_advert_t	_airspeed_pub;			/**< airspeed */
-	orb_advert_t	_diff_pres_pub;			/**< differential_pressure */
-	orb_advert_t	_sensor_preflight;		/**< sensor preflight topic */
+	orb_advert_t	_airspeed_pub{nullptr};			/**< airspeed */
+	orb_advert_t	_diff_pres_pub{nullptr};			/**< differential_pressure */
+	orb_advert_t	_sensor_preflight{nullptr};		/**< sensor preflight topic */
 
 	perf_counter_t	_loop_perf;			/**< loop performance counter */
 
 	DataValidator	_airspeed_validator;		/**< data validator to monitor airspeed */
 
-	struct battery_status_s _battery_status[BOARD_NUMBER_BRICKS];	/**< battery status */
-	struct differential_pressure_s _diff_pres;
-	struct airspeed_s _airspeed;
+	battery_status_s _battery_status[BOARD_NUMBER_BRICKS] {};	/**< battery status */
+	differential_pressure_s _diff_pres{};
+	airspeed_s _airspeed{};
 
 	Battery		_battery[BOARD_NUMBER_BRICKS];			/**< Helper lib to publish battery_status topic. */
 
-	Parameters		_parameters;			/**< local copies of interesting parameters */
-	ParameterHandles	_parameter_handles;		/**< handles for interesting parameters */
+	Parameters		_parameters{};			/**< local copies of interesting parameters */
+	ParameterHandles	_parameter_handles{};		/**< handles for interesting parameters */
 
 	RCUpdate		_rc_update;
 	VotedSensorsUpdate _voted_sensors_update;
@@ -233,31 +233,11 @@ private:
 };
 
 Sensors::Sensors(bool hil_enabled) :
-	_last_adc(0),
-
 	_hil_enabled(hil_enabled),
-	_armed(false),
-
-	_actuator_ctrl_0_sub(-1),
-	_diff_pres_sub(-1),
-	_vcontrol_mode_sub(-1),
-	_params_sub(-1),
-
-	/* publications */
-	_sensor_pub(nullptr),
-	_airspeed_pub(nullptr),
-	_diff_pres_pub(nullptr),
-	_sensor_preflight(nullptr),
-
-	/* performance counters */
 	_loop_perf(perf_alloc(PC_ELAPSED, "sensors")),
-
 	_rc_update(_parameters),
 	_voted_sensors_update(_parameters, hil_enabled)
 {
-	memset(&_diff_pres, 0, sizeof(_diff_pres));
-	memset(&_parameters, 0, sizeof(_parameters));
-
 	initialize_parameter_handles(_parameter_handles);
 
 	_airspeed_validator.set_timeout(300000);
@@ -344,12 +324,34 @@ Sensors::diff_pres_poll(struct sensor_combined_s &raw)
 
 		_airspeed.confidence = _airspeed_validator.confidence(hrt_absolute_time());
 
+		enum AIRSPEED_SENSOR_MODEL smodel;
+
+		switch ((_diff_pres.device_id >> 16) & 0xFF) {
+		case DRV_DIFF_PRESS_DEVTYPE_SDP31:
+
+		/* fallthrough */
+		case DRV_DIFF_PRESS_DEVTYPE_SDP32:
+
+		/* fallthrough */
+		case DRV_DIFF_PRESS_DEVTYPE_SDP33:
+			/* fallthrough */
+			smodel = AIRSPEED_SENSOR_MODEL_SDP3X;
+			break;
+
+		default:
+			smodel = AIRSPEED_SENSOR_MODEL_MEMBRANE;
+			break;
+		}
+
 		/* don't risk to feed negative airspeed into the system */
 		_airspeed.indicated_airspeed_m_s = math::max(0.0f,
-						   calc_indicated_airspeed(_diff_pres.differential_pressure_filtered_pa));
+						   calc_indicated_airspeed_corrected((enum AIRSPEED_COMPENSATION_MODEL)_parameters.air_cmodel,
+								   smodel, _parameters.air_tube_length, _parameters.air_tube_diameter_mm,
+								   _diff_pres.differential_pressure_filtered_pa, _voted_sensors_update.baro_pressure(),
+								   air_temperature_celsius));
 
 		_airspeed.true_airspeed_m_s = math::max(0.0f,
-							calc_true_airspeed(_diff_pres.differential_pressure_filtered_pa + _voted_sensors_update.baro_pressure(),
+							calc_true_airspeed_from_indicated(_airspeed.indicated_airspeed_m_s,
 									_voted_sensors_update.baro_pressure(), air_temperature_celsius));
 
 		_airspeed.true_airspeed_unfiltered_m_s = math::max(0.0f,
@@ -543,8 +545,15 @@ Sensors::adc_poll(struct sensor_combined_s &raw)
 				for (int b = 0; b < BOARD_NUMBER_BRICKS; b++) {
 
 					/* Consider the brick connected if there is a voltage */
+					bool connected = bat_voltage_v[b] > BOARD_ADC_OPEN_CIRCUIT_V;
 
-					bool connected = bat_voltage_v[b] > 1.5f;
+					/* In the case where the BOARD_ADC_OPEN_CIRCUIT_V is
+					 * greater than the BOARD_VALID_UV let the HW qualify that it
+					 * is connected.
+					 */
+					if (BOARD_ADC_OPEN_CIRCUIT_V > BOARD_VALID_UV) {
+						connected &= valid_chan[b];
+					}
 
 					actuator_controls_s ctrl;
 					orb_copy(ORB_ID(actuator_controls_0), _actuator_ctrl_0_sub, &ctrl);
@@ -612,8 +621,8 @@ Sensors::run()
 
 	/* advertise the sensor_preflight topic and make the initial publication */
 	preflt.accel_inconsistency_m_s_s = 0.0f;
-
 	preflt.gyro_inconsistency_rad_s = 0.0f;
+	preflt.mag_inconsistency_ga = 0.0f;
 
 	_sensor_preflight = orb_advertise(ORB_ID(sensor_preflight), &preflt);
 
@@ -677,11 +686,10 @@ Sensors::run()
 			if (!_armed) {
 				_voted_sensors_update.calc_accel_inconsistency(preflt);
 				_voted_sensors_update.calc_gyro_inconsistency(preflt);
+				_voted_sensors_update.calc_mag_inconsistency(preflt);
 				orb_publish(ORB_ID(sensor_preflight), _sensor_preflight, &preflt);
 
 			}
-
-			//_voted_sensors_update.check_vibration(); //disabled for now, as it does not seem to be reliable
 		}
 
 		/* keep adding sensors as long as we are not armed,

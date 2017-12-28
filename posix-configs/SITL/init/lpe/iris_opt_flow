@@ -48,7 +48,6 @@ param set MC_ROLLRATE_P 0.2
 param set MC_PITCHRATE_P 0.2
 param set MC_ROLLRATE_I 0.05
 param set MC_PITCHRATE_I 0.05
-param set LPE_GPS_ON 0
 param set MPC_ALT_MODE 1
 param set LPE_T_MAX_GRADE 0
 param set MPC_XY_VEL_MAX 2
@@ -61,7 +60,7 @@ param set NAV_ACC_RAD 1.0
 param set CBRK_GPSFAIL 240024
 # Flow-only mode
 param set LPE_FUSION 242
-param set FAKE_ORIGIN 1
+param set LPE_FAKE_ORIGIN 1
 
 replay tryapplyparams
 simulator start -s
@@ -81,8 +80,8 @@ local_position_estimator start
 mc_pos_control start
 mc_att_control start
 mixer load /dev/pwm_output0 ROMFS/px4fmu_common/mixers/quad_dc.main.mix
-mavlink start -u 14556 -r 2000000
-mavlink start -u 14557 -r 2000000 -m onboard -o 14540
+mavlink start -x -u 14556 -r 2000000
+mavlink start -x -u 14557 -r 2000000 -m onboard -o 14540
 mavlink stream -r 80 -s POSITION_TARGET_LOCAL_NED -u 14556
 mavlink stream -r 80 -s LOCAL_POSITION_NED -u 14556
 mavlink stream -r 80 -s GLOBAL_POSITION_INT -u 14556

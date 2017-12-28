@@ -63,6 +63,7 @@ set(srcs
 	test_uart_console.c
 	test_uart_loopback.c
 	test_uart_send.c
+	test_versioning.cpp
 	tests_main.c
 	)
 
@@ -79,7 +80,7 @@ px4_add_module(
 	STACK_MAIN 10000
 	STACK_MAX 10000
 	COMPILE_FLAGS
-		${MODULE_CFLAGS}
+		-Wno-sign-compare # TODO: fix all sign-compare
 		-Wno-unused-result
 		-Wno-float-equal
 		-Wno-missing-declarations
