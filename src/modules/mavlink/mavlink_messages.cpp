@@ -76,6 +76,7 @@
 #include <uORB/topics/mavlink_log.h>
 #include <uORB/topics/optical_flow.h>
 #include <uORB/topics/position_setpoint_triplet.h>
+#include <uORB/topics/rc_channels.h>
 #include <uORB/topics/sensor_combined.h>
 #include <uORB/topics/sensor_bias.h>
 #include <uORB/topics/tecs_status.h>
