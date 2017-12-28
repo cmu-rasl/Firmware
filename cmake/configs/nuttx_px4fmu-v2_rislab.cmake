@@ -20,10 +20,10 @@ set(config_module_list
 	drivers/boards/px4fmu-v2
 	drivers/rgbled
 
-  drivers/l3gd20  # ST Micro 16 bit gyro
-  drivers/lsm303d # ST Micro 14 bit accel / mag
+	drivers/l3gd20  # ST Micro 16 bit gyro
+	drivers/lsm303d # ST Micro 14 bit accel / mag
 	drivers/mpu6000 # Invensense 3-axis accel / gyro
-  drivers/ms5611  # MEAS barometer
+	drivers/ms5611  # MEAS barometer
 
 	modules/sensors
 	drivers/pwm_input
@@ -34,18 +34,14 @@ set(config_module_list
 	systemcmds/bl_update
 	systemcmds/config
 	systemcmds/dumpfile
-	#systemcmds/esc_calib
 	systemcmds/mixer
-	#systemcmds/motor_ramp
 	systemcmds/mtd
 	systemcmds/nshterm
 	systemcmds/param
 	systemcmds/perf
 	systemcmds/pwm
 	systemcmds/reboot
-	#systemcmds/sd_bench
 	systemcmds/top
-	#systemcmds/topic_listener
 	systemcmds/ver
 
 	#
@@ -62,13 +58,12 @@ set(config_module_list
 	# Vehicle Control
 	#
 
-  modules/mocap_control
-  modules/mocap_status_monitor
+	modules/mocap_control
+	modules/mocap_status_monitor
 
 	#
 	# Logging
 	#
-	#modules/logger
 	modules/sdlog2
 
 	#

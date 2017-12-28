@@ -1194,7 +1194,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 		struct cpuload_s cpuload;
 		struct vehicle_gps_position_s dual_gps_pos;
 		struct task_stack_info_s task_stack_info;
-    struct mocap_rpm_command_s mocap_rpm_command;
+		struct mocap_rpm_command_s mocap_rpm_command;
 	} buf;
 
 	memset(&buf, 0, sizeof(buf));
@@ -1252,7 +1252,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 			struct log_LOAD_s log_LOAD;
 			struct log_DPRS_s log_DPRS;
 			struct log_STCK_s log_STCK;
-      struct log_RPMC_s log_RPMC;
+			struct log_RPMC_s log_RPMC;
 		} body;
 	} log_msg = {
 		LOG_PACKET_HEADER_INIT(0)
@@ -1302,7 +1302,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 		int cpuload_sub;
 		int diff_pres_sub;
 		int task_stack_info_sub;
-    int mocap_rpm_command_sub;
+		int mocap_rpm_command_sub;
 	} subs;
 
 	subs.cmd_sub = -1;
@@ -2146,7 +2146,7 @@ int sdlog2_thread_main(int argc, char *argv[])
 			LOGBUFFER_WRITE_AND_COUNT(STCK);
 		}
 
-    /* --- MOCAP RPM COMMAND --- */
+		/* --- MOCAP RPM COMMAND --- */
 		if (copy_if_updated(ORB_ID(mocap_rpm_command), &subs.mocap_rpm_command_sub, &buf.mocap_rpm_command)) {
 			log_msg.msg_type = LOG_RPMC_MSG;
 			log_msg.body.log_RPMC.ninputs = buf.mocap_rpm_command.ninputs;
