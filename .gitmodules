@@ -45,7 +45,6 @@
 [submodule "src/modules/mocap_control"]
 	path = src/modules/mocap_control
 	url = git@gitlab.rislab.org:nmichael/mocap_control.git
-	branch = feature/mocap_yaw
 [submodule "src/modules/mocap_status_monitor"]
 	path = src/modules/mocap_status_monitor
 	url = git@gitlab.rislab.org:nmichael/mocap_status_monitor.git
