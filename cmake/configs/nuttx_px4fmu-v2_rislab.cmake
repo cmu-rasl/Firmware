@@ -17,7 +17,7 @@ set(config_module_list
 	drivers/led
 	drivers/px4fmu
 	drivers/px4io
-	drivers/boards/px4fmu-v2
+	drivers/boards
 	drivers/rgbled
 
 	drivers/l3gd20  # ST Micro 16 bit gyro
@@ -69,28 +69,26 @@ set(config_module_list
 	#
 	# Library modules
 	#
+	modules/dataman
 	modules/systemlib
-	modules/systemlib/mixer
 	modules/systemlib/param
 	modules/uORB
-	modules/dataman
 
 	#
 	# Libraries
 	#
 	lib/controllib
 	lib/conversion
+	lib/DriverFramework/framework
 	lib/ecl
-	lib/external_lgpl
 	lib/geo
 	lib/geo_lookup
 	lib/led
 	lib/mathlib
 	lib/mathlib/math/filter
-	lib/micro-CDR
+	lib/mixer
 	lib/version
 
-	lib/DriverFramework/framework
 
 	platforms/common
 	platforms/nuttx
