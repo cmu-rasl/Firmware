@@ -2439,28 +2439,30 @@ MavlinkReceiver::receive_thread(void *arg)
 							_mavlink->set_proto_version(2);
 						}
 
-						if (msg.sysid == base_id)
+						if (msg.sysid != base_id)
 						{
-							/* handle generic messages and commands */
-							handle_message(&msg);
-
-							/* handle packet with mission manager */
-							_mission_manager.handle_message(&msg);
-
-							/* handle packet with parameter component */
-							_parameters_manager.handle_message(&msg);
-
-							if (_mavlink->ftp_enabled()) {
-								/* handle packet with ftp component */
-								_mavlink_ftp.handle_message(&msg);
-							}
-
-							/* handle packet with log component */
-							_mavlink_log_handler.handle_message(&msg);
-
-							/* handle packet with parent object */
-							_mavlink->handle_message(&msg);
+							continue;
 						}
+
+						/* handle generic messages and commands */
+						handle_message(&msg);
+
+						/* handle packet with mission manager */
+						_mission_manager.handle_message(&msg);
+
+						/* handle packet with parameter component */
+						_parameters_manager.handle_message(&msg);
+
+						if (_mavlink->ftp_enabled()) {
+							/* handle packet with ftp component */
+							_mavlink_ftp.handle_message(&msg);
+						}
+
+						/* handle packet with log component */
+						_mavlink_log_handler.handle_message(&msg);
+
+						/* handle packet with parent object */
+						_mavlink->handle_message(&msg);
 					}
 				}
 
