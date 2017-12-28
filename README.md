@@ -10,7 +10,7 @@ Build on the pixhawk with
    make px4fmu-v2_rislab
 
 Build on the pixracer with
-   make_px4fmu-v4_cmu
+   make px4fmu-v4_cmu
 
 [![Releases](https://img.shields.io/github/release/PX4/Firmware.svg)](https://github.com/PX4/Firmware/releases) [![DOI](https://zenodo.org/badge/22634/PX4/Firmware.svg)](https://zenodo.org/badge/latestdoi/22634/PX4/Firmware)
 
