@@ -71,10 +71,10 @@ bmp280::IBMP280 *bmp280_i2c_interface(uint8_t busnum, uint8_t device, bool exter
 	return new BMP280_I2C(busnum, device, external);
 }
 
-BMP280_I2C::BMP280_I2C(uint8_t bus, uint8_t device, bool external) :
+BMP280_I2C::BMP280_I2C(uint8_t bus, uint8_t device, bool external_) :
 	I2C("BMP280_I2C", nullptr, bus, device, 100 * 1000)
 {
-	_external = external;
+	_external = external_;
 }
 
 bool BMP280_I2C::is_external()
