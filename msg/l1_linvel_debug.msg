@@ -4,3 +4,5 @@ float32[3] vel  # linear velocity estimate
 float32[4] rpm  # RPM estimate
 float32[3] dst  # acceleration disturbance estimate
 float32[3] lpd  # low pass filtered acceleration disturbance estimate
+int16 cell_id_epc
+float32 timequery

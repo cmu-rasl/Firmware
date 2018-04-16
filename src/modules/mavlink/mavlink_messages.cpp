@@ -76,6 +76,8 @@
 #include <uORB/topics/vehicle_land_detected.h>
 #include <uORB/topics/estimator_status.h>
 #include <uORB/topics/rpm_command.h>
+#include <uORB/topics/l1_linvel_debug.h>
+#include <uORB/topics/l1_angvel_debug.h>
 
 #include <drivers/drv_rc_input.h>
 #include <drivers/drv_pwm_output.h>
@@ -511,6 +513,71 @@ protected:
 	}
 };
 
+
+class MavlinkStreamL1Att : public MavlinkStream
+{
+public:
+	const char *get_name() const
+	{
+		return MavlinkStreamL1Att::get_name_static();
+	}
+
+	static const char *get_name_static()
+	{
+		return "L1_ADAPTIVE_DEBUG";
+	}
+	uint8_t get_id()
+	{
+		return MAVLINK_MSG_ID_L1_ADAPTIVE_DEBUG;
+	}
+
+	static MavlinkStream *new_instance(Mavlink *mavlink)
+	{
+		return new MavlinkStreamL1Att(mavlink);
+	}
+
+	unsigned get_size()
+	{
+		return MAVLINK_MSG_ID_L1_ADAPTIVE_DEBUG + MAVLINK_NUM_NON_PAYLOAD_BYTES;
+	}
+private:
+	MavlinkOrbSubscription *_l1_angvel_debug_sub;
+
+	MavlinkStreamL1Att(MavlinkStreamL1Att &);
+	MavlinkStreamL1Att& operator = (const MavlinkStreamL1Att &);
+
+protected:
+	explicit MavlinkStreamL1Att(Mavlink *mavlink) : MavlinkStream(mavlink),
+
+	_l1_angvel_debug_sub(_mavlink->add_orb_subscription(ORB_ID(l1_angvel_debug)))
+	{}
+
+	void send(const hrt_abstime t)
+	{
+		struct l1_angvel_debug_s l1_angvel_debug = {};
+		
+
+		const bool updated_l1_angvel = _l1_angvel_debug_sub->update(&l1_angvel_debug);
+
+		if(updated_l1_angvel)
+		{
+			mavlink_l1_adaptive_debug_t msg;
+			msg.avl_hat[0] = l1_angvel_debug.avl[0];
+			msg.avl_hat[1] = l1_angvel_debug.avl[1];
+			msg.avl_hat[2] = l1_angvel_debug.avl[2];
+			msg.dst_hat[0] = l1_angvel_debug.dst[0];
+			msg.dst_hat[1] = l1_angvel_debug.dst[1];
+			msg.dst_hat[2] = l1_angvel_debug.dst[2];
+			msg.lpd[0] = l1_angvel_debug.lpd[0];
+			msg.lpd[1] = l1_angvel_debug.lpd[1];
+			msg.lpd[2] = l1_angvel_debug.lpd[2];
+			_mavlink->send_message(MAVLINK_MSG_ID_L1_ADAPTIVE_DEBUG, &msg);
+		}
+	}
+
+
+};
+
 class MavlinkStreamSysStatus : public MavlinkStream
 {
 public:
@@ -540,7 +607,8 @@ public:
 	}
 
 private:
-	MavlinkOrbSubscription *_status_sub;
+	// MavlinkOrbSubscription *_status_sub;
+	MavlinkOrbSubscription *_l1_linvel_debug_sub;
 
 	/* do not allow top copying this class */
 	MavlinkStreamSysStatus(MavlinkStreamSysStatus &);
@@ -548,12 +616,26 @@ private:
 
 protected:
 	explicit MavlinkStreamSysStatus(Mavlink *mavlink) : MavlinkStream(mavlink),
-		_status_sub(_mavlink->add_orb_subscription(ORB_ID(vehicle_status)))
+		// _status_sub(_mavlink->add_orb_subscription(ORB_ID(vehicle_status)))
+		_l1_linvel_debug_sub(_mavlink->add_orb_subscription(ORB_ID(l1_linvel_debug)))
 	{}
 
 	void send(const hrt_abstime t)
 	{
-		struct vehicle_status_s status;
+		// struct vehicle_status_s status;
+		struct l1_linvel_debug_s l1_linvel_debug = {};
+
+		const bool updated_l1_linvel = _l1_linvel_debug_sub->update(&l1_linvel_debug);
+
+		if (updated_l1_linvel)
+		{
+			mavlink_sys_status_t msg;
+			msg.voltage_battery = l1_linvel_debug.timequery;
+			msg.errors_comm = l1_linvel_debug.cell_id_epc;
+			_mavlink->send_message(MAVLINK_MSG_ID_SYS_STATUS, &msg);
+		}
+
+		#if 0
 
 		if (_status_sub->update(&status)) {
 			mavlink_sys_status_t msg;
@@ -604,6 +686,7 @@ protected:
 
 			_mavlink->send_message(MAVLINK_MSG_ID_BATTERY_STATUS, &bat_msg);
 		}
+		#endif
 	}
 };
 
@@ -2987,5 +3070,6 @@ const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamAltitude::new_instance, &MavlinkStreamAltitude::get_name_static),
 	new StreamListItem(&MavlinkStreamRPMOutput::new_instance, &MavlinkStreamRPMOutput::get_name_static),
 	new StreamListItem(&MavlinkStreamBatteryStatus::new_instance, &MavlinkStreamBatteryStatus::get_name_static),
+	new StreamListItem(&MavlinkStreamL1Att::new_instance, &MavlinkStreamL1Att::get_name_static),
 	nullptr
 };
