@@ -92,6 +92,7 @@
 #include <uORB/topics/wind_estimate.h>
 #include <uORB/topics/mount_orientation.h>
 #include <uORB/topics/collision_report.h>
+#include <uORB/topics/l1_angvel_debug.h>
 #include <uORB/uORB.h>
 
 
@@ -481,6 +482,78 @@ protected:
 
 		return sent;
 	}
+};
+
+class MavlinkStreamL1Att : public MavlinkStream
+{
+public:
+	const char *get_name() const
+	{
+		return MavlinkStreamL1Att::get_name_static();
+	}
+
+	static const char *get_name_static()
+	{
+		return "L1_ADAPTIVE_DEBUG";
+	}
+
+	static uint16_t get_id_static()
+	{
+		return MAVLINK_MSG_ID_L1_ADAPTIVE_DEBUG;
+	}
+
+	uint16_t get_id()
+	{
+		return get_id_static();
+	}
+
+	static MavlinkStream *new_instance(Mavlink *mavlink)
+	{
+		return new MavlinkStreamL1Att(mavlink);
+	}
+
+	unsigned get_size()
+	{
+		return MAVLINK_MSG_ID_L1_ADAPTIVE_DEBUG + MAVLINK_NUM_NON_PAYLOAD_BYTES;
+	}
+private:
+	MavlinkOrbSubscription *_l1_angvel_debug_sub;
+
+	MavlinkStreamL1Att(MavlinkStreamL1Att &);
+	MavlinkStreamL1Att &operator = (const MavlinkStreamL1Att &);
+
+protected:
+	explicit MavlinkStreamL1Att(Mavlink *mavlink) : MavlinkStream(mavlink),
+	_l1_angvel_debug_sub(_mavlink->add_orb_subscription(ORB_ID(l1_angvel_debug)))
+	{}
+
+	bool send(const hrt_abstime t)
+	{
+		struct l1_angvel_debug_s l1_angvel_debug = {};
+		
+
+		const bool updated_l1_angvel = _l1_angvel_debug_sub->update(&l1_angvel_debug);
+
+		if(updated_l1_angvel)
+		{
+			
+			mavlink_l1_adaptive_debug_t msg;
+			msg.avl_hat[0] = l1_angvel_debug.avl[0];
+			msg.avl_hat[1] = l1_angvel_debug.avl[1];
+			msg.avl_hat[2] = l1_angvel_debug.avl[2];
+			msg.dst_hat[0] = l1_angvel_debug.dst[0];
+			msg.dst_hat[1] = l1_angvel_debug.dst[1];
+			msg.dst_hat[2] = l1_angvel_debug.dst[2];
+			msg.lpd[0] = l1_angvel_debug.lpd[0];
+			msg.lpd[1] = l1_angvel_debug.lpd[1];
+			msg.lpd[2] = l1_angvel_debug.lpd[2];
+			mavlink_msg_l1_adaptive_debug_send_struct(_mavlink->get_channel(), &msg);
+			return true;
+		}
+		return false;
+	}
+
+
 };
 
 class MavlinkStreamSysStatus : public MavlinkStream
@@ -2946,6 +3019,86 @@ protected:
 	}
 };
 
+class MavlinkStreamRCChannelsScaled : public MavlinkStream
+{
+public:
+  const char *get_name() const
+  {
+    return MavlinkStreamRCChannelsScaled::get_name_static();
+  }
+
+  static const char *get_name_static()
+  {
+    return "RC_CHANNELS_SCALED";
+  }
+
+  static uint16_t get_id_static()
+  {
+    return MAVLINK_MSG_ID_RC_CHANNELS_SCALED;
+  }
+
+  uint16_t get_id()
+ {
+	return get_id_static();
+ }  
+
+  static MavlinkStream *new_instance(Mavlink *mavlink)
+  {
+    return new MavlinkStreamRCChannelsScaled(mavlink);
+  }
+
+  unsigned get_size()
+  {
+    return _rc_scaled_sub->is_published() ? MAVLINK_MSG_ID_RC_CHANNELS_SCALED_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES : 0;
+  }
+
+private:
+  MavlinkOrbSubscription *_rc_scaled_sub;
+  uint64_t _rc_time;
+
+  /* do not allow top copying this class */
+  MavlinkStreamRCChannelsScaled(MavlinkStreamRCChannelsScaled &);
+  MavlinkStreamRCChannelsScaled& operator = (const MavlinkStreamRCChannelsScaled &);
+
+protected:
+  explicit MavlinkStreamRCChannelsScaled(Mavlink *mavlink) :
+    MavlinkStream(mavlink),
+    _rc_scaled_sub(_mavlink->add_orb_subscription(ORB_ID(rc_channels))),
+    _rc_time(0) { }
+
+  bool send(const hrt_abstime t)
+  {
+    struct rc_channels_s rc_scaled;
+
+    if (_rc_scaled_sub->update(&_rc_time, &rc_scaled)) 
+    {
+      mavlink_rc_channels_scaled_t msg;
+
+      msg.time_boot_ms = rc_scaled.timestamp_last_valid / 1000;
+      msg.chan1_scaled =
+        (rc_scaled.channel_count > 0) ? rc_scaled.channels[0] * 10000 : INT16_MAX;
+      msg.chan2_scaled =
+        (rc_scaled.channel_count > 1) ? rc_scaled.channels[1] * 10000 : INT16_MAX;
+      msg.chan3_scaled =
+        (rc_scaled.channel_count > 2) ? rc_scaled.channels[2] * 10000 : INT16_MAX;
+      msg.chan4_scaled =
+        (rc_scaled.channel_count > 3) ? rc_scaled.channels[3] * 10000 : INT16_MAX;
+      msg.chan5_scaled =
+        (rc_scaled.channel_count > 4) ? rc_scaled.channels[4] * 10000 : INT16_MAX;
+      msg.chan6_scaled =
+        (rc_scaled.channel_count > 5) ? rc_scaled.channels[5] * 10000 : INT16_MAX;
+      msg.chan7_scaled =
+        (rc_scaled.channel_count > 6) ? rc_scaled.channels[6] * 10000 : INT16_MAX;
+      msg.chan8_scaled =
+        (rc_scaled.channel_count > 7) ? rc_scaled.channels[7] * 10000 : INT16_MAX;
+      msg.rssi = rc_scaled.rssi;
+
+        mavlink_msg_rc_channels_scaled_send_struct(_mavlink->get_channel(), &msg);   
+        return true;
+    }
+    return false;
+  }
+};
 
 class MavlinkStreamManualControl : public MavlinkStream
 {
@@ -4231,6 +4384,7 @@ const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamLocalPositionSetpoint::new_instance, &MavlinkStreamLocalPositionSetpoint::get_name_static, &MavlinkStreamLocalPositionSetpoint::get_id_static),
 	new StreamListItem(&MavlinkStreamAttitudeTarget::new_instance, &MavlinkStreamAttitudeTarget::get_name_static, &MavlinkStreamAttitudeTarget::get_id_static),
 	new StreamListItem(&MavlinkStreamRCChannels::new_instance, &MavlinkStreamRCChannels::get_name_static, &MavlinkStreamRCChannels::get_id_static),
+	new StreamListItem(&MavlinkStreamRCChannelsScaled::new_instance, &MavlinkStreamRCChannelsScaled::get_name_static, &MavlinkStreamRCChannelsScaled::get_id_static),
 	new StreamListItem(&MavlinkStreamManualControl::new_instance, &MavlinkStreamManualControl::get_name_static, &MavlinkStreamManualControl::get_id_static),
 	new StreamListItem(&MavlinkStreamOpticalFlowRad::new_instance, &MavlinkStreamOpticalFlowRad::get_name_static, &MavlinkStreamOpticalFlowRad::get_id_static),
 	new StreamListItem(&MavlinkStreamActuatorControlTarget<0>::new_instance, &MavlinkStreamActuatorControlTarget<0>::get_name_static, &MavlinkStreamActuatorControlTarget<0>::get_id_static),
@@ -4251,6 +4405,7 @@ const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamMountOrientation::new_instance, &MavlinkStreamMountOrientation::get_name_static, &MavlinkStreamMountOrientation::get_id_static),
 	new StreamListItem(&MavlinkStreamHighLatency::new_instance, &MavlinkStreamHighLatency::get_name_static, &MavlinkStreamWind::get_id_static),
 	new StreamListItem(&MavlinkStreamGroundTruth::new_instance, &MavlinkStreamGroundTruth::get_name_static, &MavlinkStreamGroundTruth::get_id_static),
-        new StreamListItem(&MavlinkStreamBatteryStatus::new_instance, &MavlinkStreamBatteryStatus::get_name_static, &MavlinkStreamBatteryStatus::get_id_static),
+            new StreamListItem(&MavlinkStreamBatteryStatus::new_instance, &MavlinkStreamBatteryStatus::get_name_static, &MavlinkStreamBatteryStatus::get_id_static),
+            new StreamListItem(&MavlinkStreamL1Att::new_instance, &MavlinkStreamL1Att::get_name_static, &MavlinkStreamL1Att::get_id_static),
 	nullptr
 };
