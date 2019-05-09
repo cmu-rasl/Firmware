@@ -148,6 +148,7 @@ set(msg_files
 	mocap_position_command.msg
 	mocap_position_command_gains.msg
 	mocap_rpm_command.msg
+	mocap_pwm_debug.msg
 	l1_linvel_debug.msg
 	l1_angvel_debug.msg
 	)
