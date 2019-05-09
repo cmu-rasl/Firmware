@@ -1,29 +1,27 @@
-#include <mathlib/mathlib.h>
-#include <uORB/topics/time_offset.h>
-#include <uORB/topics/att_pos_mocap.h>
+#include <matrix/Quaternion.hpp>
+
 #include <uORB/topics/cascaded_command.h>
 #include <uORB/topics/cascaded_command_gains.h>
 #include <uORB/topics/mocap_motor_state.h>
 #include <uORB/topics/mocap_rpm_command.h>
 #include <uORB/topics/mocap_position_command.h>
 #include <uORB/topics/mocap_position_command_gains.h>
+#include <uORB/topics/vehicle_odometry.h>
 
-#include "mavlink_main.h"
 #include "cmu_mavlink_handler.h"
+#include "mavlink_main.h"
 
 CMUMavlinkHandler::CMUMavlinkHandler() :
   system_id(0),
   channel(MAVLINK_COMM_0),
-  time_offset_avg_alpha(0.6),
-  time_offset(0),
+  mavlink_timesync(nullptr),
   cascaded_command_pub(nullptr),
   cascaded_command_gains_pub(nullptr),
   mocap_motor_state_pub(nullptr),
   mocap_rpm_cmd_pub(nullptr),
   mocap_position_command_pub(nullptr),
   mocap_position_command_gains_pub(nullptr),
-  time_offset_pub(nullptr),
-  att_pos_mocap_pub(nullptr)
+  vehicle_mocap_odometry_pub(nullptr)
 {
   return;
 }
@@ -89,7 +87,7 @@ void CMUMavlinkHandler::handle_message_cascaded_cmd(const mavlink_message_t *msg
 
   cascaded_command.thrust = mavlink_cascaded_cmd.thrust;
   cascaded_command.current_yaw = mavlink_cascaded_cmd.current_yaw;
-  math::Quaternion q(mavlink_cascaded_cmd.q);
+  matrix::Quaternionf q(mavlink_cascaded_cmd.q);
   q.normalize();
 
   for (unsigned int i = 0; i < 4; i++)
@@ -106,7 +104,7 @@ void CMUMavlinkHandler::handle_message_cascaded_cmd(const mavlink_message_t *msg
                    &cascaded_command, &inst, ORB_PRIO_HIGH);
 
   if (!isnan(mavlink_cascaded_cmd.current_yaw))
-    pack_publish_mocap(msg->compid, cascaded_command.timestamp, 0.0f, 0.0f, 0.0f,
+    pack_publish_mocap(cascaded_command.timestamp, 0.0f, 0.0f, 0.0f,
                        static_cast<float>(mavlink_cascaded_cmd.current_yaw));
 }
 
@@ -124,10 +122,10 @@ void CMUMavlinkHandler::handle_message_cascaded_cmd_gains(const mavlink_message_
   cascaded_command_gains.timestamp = mavlink_cascaded_cmd_gains.time_usec;
 
   for (unsigned int i = 0; i < 3; i++)
-    cascaded_command_gains.kR[i] = mavlink_cascaded_cmd_gains.kR[i];
+    cascaded_command_gains.k_rot[i] = mavlink_cascaded_cmd_gains.kR[i];
 
   for (unsigned int i = 0; i < 3; i++)
-    cascaded_command_gains.kOm[i] = mavlink_cascaded_cmd_gains.kOm[i];
+    cascaded_command_gains.k_om[i] = mavlink_cascaded_cmd_gains.kOm[i];
 
   int inst; // Not used
   orb_publish_auto(ORB_ID(cascaded_command_gains), &cascaded_command_gains_pub,
@@ -194,41 +192,14 @@ void CMUMavlinkHandler::handle_message_mocap_timesync(const mavlink_message_t *m
   if (tsync.target_system != system_id)
     return;
 
-  struct time_offset_s tsync_offset;
-  memset(&tsync_offset, 0, sizeof(tsync_offset));
+  mavlink_timesync_t timesync_struct;
+  timesync_struct.tc1 = tsync.tc1;
+  timesync_struct.ts1 = tsync.ts1;
 
-  uint64_t now_ns = hrt_absolute_time() * 1000LL;
+  mavlink_message_t timesync_msg;
+  mavlink_msg_timesync_encode(system_id, msg->compid, &timesync_msg, &timesync_struct);
 
-  if (tsync.tc1 == 0)
-  {
-    mavlink_timesync_t rsync; // return timestamped sync message
-
-    rsync.tc1 = now_ns;
-    rsync.ts1 = tsync.ts1;
-
-    mavlink_msg_timesync_send_struct(channel, &rsync);
-    //mavlink->send_message(MAVLINK_MSG_ID_TIMESYNC, &rsync);
-    return;
-  }
-  else if (tsync.tc1 > 0)
-  {
-    int64_t offset_ns = (tsync.ts1 + now_ns - tsync.tc1*2)/2;
-    int64_t dt = time_offset - offset_ns;
-
-    if (dt > 10000000LL || dt < -10000000LL)
-    {
-      time_offset = offset_ns;
-      //printf("[timesync] Hard setting offset (%lld)\n", dt);
-    }
-    else
-      smooth_time_offset(offset_ns);
-  }
-
-  tsync_offset.offset_ns = time_offset;
-
-  int inst; // Not used
-  orb_publish_auto(ORB_ID(time_offset), &time_offset_pub,
-                   &tsync_offset, &inst, ORB_PRIO_HIGH);
+  mavlink_timesync.handle_message(&timesync_msg);
 }
 
 void CMUMavlinkHandler::handle_message_mocap_multi_pose(const mavlink_message_t *msg)
@@ -252,7 +223,7 @@ void CMUMavlinkHandler::handle_message_mocap_multi_pose(const mavlink_message_t 
   float y = static_cast<float>(mpose.pose[k++])*1.0e-3f;
   float z = static_cast<float>(mpose.pose[k++])*1.0e-3f;
   float heading = static_cast<float>(mpose.pose[k++])*1.0e-4f;
-  pack_publish_mocap(msg->compid, mpose.time_usec, x, y, z, heading);
+  pack_publish_mocap(mpose.time_usec, x, y, z, heading);
 }
 
 void CMUMavlinkHandler::handle_message_mocap_pose(const mavlink_message_t *msg)
@@ -265,7 +236,7 @@ void CMUMavlinkHandler::handle_message_mocap_pose(const mavlink_message_t *msg)
   float z = static_cast<float>(mpose.pose[2])*1.0e-3f;
   float heading = static_cast<float>(mpose.pose[3])*1.0e-4f;
 
-  pack_publish_mocap(msg->compid, mpose.time_usec, x, y, z, heading);
+  pack_publish_mocap(mpose.time_usec, x, y, z, heading);
 }
 
 void CMUMavlinkHandler::handle_message_mocap_position_cmd(const mavlink_message_t *msg)
@@ -318,43 +289,35 @@ void CMUMavlinkHandler::handle_message_mocap_position_cmd_gains(const mavlink_me
                    &mcmd_gains, &inst, ORB_PRIO_HIGH);
 }
 
-void CMUMavlinkHandler::pack_publish_mocap(uint32_t id, uint64_t time,
+void CMUMavlinkHandler::pack_publish_mocap(uint64_t time,
                                            float x, float y, float z, float heading)
 {
-  struct att_pos_mocap_s att_pos_mocap;
-  memset(&att_pos_mocap, 0, sizeof(att_pos_mocap));
-
-  // Use the component ID to identify the mocap system
-  att_pos_mocap.id = id;
+  struct vehicle_odometry_s vehicle_odometry;
+  memset(&vehicle_odometry, 0, sizeof(vehicle_odometry));
 
   // Temporary hack to deal with fact that time offset is sometimes set incorrectly
 #if 0
-  att_pos_mocap.timestamp = sync_stamp(time); // Synced time
+  vehicle_odometry.timestamp = mavlink_timesync.sync_stamp(time); // Synced time
 #else
-  att_pos_mocap.timestamp = hrt_absolute_time(); // Synced time
+  vehicle_odometry.timestamp = hrt_absolute_time(); // Synced time
 #endif
 
-  att_pos_mocap.timestamp_received = att_pos_mocap.timestamp;
+  vehicle_odometry.x = x;
+  vehicle_odometry.y = y;
+  vehicle_odometry.z = z;
 
-  att_pos_mocap.x = x;
-  att_pos_mocap.y = y;
-  att_pos_mocap.z = z;
-
-  math::Quaternion mq;
-  mq.from_yaw(heading);
-
-  att_pos_mocap.q[0] = mq(0);
-  att_pos_mocap.q[1] = mq(1);
-  att_pos_mocap.q[2] = mq(2);
-  att_pos_mocap.q[3] = mq(3);
+  vehicle_odometry.q[0] = cosf(heading / 2.0f);
+  vehicle_odometry.q[1] = 0.0f;
+  vehicle_odometry.q[2] = 0.0f;
+  vehicle_odometry.q[3] = sinf(heading / 2.0f);
 
 #if 0
   puts("pack_publish_mocap");
   // Hack to address NuttX printf issue re: handling of float/double
   char buf[128];
   sprintf(buf, "position = %0.5f, %0.5f, %0.5f, heading = %0.5f",
-          (double)att_pos_mocap.x, (double)att_pos_mocap.y,
-          (double)att_pos_mocap.z, (double)heading);
+          (double)vehicle_odometry.x, (double)vehicle_odometry.y,
+          (double)vehicle_odometry.z, (double)heading);
   printf("%s\n", buf);
 
   static uint64_t t_last = 0;
@@ -363,7 +326,7 @@ void CMUMavlinkHandler::pack_publish_mocap(uint32_t id, uint64_t time,
   t_last = tnow;
 
   float tn = tnow*1.0e-9f;
-  float ts = sync_stamp(time)*1.0e-9f;
+  float ts = mavlink_timesync.sync_stamp(time)*1.0e-9f;
 
   sprintf(buf, "dt = %0.5f", (double)(dt*1.0e-6f));
   printf("%s\n", buf);
@@ -373,6 +336,6 @@ void CMUMavlinkHandler::pack_publish_mocap(uint32_t id, uint64_t time,
 #endif
 
   int inst; // Not used
-  orb_publish_auto(ORB_ID(att_pos_mocap), &att_pos_mocap_pub,
-                   &att_pos_mocap, &inst, ORB_PRIO_HIGH);
+  orb_publish_auto(ORB_ID(vehicle_mocap_odometry), &vehicle_mocap_odometry_pub,
+                   &vehicle_odometry, &inst, ORB_PRIO_HIGH);
 }

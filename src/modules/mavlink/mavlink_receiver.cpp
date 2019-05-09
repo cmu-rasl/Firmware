@@ -2634,9 +2634,6 @@ MavlinkReceiver::receive_thread(void *arg)
 	ssize_t nread = 0;
 	hrt_abstime last_send_update = 0;
 
-	bool verbose = _mavlink->get_verbose();
-	_mission_manager.set_verbose(verbose);
-
 	param_t h = param_find("MAV_BASE_ID");
 	int base_id;
 	param_get(h, &base_id);
