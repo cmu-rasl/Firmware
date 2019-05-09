@@ -749,6 +749,18 @@ void Logger::add_system_identification_topics()
 	add_topic("sensor_combined");
 }
 
+void Logger::add_rislab_topics()
+{
+	add_topic("vehicle_attitude", 250);
+	add_topic("cascaded_command", 100);
+	add_topic("cascaded_command_gains", 10);
+	add_topic("mocap_pwm_debug", 300);
+	add_topic("l1_angvel_debug", 300);
+	add_topic("l1_linvel_debug", 300);
+	add_topic("battery_status", 50);
+	add_topic("system_power", 50);
+}
+
 int Logger::add_topics_from_file(const char *fname)
 {
 	FILE		*fp;
@@ -874,6 +886,10 @@ void Logger::initialize_configured_topics()
 
 	if (sdlog_profile & SDLogProfileMask::VISION_AND_AVOIDANCE) {
 		add_vision_and_avoidance_topics();
+	}
+
+	if (sdlog_profile & SDLogProfileMask::RISLAB) {
+		add_rislab_topics();
 	}
 }
 
