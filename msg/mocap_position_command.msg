@@ -1,4 +1,4 @@
-uint64 mocap_position_command_timestamp
+uint64 timestamp
 float32[3] pos
 float32[3] vel
 float32[3] acc

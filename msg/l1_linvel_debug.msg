@@ -1,4 +1,4 @@
-uint64 l1_linvel_debug_timestamp
+uint64 timestamp
 uint16 seq_id
 float32[3] vel  # linear velocity estimate
 float32[4] rpm  # RPM estimate

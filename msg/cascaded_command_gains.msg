@@ -1,3 +1,3 @@
-uint64 cascaded_command_gains_timestamp
+uint64 timestamp
 float32[3] kR
 float32[3] kOm

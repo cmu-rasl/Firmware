@@ -1,4 +1,4 @@
-uint64 cascaded_command_timestamp
+uint64 timestamp
 float32 thrust
 float32 current_yaw
 float32[4] q
