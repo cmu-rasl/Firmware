@@ -71,8 +71,10 @@
 #include <uORB/topics/geofence_result.h>
 #include <uORB/topics/home_position.h>
 #include <uORB/topics/input_rc.h>
+#include <uORB/topics/l1_angvel_debug.h>
 #include <uORB/topics/manual_control_setpoint.h>
 #include <uORB/topics/mavlink_log.h>
+#include <uORB/topics/mocap_pwm_debug.h>
 #include <uORB/topics/vehicle_trajectory_waypoint.h>
 #include <uORB/topics/optical_flow.h>
 #include <uORB/topics/orbit_status.h>
@@ -4976,6 +4978,141 @@ protected:
   }
 };
 
+class MavlinkStreamL1AdaptiveDebug : public MavlinkStream
+{
+public:
+  const char *get_name() const
+  {
+    return MavlinkStreamL1AdaptiveDebug::get_name_static();
+  }
+
+  static const char *get_name_static()
+  {
+    return "L1_ADAPTIVE_DEBUG";
+  }
+
+  static uint16_t get_id_static()
+  {
+    return MAVLINK_MSG_ID_L1_ADAPTIVE_DEBUG;
+  }
+
+  uint16_t get_id()
+  {
+    return get_id_static();
+  }
+
+  static MavlinkStream *new_instance(Mavlink *mavlink)
+  {
+    return new MavlinkStreamL1AdaptiveDebug(mavlink);
+  }
+
+  unsigned get_size()
+  {
+    return MAVLINK_MSG_ID_L1_ADAPTIVE_DEBUG_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES;
+  }
+
+private:
+  MavlinkOrbSubscription *_l1_adaptive_sub;
+
+  /* do not allow top copying this class */
+  MavlinkStreamL1AdaptiveDebug(MavlinkStreamL1AdaptiveDebug &);
+  MavlinkStreamL1AdaptiveDebug& operator = (const MavlinkStreamL1AdaptiveDebug &);
+
+protected:
+  explicit MavlinkStreamL1AdaptiveDebug(Mavlink *mavlink) : MavlinkStream(mavlink),
+                                                          _l1_adaptive_sub(_mavlink->add_orb_subscription(ORB_ID(l1_angvel_debug)))
+  {}
+
+  bool send(const hrt_abstime t)
+  {
+    struct l1_angvel_debug_s l1ad;
+
+    if (_l1_adaptive_sub->update(&l1ad))
+    {
+      mavlink_l1_adaptive_debug_t l1_msg;
+      l1_msg.seq_id = l1ad.seq_id;
+      for (int i = 0; i < 3; i++)
+      {
+        l1_msg.avl_hat[i] = l1ad.avl[i];
+        l1_msg.dst_hat[i] = l1ad.dst[i];
+        l1_msg.lpd[i] = l1ad.lpd[i];
+      }
+
+      mavlink_msg_l1_adaptive_debug_send_struct(_mavlink->get_channel(), &l1_msg);
+      return true;
+    }
+
+    return false;
+  }
+};
+
+class MavlinkStreamMocapPWMDebug : public MavlinkStream
+{
+public:
+  const char *get_name() const
+  {
+    return MavlinkStreamMocapPWMDebug::get_name_static();
+  }
+
+  static const char *get_name_static()
+  {
+    return "MOCAP_PWM_DEBUG";
+  }
+
+  static uint16_t get_id_static()
+  {
+    return MAVLINK_MSG_ID_MOCAP_PWM_DEBUG;
+  }
+
+  uint16_t get_id()
+  {
+    return get_id_static();
+  }
+
+  static MavlinkStream *new_instance(Mavlink *mavlink)
+  {
+    return new MavlinkStreamMocapPWMDebug(mavlink);
+  }
+
+  unsigned get_size()
+  {
+    return MAVLINK_MSG_ID_MOCAP_PWM_DEBUG_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES;
+  }
+
+private:
+  MavlinkOrbSubscription *_mocap_pwm_debug_sub;
+
+  /* do not allow top copying this class */
+  MavlinkStreamMocapPWMDebug(MavlinkStreamMocapPWMDebug &);
+  MavlinkStreamMocapPWMDebug& operator = (const MavlinkStreamMocapPWMDebug &);
+
+protected:
+  explicit MavlinkStreamMocapPWMDebug(Mavlink *mavlink) : MavlinkStream(mavlink),
+                                                          _mocap_pwm_debug_sub(_mavlink->add_orb_subscription(ORB_ID(mocap_pwm_debug)))
+  {}
+
+  bool send(const hrt_abstime t)
+  {
+    struct mocap_pwm_debug_s mpd;
+
+    if (_mocap_pwm_debug_sub->update(&mpd))
+    {
+      mavlink_mocap_pwm_debug_t mpd_msg;
+      mpd_msg.time_usec = mpd.timestamp;
+      for (int i = 0; i < 8; i++)
+      {
+        mpd_msg.pwms[i] = mpd.input[i];
+      }
+
+      mavlink_msg_mocap_pwm_debug_send_struct(_mavlink->get_channel(), &mpd_msg);
+      return true;
+    }
+
+    return false;
+  }
+};
+
+
 static const StreamListItem streams_list[] = {
 	StreamListItem(&MavlinkStreamHeartbeat::new_instance, &MavlinkStreamHeartbeat::get_name_static, &MavlinkStreamHeartbeat::get_id_static),
 	StreamListItem(&MavlinkStreamStatustext::new_instance, &MavlinkStreamStatustext::get_name_static, &MavlinkStreamStatustext::get_id_static),
@@ -5035,6 +5172,8 @@ static const StreamListItem streams_list[] = {
 	StreamListItem(&MavlinkStreamPing::new_instance, &MavlinkStreamPing::get_name_static, &MavlinkStreamPing::get_id_static),
 	StreamListItem(&MavlinkStreamOrbitStatus::new_instance, &MavlinkStreamOrbitStatus::get_name_static, &MavlinkStreamOrbitStatus::get_id_static),
 	StreamListItem(&MavlinkStreamBatteryStatus::new_instance, &MavlinkStreamBatteryStatus::get_name_static, &MavlinkStreamBatteryStatus::get_id_static),
+	StreamListItem(&MavlinkStreamL1AdaptiveDebug::new_instance, &MavlinkStreamL1AdaptiveDebug::get_name_static, &MavlinkStreamL1AdaptiveDebug::get_id_static),
+	StreamListItem(&MavlinkStreamMocapPWMDebug::new_instance, &MavlinkStreamMocapPWMDebug::get_name_static, &MavlinkStreamMocapPWMDebug::get_id_static)
 };
 
 const char *get_stream_name(const uint16_t msg_id)
