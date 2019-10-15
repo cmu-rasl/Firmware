@@ -93,6 +93,7 @@
 #include <uORB/topics/mount_orientation.h>
 #include <uORB/topics/collision_report.h>
 #include <uORB/topics/l1_angvel_debug.h>
+#include <uORB/topics/motor_rpm_out.h>
 #include <uORB/uORB.h>
 
 
@@ -4355,6 +4356,74 @@ protected:
   }
 };
 
+class MavlinkStreamMotorRPMOut : public MavlinkStream
+{
+public:
+	const char *get_name() const
+	{
+		return MavlinkStreamMotorRPMOut::get_name_static();
+	}
+
+	static const char *get_name_static()
+	{
+		return "MOTOR_RPM_OUT";
+	}
+
+	static uint16_t get_id_static()
+	{
+		return MAVLINK_MSG_ID_MOTOR_RPM_OUT; // This MUST match the contents of mavlink/include/mavlink/v2.0/message_definitions/cmu_mavlink.xml 
+	}
+
+	uint16_t get_id()
+	{
+		return get_id_static();
+	}
+
+	static MavlinkStream *new_instance(Mavlink *mavlink)
+	{
+		return new MavlinkStreamMotorRPMOut(mavlink);
+	}
+
+	unsigned get_size()
+	{
+		return MAVLINK_MSG_ID_MOTOR_RPM_OUT + MAVLINK_NUM_NON_PAYLOAD_BYTES;
+	}
+private:
+	MavlinkOrbSubscription *_motor_rpm_out_sub;
+
+	MavlinkStreamMotorRPMOut(MavlinkStreamMotorRPMOut &);
+	MavlinkStreamMotorRPMOut &operator = (const MavlinkStreamMotorRPMOut &);
+
+protected:
+	explicit MavlinkStreamMotorRPMOut(Mavlink *mavlink) : MavlinkStream(mavlink),
+	_motor_rpm_out_sub(_mavlink->add_orb_subscription(ORB_ID(motor_rpm_out)))
+	{}
+
+	bool send(const hrt_abstime t)
+	{
+		struct motor_rpm_out_s motor_rpm_out = {};
+		
+
+		const bool updated_motor_rpm_out = _motor_rpm_out_sub->update(&motor_rpm_out);
+
+		if(updated_motor_rpm_out)
+		{
+			
+			mavlink_motor_rpm_out_t msg;
+			msg.rpm[0] = motor_rpm_out.rpm[0];
+			msg.rpm[1] = motor_rpm_out.rpm[1];
+			msg.rpm[2] = motor_rpm_out.rpm[2];
+			msg.rpm[3] = motor_rpm_out.rpm[3];
+			mavlink_msg_motor_rpm_out_send_struct(_mavlink->get_channel(), &msg);
+			return true;
+		}
+		return false;
+	}
+
+
+};
+
+
 const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamHeartbeat::new_instance, &MavlinkStreamHeartbeat::get_name_static, &MavlinkStreamHeartbeat::get_id_static),
 	new StreamListItem(&MavlinkStreamStatustext::new_instance, &MavlinkStreamStatustext::get_name_static, &MavlinkStreamStatustext::get_id_static),
@@ -4405,7 +4474,8 @@ const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamMountOrientation::new_instance, &MavlinkStreamMountOrientation::get_name_static, &MavlinkStreamMountOrientation::get_id_static),
 	new StreamListItem(&MavlinkStreamHighLatency::new_instance, &MavlinkStreamHighLatency::get_name_static, &MavlinkStreamWind::get_id_static),
 	new StreamListItem(&MavlinkStreamGroundTruth::new_instance, &MavlinkStreamGroundTruth::get_name_static, &MavlinkStreamGroundTruth::get_id_static),
-            new StreamListItem(&MavlinkStreamBatteryStatus::new_instance, &MavlinkStreamBatteryStatus::get_name_static, &MavlinkStreamBatteryStatus::get_id_static),
-            new StreamListItem(&MavlinkStreamL1Att::new_instance, &MavlinkStreamL1Att::get_name_static, &MavlinkStreamL1Att::get_id_static),
+        new StreamListItem(&MavlinkStreamBatteryStatus::new_instance, &MavlinkStreamBatteryStatus::get_name_static, &MavlinkStreamBatteryStatus::get_id_static),
+        new StreamListItem(&MavlinkStreamL1Att::new_instance, &MavlinkStreamL1Att::get_name_static, &MavlinkStreamL1Att::get_id_static),
+	new StreamListItem(&MavlinkStreamMotorRPMOut::new_instance, &MavlinkStreamMotorRPMOut::get_name_static, &MavlinkStreamMotorRPMOut::get_id_static),
 	nullptr
 };
