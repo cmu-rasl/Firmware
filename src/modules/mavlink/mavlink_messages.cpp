@@ -4422,6 +4422,12 @@ protected:
       for (unsigned int i = 0; i < 3; ++i)
         msg.eR[i] = att_ctrl_debug.eR[i];
 
+      for (unsigned int i = 0; i < 9; ++i)
+        msg.Rd[i] = att_ctrl_debug.Rd[i];
+
+      for (unsigned int i = 0; i < 9; ++i)
+        msg.R[i] = att_ctrl_debug.R[i];
+
       mavlink_msg_att_ctrl_debug_send_struct(_mavlink->get_channel(), &msg);
       return true;
     }
