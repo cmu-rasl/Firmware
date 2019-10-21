@@ -4428,6 +4428,13 @@ protected:
       for (unsigned int i = 0; i < 9; ++i)
         msg.R[i] = att_ctrl_debug.R[i];
 
+      msg.casc_cmd_dt = att_ctrl_debug.casc_cmd_dt;
+
+      for (unsigned int i = 0; i < 3; ++i)
+        msg.eRint[i] = att_ctrl_debug.eRint[i];
+
+      msg.body_cmd_fbz = att_ctrl_debug.body_cmd_fbz;
+
       mavlink_msg_att_ctrl_debug_send_struct(_mavlink->get_channel(), &msg);
       return true;
     }
