@@ -4359,35 +4359,35 @@ protected:
 class MavlinkStreamAttCtrlDebug : public MavlinkStream
 {
 public:
-	const char *get_name() const
-	{
-		return MavlinkStreamAttCtrlDebug::get_name_static();
-	}
+  const char *get_name() const
+  {
+    return MavlinkStreamAttCtrlDebug::get_name_static();
+  }
 
 	static const char *get_name_static()
-	{
-		return "ATT_CTRL_DEBUG";
-	}
+  {
+    return "ATT_CTRL_DEBUG";
+  }
 
 	static uint16_t get_id_static()
-	{
-		return MAVLINK_MSG_ID_ATT_CTRL_DEBUG; // This MUST match the contents of mavlink/include/mavlink/v2.0/message_definitions/cmu_mavlink.xml
-	}
+  {
+    return MAVLINK_MSG_ID_ATT_CTRL_DEBUG; // This MUST match the contents of mavlink/include/mavlink/v2.0/message_definitions/cmu_mavlink.xml
+  }
 
 	uint16_t get_id()
-	{
-		return get_id_static();
-	}
+  {
+    return get_id_static();
+  }
 
 	static MavlinkStream *new_instance(Mavlink *mavlink)
-	{
-		return new MavlinkStreamAttCtrlDebug(mavlink);
-	}
+  {
+    return new MavlinkStreamAttCtrlDebug(mavlink);
+  }
 
 	unsigned get_size()
-	{
-		return MAVLINK_MSG_ID_ATT_CTRL_DEBUG + MAVLINK_NUM_NON_PAYLOAD_BYTES;
-	}
+  {
+    return MAVLINK_MSG_ID_ATT_CTRL_DEBUG + MAVLINK_NUM_NON_PAYLOAD_BYTES;
+  }
 private:
 	MavlinkOrbSubscription *_att_ctrl_debug_sub;
 
@@ -4396,20 +4396,19 @@ private:
 
 protected:
 	explicit MavlinkStreamAttCtrlDebug(Mavlink *mavlink) : MavlinkStream(mavlink),
-	_att_ctrl_debug_sub(_mavlink->add_orb_subscription(ORB_ID(att_ctrl_debug)))
-	{}
+                                                         _att_ctrl_debug_sub(_mavlink->add_orb_subscription(ORB_ID(att_ctrl_debug)))
+    {}
 
 	bool send(const hrt_abstime t)
-	{
-		struct att_ctrl_debug_s att_ctrl_debug = {};
+  {
+    struct att_ctrl_debug_s att_ctrl_debug = {};
 
+    const bool updated_att_ctrl_debug = _att_ctrl_debug_sub->update(&att_ctrl_debug);
 
-		const bool updated_att_ctrl_debug = _att_ctrl_debug_sub->update(&att_ctrl_debug);
+    if(updated_att_ctrl_debug)
+    {
 
-		if(updated_att_ctrl_debug)
-		{
-
-			mavlink_att_ctrl_debug_t msg;
+      mavlink_att_ctrl_debug_t msg;
 
       for (int i = 0; i < 6; ++i)
         msg.rpm[i] = att_ctrl_debug.rpm[i];
@@ -4417,15 +4416,12 @@ protected:
       for (int i = 0; i < 3; ++i)
         msg.eOm[i] = att_ctrl_debug.eOm[i];
 
-			mavlink_msg_att_ctrl_debug_send_struct(_mavlink->get_channel(), &msg);
-			return true;
-		}
-		return false;
-	}
-
-
+      mavlink_msg_att_ctrl_debug_send_struct(_mavlink->get_channel(), &msg);
+      return true;
+    }
+    return false;
+  }
 };
-
 
 const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamHeartbeat::new_instance, &MavlinkStreamHeartbeat::get_name_static, &MavlinkStreamHeartbeat::get_id_static),
