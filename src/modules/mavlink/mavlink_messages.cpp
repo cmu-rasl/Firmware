@@ -93,7 +93,7 @@
 #include <uORB/topics/mount_orientation.h>
 #include <uORB/topics/collision_report.h>
 #include <uORB/topics/l1_angvel_debug.h>
-#include <uORB/topics/motor_rpm_out.h>
+#include <uORB/topics/att_ctrl_debug.h>
 #include <uORB/uORB.h>
 
 
@@ -531,13 +531,13 @@ protected:
 	bool send(const hrt_abstime t)
 	{
 		struct l1_angvel_debug_s l1_angvel_debug = {};
-		
+
 
 		const bool updated_l1_angvel = _l1_angvel_debug_sub->update(&l1_angvel_debug);
 
 		if(updated_l1_angvel)
 		{
-			
+
 			mavlink_l1_adaptive_debug_t msg;
 			msg.avl_hat[0] = l1_angvel_debug.avl[0];
 			msg.avl_hat[1] = l1_angvel_debug.avl[1];
@@ -3041,7 +3041,7 @@ public:
   uint16_t get_id()
  {
 	return get_id_static();
- }  
+ }
 
   static MavlinkStream *new_instance(Mavlink *mavlink)
   {
@@ -3071,7 +3071,7 @@ protected:
   {
     struct rc_channels_s rc_scaled;
 
-    if (_rc_scaled_sub->update(&_rc_time, &rc_scaled)) 
+    if (_rc_scaled_sub->update(&_rc_time, &rc_scaled))
     {
       mavlink_rc_channels_scaled_t msg;
 
@@ -3094,7 +3094,7 @@ protected:
         (rc_scaled.channel_count > 7) ? rc_scaled.channels[7] * 10000 : INT16_MAX;
       msg.rssi = rc_scaled.rssi;
 
-        mavlink_msg_rc_channels_scaled_send_struct(_mavlink->get_channel(), &msg);   
+        mavlink_msg_rc_channels_scaled_send_struct(_mavlink->get_channel(), &msg);
         return true;
     }
     return false;
@@ -4356,22 +4356,22 @@ protected:
   }
 };
 
-class MavlinkStreamMotorRPMOut : public MavlinkStream
+class MavlinkStreamAttCtrlDebug : public MavlinkStream
 {
 public:
 	const char *get_name() const
 	{
-		return MavlinkStreamMotorRPMOut::get_name_static();
+		return MavlinkStreamAttCtrlDebug::get_name_static();
 	}
 
 	static const char *get_name_static()
 	{
-		return "MOTOR_RPM_OUT";
+		return "ATT_CTRL_DEBUG";
 	}
 
 	static uint16_t get_id_static()
 	{
-		return MAVLINK_MSG_ID_MOTOR_RPM_OUT; // This MUST match the contents of mavlink/include/mavlink/v2.0/message_definitions/cmu_mavlink.xml 
+		return MAVLINK_MSG_ID_ATT_CTRL_DEBUG; // This MUST match the contents of mavlink/include/mavlink/v2.0/message_definitions/cmu_mavlink.xml
 	}
 
 	uint16_t get_id()
@@ -4381,40 +4381,40 @@ public:
 
 	static MavlinkStream *new_instance(Mavlink *mavlink)
 	{
-		return new MavlinkStreamMotorRPMOut(mavlink);
+		return new MavlinkStreamAttCtrlDebug(mavlink);
 	}
 
 	unsigned get_size()
 	{
-		return MAVLINK_MSG_ID_MOTOR_RPM_OUT + MAVLINK_NUM_NON_PAYLOAD_BYTES;
+		return MAVLINK_MSG_ID_ATT_CTRL_DEBUG + MAVLINK_NUM_NON_PAYLOAD_BYTES;
 	}
 private:
-	MavlinkOrbSubscription *_motor_rpm_out_sub;
+	MavlinkOrbSubscription *_att_ctrl_debug_sub;
 
-	MavlinkStreamMotorRPMOut(MavlinkStreamMotorRPMOut &);
-	MavlinkStreamMotorRPMOut &operator = (const MavlinkStreamMotorRPMOut &);
+	MavlinkStreamAttCtrlDebug(MavlinkStreamAttCtrlDebug &);
+	MavlinkStreamAttCtrlDebug &operator = (const MavlinkStreamAttCtrlDebug &);
 
 protected:
-	explicit MavlinkStreamMotorRPMOut(Mavlink *mavlink) : MavlinkStream(mavlink),
-	_motor_rpm_out_sub(_mavlink->add_orb_subscription(ORB_ID(motor_rpm_out)))
+	explicit MavlinkStreamAttCtrlDebug(Mavlink *mavlink) : MavlinkStream(mavlink),
+	_att_ctrl_debug_sub(_mavlink->add_orb_subscription(ORB_ID(att_ctrl_debug)))
 	{}
 
 	bool send(const hrt_abstime t)
 	{
-		struct motor_rpm_out_s motor_rpm_out = {};
-		
+		struct att_ctrl_debug_s att_ctrl_debug = {};
 
-		const bool updated_motor_rpm_out = _motor_rpm_out_sub->update(&motor_rpm_out);
 
-		if(updated_motor_rpm_out)
+		const bool updated_att_ctrl_debug = _att_ctrl_debug_sub->update(&att_ctrl_debug);
+
+		if(updated_att_ctrl_debug)
 		{
-			
-			mavlink_motor_rpm_out_t msg;
-			msg.rpm[0] = motor_rpm_out.rpm[0];
-			msg.rpm[1] = motor_rpm_out.rpm[1];
-			msg.rpm[2] = motor_rpm_out.rpm[2];
-			msg.rpm[3] = motor_rpm_out.rpm[3];
-			mavlink_msg_motor_rpm_out_send_struct(_mavlink->get_channel(), &msg);
+
+			mavlink_att_ctrl_debug_t msg;
+			msg.rpm[0] = att_ctrl_debug.rpm[0];
+			msg.rpm[1] = att_ctrl_debug.rpm[1];
+			msg.rpm[2] = att_ctrl_debug.rpm[2];
+			msg.rpm[3] = att_ctrl_debug.rpm[3];
+			mavlink_msg_att_ctrl_debug_send_struct(_mavlink->get_channel(), &msg);
 			return true;
 		}
 		return false;
@@ -4476,6 +4476,6 @@ const StreamListItem *streams_list[] = {
 	new StreamListItem(&MavlinkStreamGroundTruth::new_instance, &MavlinkStreamGroundTruth::get_name_static, &MavlinkStreamGroundTruth::get_id_static),
         new StreamListItem(&MavlinkStreamBatteryStatus::new_instance, &MavlinkStreamBatteryStatus::get_name_static, &MavlinkStreamBatteryStatus::get_id_static),
         new StreamListItem(&MavlinkStreamL1Att::new_instance, &MavlinkStreamL1Att::get_name_static, &MavlinkStreamL1Att::get_id_static),
-	new StreamListItem(&MavlinkStreamMotorRPMOut::new_instance, &MavlinkStreamMotorRPMOut::get_name_static, &MavlinkStreamMotorRPMOut::get_id_static),
+	new StreamListItem(&MavlinkStreamAttCtrlDebug::new_instance, &MavlinkStreamAttCtrlDebug::get_name_static, &MavlinkStreamAttCtrlDebug::get_id_static),
 	nullptr
 };

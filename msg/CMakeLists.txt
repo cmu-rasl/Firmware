@@ -132,7 +132,7 @@ set(msg_file_names
         mocap_position_command_gains.msg
         l1_angvel_debug.msg
         l1_linvel_debug.msg
-	motor_rpm_out.msg
+	att_ctrl_debug.msg
 	)
 
 # Get absolute paths
