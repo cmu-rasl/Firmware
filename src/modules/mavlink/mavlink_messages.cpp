@@ -4416,6 +4416,9 @@ protected:
       for (int i = 0; i < 3; ++i)
         msg.eOm[i] = att_ctrl_debug.eOm[i];
 
+      for (int i = 0; i < 3; ++i)
+        msg.Omd[i] = att_ctrl_debug.Omd[i];
+
       mavlink_msg_att_ctrl_debug_send_struct(_mavlink->get_channel(), &msg);
       return true;
     }
