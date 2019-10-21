@@ -4410,14 +4410,17 @@ protected:
 
       mavlink_att_ctrl_debug_t msg;
 
-      for (int i = 0; i < 6; ++i)
+      for (unsigned int i = 0; i < 6; ++i)
         msg.rpm[i] = att_ctrl_debug.rpm[i];
 
-      for (int i = 0; i < 3; ++i)
+      for (unsigned int i = 0; i < 3; ++i)
         msg.eOm[i] = att_ctrl_debug.eOm[i];
 
-      for (int i = 0; i < 3; ++i)
+      for (unsigned int i = 0; i < 3; ++i)
         msg.Omd[i] = att_ctrl_debug.Omd[i];
+
+      for (unsigned int i = 0; i < 3; ++i)
+        msg.eR[i] = att_ctrl_debug.eR[i];
 
       mavlink_msg_att_ctrl_debug_send_struct(_mavlink->get_channel(), &msg);
       return true;
