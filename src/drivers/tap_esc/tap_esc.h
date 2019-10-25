@@ -63,7 +63,9 @@ private:
 	bool 			_is_armed = false;
 	int			_armed_sub = -1;
 	int 			_test_motor_sub = -1;
-	int 			_params_sub = -1;
+
+	uORB::Subscription	_parameter_update_sub{ORB_ID(parameter_update)};
+
 	orb_advert_t        	_outputs_pub = nullptr;
 	actuator_outputs_s      _outputs = {};
 	actuator_armed_s	_armed = {};
@@ -89,7 +91,7 @@ private:
 	EscPacket 	_packet = {};
 
 	DEFINE_PARAMETERS(
-		(ParamInt<px4::params::MC_AIRMODE>) _airmode   ///< multicopter air-mode
+		(ParamInt<px4::params::MC_AIRMODE>) _param_mc_airmode   ///< multicopter air-mode
 	)
 
 	void subscribe();

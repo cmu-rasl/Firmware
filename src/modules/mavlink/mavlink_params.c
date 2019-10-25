@@ -32,14 +32,6 @@
  ****************************************************************************/
 
 /**
- * MAVLink base ID
- * @group MAVLink
- * @min 1
- * @max 250
-*/
-PARAM_DEFINE_INT32(MAV_BASE_ID, 1);
-
-/**
  * MAVLink system ID
  * @group MAVLink
  * @min 1

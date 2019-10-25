@@ -2573,9 +2573,6 @@ MavlinkReceiver::Run()
 	ssize_t nread = 0;
 	hrt_abstime last_send_update = 0;
 
-	param_t h = param_find("MAV_BASE_ID");
-	int base_id;
-	param_get(h, &base_id);
 	while (!_mavlink->_task_should_exit) {
 
 		// check for parameter updates
@@ -2647,11 +2644,6 @@ MavlinkReceiver::Run()
 						if (!(_mavlink->get_status()->flags & MAVLINK_STATUS_FLAG_IN_MAVLINK1)) {
 							/* this will only switch to proto version 2 if allowed in settings */
 							_mavlink->set_proto_version(2);
-						}
-
-						if (msg.sysid != base_id)
-						{
-							continue;
 						}
 
 						/* handle generic messages and commands */

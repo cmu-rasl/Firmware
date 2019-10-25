@@ -5036,77 +5036,6 @@ protected:
 	}
 };
 
-class MavlinkStreamBatteryStatus : public MavlinkStream
-{
-public:
-  const char *get_name() const
-  {
-    return MavlinkStreamBatteryStatus::get_name_static();
-  }
-
-  static const char *get_name_static()
-  {
-    return "BATTERY_STATUS";
-  }
-
-  static uint16_t get_id_static()
-  {
-    return MAVLINK_MSG_ID_BATTERY_STATUS;
-  }
-
-  uint16_t get_id()
-  {
-    return get_id_static();
-  }
-
-  static MavlinkStream *new_instance(Mavlink *mavlink)
-  {
-    return new MavlinkStreamBatteryStatus(mavlink);
-  }
-
-  unsigned get_size()
-  {
-    return MAVLINK_MSG_ID_BATTERY_STATUS_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES;
-  }
-
-private:
-  MavlinkOrbSubscription *_battery_status_sub;
-
-  /* do not allow top copying this class */
-  MavlinkStreamBatteryStatus(MavlinkStreamBatteryStatus &);
-  MavlinkStreamBatteryStatus& operator = (const MavlinkStreamBatteryStatus &);
-
-protected:
-  explicit MavlinkStreamBatteryStatus(Mavlink *mavlink) : MavlinkStream(mavlink),
-                                                          _battery_status_sub(_mavlink->add_orb_subscription(ORB_ID(battery_status)))
-  {}
-
-  bool send(const hrt_abstime t)
-  {
-    struct battery_status_s bs;
-
-    if (_battery_status_sub->update(&bs))
-    {
-      mavlink_battery_status_t bat_msg;
-      bat_msg.id = 0;
-      bat_msg.battery_function = MAV_BATTERY_FUNCTION_ALL;
-      bat_msg.type = MAV_BATTERY_TYPE_LIPO;
-      bat_msg.temperature = INT16_MAX;
-      bat_msg.voltages[0] =
-        static_cast<uint16_t>(bs.voltage_filtered_v*1000.0f);
-      bat_msg.current_battery =
-        static_cast<int16_t>(bs.current_a*100.0f);
-      bat_msg.current_consumed = bs.discharged_mah;
-      bat_msg.battery_remaining = -1.0f;
-      bat_msg.energy_consumed = -1.0f;
-      mavlink_msg_battery_status_send_struct(_mavlink->get_channel(), &bat_msg);
-      return true;
-    }
-
-    return false;
-  }
-};
-
 class MavlinkStreamL1AdaptiveDebug : public MavlinkStream
 {
 public:
@@ -5374,7 +5303,6 @@ static const StreamListItem streams_list[] = {
 	StreamListItem(&MavlinkStreamGroundTruth::new_instance, &MavlinkStreamGroundTruth::get_name_static, &MavlinkStreamGroundTruth::get_id_static),
 	StreamListItem(&MavlinkStreamPing::new_instance, &MavlinkStreamPing::get_name_static, &MavlinkStreamPing::get_id_static),
 	StreamListItem(&MavlinkStreamOrbitStatus::new_instance, &MavlinkStreamOrbitStatus::get_name_static, &MavlinkStreamOrbitStatus::get_id_static),
-	StreamListItem(&MavlinkStreamBatteryStatus::new_instance, &MavlinkStreamBatteryStatus::get_name_static, &MavlinkStreamBatteryStatus::get_id_static),
 	StreamListItem(&MavlinkStreamL1AdaptiveDebug::new_instance, &MavlinkStreamL1AdaptiveDebug::get_name_static, &MavlinkStreamL1AdaptiveDebug::get_id_static),
 	StreamListItem(&MavlinkStreamMocapPWMDebug::new_instance, &MavlinkStreamMocapPWMDebug::get_name_static, &MavlinkStreamMocapPWMDebug::get_id_static),
 	StreamListItem(&MavlinkStreamObstacleDistance::new_instance, &MavlinkStreamObstacleDistance::get_name_static, &MavlinkStreamObstacleDistance::get_id_static)
