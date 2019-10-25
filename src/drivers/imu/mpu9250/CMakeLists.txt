@@ -37,6 +37,7 @@ px4_add_module(
 	COMPILE_FLAGS
 	SRCS
 		mpu9250.cpp
+    mpu9250_params.c
 		mpu9250_i2c.cpp
 		mpu9250_spi.cpp
 		main.cpp

@@ -56,6 +56,7 @@
 #include <drivers/drv_mag.h>
 #include <lib/mathlib/math/filter/LowPassFilter2p.hpp>
 #include <lib/conversion/rotation.h>
+#include <parameters/param.h>
 
 #include "mag.h"
 #include "accel.h"
@@ -458,7 +459,21 @@ int MPU9250::reset_mpu()
 	// SAMPLE RATE
 	_set_sample_rate(_sample_rate);
 
-	_set_dlpf_filter(MPU9250_DEFAULT_ONCHIP_FILTER_FREQ);
+  param_t param_h = param_find("MPU9250_GYR_FFQ");
+
+  if (param_h != PARAM_INVALID)
+  {
+    int filter_freq_out;
+    param_get(param_h, &filter_freq_out);
+    _set_dlpf_filter(filter_freq_out);
+    printf("MPU9250 set onchip gyro filter freq to %d\n", filter_freq_out);
+  }
+
+  else
+  {
+    _set_dlpf_filter(MPU9250_DEFAULT_ONCHIP_FILTER_FREQ);
+    printf("MPU9250 driver got invalid parameter for onchip gyro filter freq!\n");
+  }
 
 	// Gyro scale 2000 deg/s ()
 	switch (_whoami) {
@@ -499,7 +514,21 @@ int MPU9250::reset_mpu()
 
 	write_checked_reg(MPUREG_INT_PIN_CFG, BIT_INT_ANYRD_2CLEAR | (bypass ? BIT_INT_BYPASS_EN : 0));
 
-	write_checked_reg(MPUREG_ACCEL_CONFIG2, BITS_ACCEL_CONFIG2_41HZ);
+  param_h = param_find("MPU9250_ACC_FBT");
+
+  if (param_h != PARAM_INVALID)
+  {
+    int filter_bits_out;
+    param_get(param_h, &filter_bits_out);
+    write_checked_reg(MPUREG_ACCEL_CONFIG2, filter_bits_out);
+    printf("MPU9250 set onchip accel filter bits to %d\n", filter_bits_out);
+  }
+
+  else
+  {
+    write_checked_reg(MPUREG_ACCEL_CONFIG2, BITS_ACCEL_CONFIG2_41HZ);
+    printf("MPU9250 driver got invalid parameter for onchip accel filter bits!\n");
+  }
 
 	retries = 3;
 	bool all_ok = false;
