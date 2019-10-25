@@ -35,8 +35,8 @@ px4_add_module(
 	MODULE modules__logger
 	MAIN logger
 	PRIORITY "SCHED_PRIORITY_MAX-30"
-	STACK_MAIN 2200
 	COMPILE_FLAGS
+		-Wno-cast-align # TODO: fix and enable
 	SRCS
 		logger.cpp
 		log_writer.cpp

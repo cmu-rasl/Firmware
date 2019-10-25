@@ -162,7 +162,7 @@ static struct {
 			uint8_t *data;
 			uint8_t *data_end;
 			/* sync above with RAM backend */
-			hrt_abstime flush_timeout_usec;
+			timespec flush_timeout;
 		} ram_flash;
 #endif
 	};
@@ -495,11 +495,9 @@ static ssize_t
 _file_write(dm_item_t item, unsigned index, dm_persitence_t persistence, const void *buf, size_t count)
 {
 	unsigned char buffer[g_per_item_size[item]];
-	size_t len;
-	int offset;
 
 	/* Get the offset for this item */
-	offset = calculate_offset(item, index);
+	const int offset = calculate_offset(item, index);
 
 	/* If item type or index out of range, return error */
 	if (offset < 0) {
@@ -523,19 +521,16 @@ _file_write(dm_item_t item, unsigned index, dm_persitence_t persistence, const v
 
 	count += DM_SECTOR_HDR_SIZE;
 
-	len = -1;
-
-	/* Seek to the right spot in the data manager file and write the data item */
-	if (lseek(dm_operations_data.file.fd, offset, SEEK_SET) == offset) {
-		if ((len = write(dm_operations_data.file.fd, buffer, count)) == count) {
-			fsync(dm_operations_data.file.fd);        /* Make sure data is written to physical media */
-		}
-	}
-
-	/* Make sure the write succeeded */
-	if (len != count) {
+	if (lseek(dm_operations_data.file.fd, offset, SEEK_SET) != offset) {
 		return -1;
 	}
+
+	if ((write(dm_operations_data.file.fd, buffer, count)) != (ssize_t)count) {
+		return -1;
+	}
+
+	/* Make sure data is written to physical media */
+	fsync(dm_operations_data.file.fd);
 
 	/* All is well... return the number of user data written */
 	return count - DM_SECTOR_HDR_SIZE;
@@ -545,7 +540,15 @@ _file_write(dm_item_t item, unsigned index, dm_persitence_t persistence, const v
 static void
 _ram_flash_update_flush_timeout()
 {
-	dm_operations_data.ram_flash.flush_timeout_usec = hrt_absolute_time() + RAM_FLASH_FLUSH_TIMEOUT_USEC;
+	timespec &abstime = dm_operations_data.ram_flash.flush_timeout;
+
+	if (clock_gettime(CLOCK_REALTIME, &abstime) == 0) {
+		const unsigned billion = 1000 * 1000 * 1000;
+		uint64_t nsecs = abstime.tv_nsec + (uint64_t)RAM_FLASH_FLUSH_TIMEOUT_USEC * 1000;
+		abstime.tv_sec += nsecs / billion;
+		nsecs -= (nsecs / billion) * billion;
+		abstime.tv_nsec = nsecs;
+	}
 }
 
 static ssize_t
@@ -1014,10 +1017,11 @@ static void
 _ram_flash_flush()
 {
 	/*
-	 * reseting flush_timeout_usec even in errors cases to avoid looping
+	 * reseting flush_timeout even in errors cases to avoid looping
 	 * forever in case of flash failure.
 	 */
-	dm_operations_data.ram_flash.flush_timeout_usec = 0;
+	dm_operations_data.ram_flash.flush_timeout.tv_nsec = 0;
+	dm_operations_data.ram_flash.flush_timeout.tv_sec = 0;
 
 	ssize_t ret = up_progmem_getpage(k_dataman_flash_sector->address);
 	ret = up_progmem_eraseblock(ret);
@@ -1039,7 +1043,7 @@ _ram_flash_flush()
 static void
 _ram_flash_shutdown()
 {
-	if (dm_operations_data.ram_flash.flush_timeout_usec) {
+	if (dm_operations_data.ram_flash.flush_timeout.tv_sec) {
 		_ram_flash_flush();
 	}
 
@@ -1049,27 +1053,16 @@ _ram_flash_shutdown()
 static int
 _ram_flash_wait(px4_sem_t *sem)
 {
-	if (!dm_operations_data.ram_flash.flush_timeout_usec) {
+	if (!dm_operations_data.ram_flash.flush_timeout.tv_sec) {
 		px4_sem_wait(sem);
 		return 0;
 	}
 
-	const uint64_t now = hrt_absolute_time();
+	int ret;
 
-	if (now >= dm_operations_data.ram_flash.flush_timeout_usec) {
-		_ram_flash_flush();
-		return 0;
-	}
+	while ((ret = px4_sem_timedwait(sem, &dm_operations_data.ram_flash.flush_timeout)) == -1 && errno == EINTR);
 
-	const uint64_t diff = dm_operations_data.ram_flash.flush_timeout_usec - now;
-	struct timespec abstime;
-	abstime.tv_sec = diff / USEC_PER_SEC;
-	// FIXME: this could be made more performant.
-	abstime.tv_nsec = (diff % USEC_PER_SEC) * NSEC_PER_USEC;
-
-	px4_sem_timedwait(sem, &abstime);
-
-	if (hrt_absolute_time() < dm_operations_data.ram_flash.flush_timeout_usec) {
+	if (ret == 0) {
 		/* a work was queued before timeout */
 		return 0;
 	}

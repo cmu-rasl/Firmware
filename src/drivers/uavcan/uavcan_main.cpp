@@ -55,6 +55,7 @@
 #include <arch/board/board.h>
 #include <arch/chip/chip.h>
 
+#include <uORB/Subscription.hpp>
 #include <uORB/topics/esc_status.h>
 #include <uORB/topics/parameter_update.h>
 
@@ -148,13 +149,7 @@ UavcanNode::~UavcanNode()
 	(void)orb_unsubscribe(_actuator_direct_sub);
 
 	// Removing the sensor bridges
-	auto br = _sensor_bridges.getHead();
-
-	while (br != nullptr) {
-		auto next = br->getSibling();
-		delete br;
-		br = next;
-	}
+	_sensor_bridges.clear();
 
 	_instance = nullptr;
 
@@ -431,6 +426,12 @@ void UavcanNode::update_params()
 	if (param_handle != PARAM_INVALID) {
 		param_get(param_handle, &_airmode);
 	}
+
+	param_handle = param_find("THR_MDL_FAC");
+
+	if (param_handle != PARAM_INVALID) {
+		param_get(param_handle, &_thr_mdl_factor);
+	}
 }
 
 int UavcanNode::start_fw_server()
@@ -651,9 +652,8 @@ int UavcanNode::init(uavcan::NodeID node_id)
 
 	// Sensor bridges
 	IUavcanSensorBridge::make_all(_node, _sensor_bridges);
-	auto br = _sensor_bridges.getHead();
 
-	while (br != nullptr) {
+	for (const auto &br : _sensor_bridges) {
 		ret = br->init();
 
 		if (ret < 0) {
@@ -662,12 +662,9 @@ int UavcanNode::init(uavcan::NodeID node_id)
 		}
 
 		PX4_INFO("sensor bridge '%s' init ok", br->get_name());
-		br = br->getSibling();
 	}
 
-
 	/*  Start the Node   */
-
 	return _node.start();
 }
 
@@ -814,17 +811,17 @@ int UavcanNode::run()
 
 	update_params();
 
-	int params_sub = orb_subscribe(ORB_ID(parameter_update));
+	uORB::Subscription parameter_update_sub{ORB_ID(parameter_update)};
 
 	while (!_task_should_exit) {
 
-		/* check for parameter updates */
-		bool param_updated = false;
-		orb_check(params_sub, &param_updated);
+		// check for parameter updates
+		if (parameter_update_sub.updated()) {
+			// clear update
+			parameter_update_s pupdate;
+			parameter_update_sub.copy(&pupdate);
 
-		if (param_updated) {
-			struct parameter_update_s update;
-			orb_copy(ORB_ID(parameter_update), params_sub, &update);
+			// update parameters from storage
 			update_params();
 		}
 
@@ -915,6 +912,7 @@ int UavcanNode::run()
 				// but this driver could well serve multiple groups.
 				unsigned num_outputs_max = 8;
 
+				_mixers->set_thrust_factor(_thr_mdl_factor);
 				_mixers->set_airmode(_airmode);
 
 				// Do mixing
@@ -973,7 +971,7 @@ int UavcanNode::run()
 			orb_copy(ORB_ID(test_motor), _test_motor_sub, &_test_motor);
 
 			// Update the test status and check that we're not locked down
-			_test_in_progress = (_test_motor.value > 0);
+			_test_in_progress = (_test_motor.action == test_motor_s::ACTION_RUN);
 			_esc_controller.arm_single_esc(_test_motor.motor_number, _test_in_progress);
 		}
 
@@ -997,8 +995,6 @@ int UavcanNode::run()
 			}
 		}
 	}
-
-	orb_unsubscribe(params_sub);
 
 	(void)::close(busevent_fd);
 
@@ -1061,6 +1057,7 @@ UavcanNode::subscribe()
 
 		if (_control_subs[i] >= 0) {
 			_poll_ids[i] = add_poll_fd(_control_subs[i]);
+			orb_set_interval(_control_subs[i], 1000 / UavcanEscController::MAX_RATE_HZ);
 		}
 	}
 }
@@ -1102,7 +1099,7 @@ UavcanNode::ioctl(file *filp, int cmd, unsigned long arg)
 
 	case MIXERIOCLOADBUF: {
 			const char *buf = (const char *)arg;
-			unsigned buflen = strnlen(buf, 1024);
+			unsigned buflen = strlen(buf);
 
 			if (_mixers == nullptr) {
 				_mixers = new MixerGroup(control_callback, (uintptr_t)_controls);
@@ -1126,6 +1123,11 @@ UavcanNode::ioctl(file *filp, int cmd, unsigned long arg)
 				} else {
 
 					_mixers->groups_required(_groups_required);
+					PX4_INFO("Groups required %d", _groups_required);
+
+					int rotor_count = _mixers->get_multirotor_count();
+					_esc_controller.set_rotor_count(rotor_count);
+					PX4_INFO("Number of rotors %d", rotor_count);
 				}
 			}
 		}
@@ -1228,13 +1230,10 @@ UavcanNode::print_info()
 	}
 
 	// Sensor bridges
-	auto br = _sensor_bridges.getHead();
-
-	while (br != nullptr) {
+	for (const auto &br : _sensor_bridges) {
 		printf("Sensor '%s':\n", br->get_name());
 		br->print_status();
 		printf("\n");
-		br = br->getSibling();
 	}
 
 	// Printing all nodes that are online

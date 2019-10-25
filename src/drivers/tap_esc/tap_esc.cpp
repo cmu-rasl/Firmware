@@ -42,7 +42,14 @@
 #include <cstring>
 
 #include <lib/mathlib/mathlib.h>
+#include <lib/cdev/CDev.hpp>
+#include <perf/perf_counter.h>
+#include <px4_module_params.h>
 #include <uORB/uORB.h>
+#include <uORB/Subscription.hpp>
+#include <uORB/topics/actuator_controls.h>
+#include <uORB/topics/actuator_outputs.h>
+#include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/test_motor.h>
 #include <uORB/topics/input_rc.h>
 #include <uORB/topics/multirotor_motor_limits.h>
@@ -51,6 +58,7 @@
 #include <drivers/drv_hrt.h>
 #include <drivers/drv_mixer.h>
 #include <pwm_limit/pwm_limit.h>
+#include <mixer/mixer.h>
 
 #include "tap_esc_common.h"
 
@@ -101,7 +109,6 @@ TAP_ESC::~TAP_ESC()
 
 	orb_unsubscribe(_armed_sub);
 	orb_unsubscribe(_test_motor_sub);
-	orb_unsubscribe(_params_sub);
 
 	orb_unadvertise(_outputs_pub);
 	orb_unadvertise(_esc_feedback_pub);
@@ -246,7 +253,6 @@ int TAP_ESC::init()
 
 	_armed_sub = orb_subscribe(ORB_ID(actuator_armed));
 	_test_motor_sub = orb_subscribe(ORB_ID(test_motor));
-	_params_sub = orb_subscribe(ORB_ID(parameter_update));
 
 	return ret;
 }
@@ -329,7 +335,7 @@ void TAP_ESC::cycle()
 	}
 
 	if (_mixers) {
-		_mixers->set_airmode((Mixer::Airmode)_airmode.get());
+		_mixers->set_airmode((Mixer::Airmode)_param_mc_airmode.get());
 	}
 
 	/* check if anything updated */
@@ -406,7 +412,14 @@ void TAP_ESC::cycle()
 			if (test_motor_updated) {
 				struct test_motor_s test_motor;
 				orb_copy(ORB_ID(test_motor), _test_motor_sub, &test_motor);
-				_outputs.output[test_motor.motor_number] = RPMSTOPPED + ((RPMMAX - RPMSTOPPED) * test_motor.value);
+
+				if (test_motor.action == test_motor_s::ACTION_STOP) {
+					_outputs.output[test_motor.motor_number] = RPMSTOPPED;
+
+				} else {
+					_outputs.output[test_motor.motor_number] = RPMSTOPPED + ((RPMMAX - RPMSTOPPED) * test_motor.value);
+				}
+
 				PX4_INFO("setting motor %i to %.1lf", test_motor.motor_number,
 					 (double)_outputs.output[test_motor.motor_number]);
 			}
@@ -473,7 +486,6 @@ void TAP_ESC::cycle()
 				if (feed_back_data.channelID < esc_status_s::CONNECTED_ESC_MAX) {
 					_esc_feedback.esc[feed_back_data.channelID].esc_rpm = feed_back_data.speed;
 					_esc_feedback.esc[feed_back_data.channelID].esc_state = feed_back_data.ESCStatus;
-					_esc_feedback.esc[feed_back_data.channelID].esc_vendor = esc_status_s::ESC_VENDOR_TAP;
 					_esc_feedback.esc_connectiontype = esc_status_s::ESC_CONNECTION_TYPE_SERIAL;
 					_esc_feedback.counter++;
 					_esc_feedback.esc_count = num_outputs;
@@ -519,13 +531,13 @@ void TAP_ESC::cycle()
 
 	}
 
-	/* check for parameter updates */
-	bool param_updated = false;
-	orb_check(_params_sub, &param_updated);
+	// check for parameter updates
+	if (_parameter_update_sub.updated()) {
+		// clear update
+		parameter_update_s pupdate;
+		_parameter_update_sub.copy(&pupdate);
 
-	if (param_updated) {
-		struct parameter_update_s update;
-		orb_copy(ORB_ID(parameter_update), _params_sub, &update);
+		// update parameters from storage
 		updateParams();
 	}
 }

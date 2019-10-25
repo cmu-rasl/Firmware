@@ -10,7 +10,7 @@ extra_args=
 baudrate=921600
 device=
 ip="127.0.0.1"
-while getopts ":b:d:p:qr:f:i:" opt; do
+while getopts ":b:d:p:qsr:f:i:l" opt; do
 	case $opt in
 		b)
 			baudrate=$OPTARG
@@ -27,11 +27,14 @@ while getopts ":b:d:p:qr:f:i:" opt; do
 		q)
 			extra_args="$extra_args -qgc"
 			;;
+		s)
+			extra_args="$extra_args -sdk"
+			;;
 		r)
 			extra_args="$extra_args -r $OPTARG"
 			;;
-		f)
-			extra_args="$extra_args -f $OPTARG"
+		l)
+			extra_args="$extra_args -lockstep"
 			;;
 		\?)
 			echo "Invalid option: -$OPTARG" >&2
@@ -44,6 +47,10 @@ if [ "$device" == "" ]; then
 	device="-tcp $ip:$tcp_port"
 else
 	device="-serial $device $baudrate"
+fi
+
+if [ "$HEADLESS" = "1" ]; then
+    extra_args="$extr_args -no-gui"
 fi
 
 # jMAVSim crashes with Java 9 on macOS, therefore we need to use Java 8
@@ -61,11 +68,11 @@ fi
 ant create_run_jar copy_res
 cd out/production
 
-java -XX:GCTimeRatio=20 -Djava.ext.dirs= -jar jmavsim_run.jar -lockstep $device $extra_args
+java -XX:GCTimeRatio=20 -Djava.ext.dirs= -jar jmavsim_run.jar $device $extra_args
 ret=$?
 if [ $ret -ne 0 -a $ret -ne 130 ]; then # 130 is Ctrl-C
 	# if the start of java fails, it's probably because the GC option is not
 	# understood. Try starting without it
-	java -Djava.ext.dirs= -jar jmavsim_run.jar -lockstep $device $extra_args
+	java -Djava.ext.dirs= -jar jmavsim_run.jar $device $extra_args
 fi
 

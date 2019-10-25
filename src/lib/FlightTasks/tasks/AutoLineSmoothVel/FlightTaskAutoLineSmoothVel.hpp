@@ -49,32 +49,47 @@ public:
 	FlightTaskAutoLineSmoothVel() = default;
 	virtual ~FlightTaskAutoLineSmoothVel() = default;
 
-	bool activate() override;
+	bool activate(vehicle_local_position_setpoint_s last_setpoint) override;
 	void reActivate() override;
 
 protected:
 
 	DEFINE_PARAMETERS_CUSTOM_PARENT(FlightTaskAutoMapper2,
-					(ParamFloat<px4::params::MIS_YAW_ERR>) MIS_YAW_ERR, // yaw-error threshold
-					(ParamFloat<px4::params::MPC_ACC_HOR>) MPC_ACC_HOR, // acceleration in flight
-					(ParamFloat<px4::params::MPC_ACC_UP_MAX>) MPC_ACC_UP_MAX,
-					(ParamFloat<px4::params::MPC_ACC_DOWN_MAX>) MPC_ACC_DOWN_MAX,
-					(ParamFloat<px4::params::MPC_ACC_HOR_MAX>) MPC_ACC_HOR_MAX,
-					(ParamFloat<px4::params::MPC_JERK_MIN>) MPC_JERK_MIN,
-					(ParamFloat<px4::params::MPC_XY_TRAJ_P>) MPC_XY_TRAJ_P,
-					(ParamFloat<px4::params::MPC_Z_TRAJ_P>) MPC_Z_TRAJ_P
+					(ParamFloat<px4::params::MIS_YAW_ERR>) _param_mis_yaw_err, // yaw-error threshold
+					(ParamFloat<px4::params::MPC_ACC_HOR>) _param_mpc_acc_hor, // acceleration in flight
+					(ParamFloat<px4::params::MPC_ACC_UP_MAX>) _param_mpc_acc_up_max,
+					(ParamFloat<px4::params::MPC_ACC_DOWN_MAX>) _param_mpc_acc_down_max,
+					(ParamFloat<px4::params::MPC_JERK_AUTO>) _param_mpc_jerk_auto,
+					(ParamFloat<px4::params::MPC_XY_TRAJ_P>) _param_mpc_xy_traj_p,
+					(ParamFloat<px4::params::MPC_Z_TRAJ_P>) _param_mpc_z_traj_p
 				       );
 
-	void _generateSetpoints() override; /**< Generate setpoints along line. */
-	void _setDefaultConstraints() override;
+	void checkSetpoints(vehicle_local_position_setpoint_s &setpoints);
 
-	inline float constrain_one_side(float val, float constrain);
+	/** Reset position or velocity setpoints in case of EKF reset event */
+	void _ekfResetHandlerPositionXY() override;
+	void _ekfResetHandlerVelocityXY() override;
+	void _ekfResetHandlerPositionZ() override;
+	void _ekfResetHandlerVelocityZ() override;
+	void _ekfResetHandlerHeading(float delta_psi) override;
+
+	void _generateSetpoints() override; /**< Generate setpoints along line. */
 	void _generateHeading();
 	bool _generateHeadingAlongTraj(); /**< Generates heading along trajectory. */
-	void _updateTrajConstraints();
+
+	inline float _constrainOneSide(float val, float constraint); /**< Constrain val between INF and constraint */
+	inline float _constrainAbs(float val, float min, float max); /**< Constrain absolute value of val between min and max */
+
+	float _getSpeedAtTarget();
+	float _getMaxSpeedFromDistance(float braking_distance);
+
 	void _prepareSetpoints(); /**< Generate velocity target points for the trajectory generator. */
+	void _updateTrajConstraints();
 	void _generateTrajectory();
+
+	/** determines when to trigger a takeoff (ignored in flight) */
+	bool _checkTakeoff() override { return _want_takeoff; };
+	bool _want_takeoff{false};
+
 	VelocitySmoothing _trajectory[3]; ///< Trajectories in x, y and z directions
-	float _yaw_sp_prev;
-	uint8_t _reset_counter{0}; /**< counter for estimator resets in xy-direction */
 };
