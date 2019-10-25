@@ -3,6 +3,7 @@
 #include <uORB/topics/cascaded_command.h>
 #include <uORB/topics/cascaded_command_gains.h>
 #include <uORB/topics/mocap_motor_state.h>
+#include <uORB/topics/mocap_pwm_command.h>
 #include <uORB/topics/mocap_rpm_command.h>
 #include <uORB/topics/mocap_position_command.h>
 #include <uORB/topics/mocap_position_command_gains.h>
@@ -19,6 +20,7 @@ CMUMavlinkHandler::CMUMavlinkHandler() :
   cascaded_command_gains_pub(nullptr),
   mocap_motor_state_pub(nullptr),
   mocap_rpm_cmd_pub(nullptr),
+  mocap_pwm_cmd_pub(nullptr),
   mocap_position_command_pub(nullptr),
   mocap_position_command_gains_pub(nullptr),
   vehicle_mocap_odometry_pub(nullptr)
@@ -53,6 +55,9 @@ void CMUMavlinkHandler::handle_message(const mavlink_message_t *msg)
       break;
     case MAVLINK_MSG_ID_MOCAP_RPM_CMD:
       handle_message_mocap_rpm_cmd(msg);
+      break;
+    case MAVLINK_MSG_ID_MOCAP_PWM_DEBUG:
+      handle_message_mocap_pwm_debug(msg);
       break;
     case MAVLINK_MSG_ID_MOCAP_TIMESYNC:
       handle_message_mocap_timesync(msg);
@@ -181,6 +186,25 @@ void CMUMavlinkHandler::handle_message_mocap_rpm_cmd(const mavlink_message_t *ms
   int inst; // Not used
   orb_publish_auto(ORB_ID(mocap_rpm_command), &mocap_rpm_cmd_pub,
                    &mocap_rpm_cmd, &inst, ORB_PRIO_HIGH);
+}
+
+void CMUMavlinkHandler::handle_message_mocap_pwm_debug(const mavlink_message_t *msg)
+{
+  mavlink_mocap_pwm_debug_t mavlink_mocap_pwm_debug;
+  mavlink_msg_mocap_pwm_debug_decode(msg, &mavlink_mocap_pwm_debug);
+
+  struct mocap_pwm_command_s mocap_pwm_cmd;
+  memset(&mocap_pwm_cmd, 0, sizeof(mocap_pwm_cmd));
+
+  mocap_pwm_cmd.timestamp = mavlink_mocap_pwm_debug.time_usec;
+
+  for (unsigned int i = 0; i < 4; i++) {
+    mocap_pwm_cmd.input[i] = mavlink_mocap_pwm_debug.pwms[i];
+  }
+
+  int inst; // Not used
+  orb_publish_auto(ORB_ID(mocap_pwm_command), &mocap_pwm_cmd_pub,
+                   &mocap_pwm_cmd, &inst, ORB_PRIO_HIGH);
 }
 
 void CMUMavlinkHandler::handle_message_mocap_timesync(const mavlink_message_t *msg)
