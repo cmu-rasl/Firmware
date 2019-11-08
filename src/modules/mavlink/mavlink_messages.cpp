@@ -5096,6 +5096,11 @@ protected:
         l1_msg.lpd[i] = l1ad.lpd[i];
       }
 
+      for (int i = 0; i < 4; ++i)
+      {
+        l1_msg.rpm[i] = l1ad.rpm[i];
+      }
+
       mavlink_msg_l1_adaptive_debug_send_struct(_mavlink->get_channel(), &l1_msg);
       return true;
     }
