@@ -82,9 +82,6 @@ void CMUMavlinkHandler::handle_message_cascaded_cmd(const mavlink_message_t *msg
   mavlink_cascaded_cmd_t mavlink_cascaded_cmd;
   mavlink_msg_cascaded_cmd_decode(msg, &mavlink_cascaded_cmd);
 
-  if (mavlink_cascaded_cmd.target_system != system_id)
-    return;
-
   struct cascaded_command_s cascaded_command;
   memset(&cascaded_command, 0, sizeof(cascaded_command));
 
@@ -118,9 +115,6 @@ void CMUMavlinkHandler::handle_message_cascaded_cmd_gains(const mavlink_message_
   mavlink_cascaded_cmd_gains_t mavlink_cascaded_cmd_gains;
   mavlink_msg_cascaded_cmd_gains_decode(msg, &mavlink_cascaded_cmd_gains);
 
-  if (mavlink_cascaded_cmd_gains.target_system != system_id)
-    return;
-
   struct cascaded_command_gains_s cascaded_command_gains;
   memset(&cascaded_command_gains, 0, sizeof(cascaded_command_gains));
 
@@ -142,9 +136,6 @@ void CMUMavlinkHandler::handle_message_mocap_motor_state(const mavlink_message_t
   mavlink_mocap_motor_state_t mavlink_mocap_motor_state;
   mavlink_msg_mocap_motor_state_decode(msg, &mavlink_mocap_motor_state);
 
-  if (mavlink_mocap_motor_state.target_system != system_id)
-    return;
-
   struct mocap_motor_state_s mocap_motor_state;
   memset(&mocap_motor_state, 0, sizeof(mocap_motor_state));
 
@@ -160,9 +151,6 @@ void CMUMavlinkHandler::handle_message_mocap_rpm_cmd(const mavlink_message_t *ms
 {
   mavlink_mocap_rpm_cmd_t mavlink_mocap_rpm_cmd;
   mavlink_msg_mocap_rpm_cmd_decode(msg, &mavlink_mocap_rpm_cmd);
-
-  if (mavlink_mocap_rpm_cmd.target_system != system_id)
-    return;
 
   struct mocap_rpm_command_s mocap_rpm_cmd;
   memset(&mocap_rpm_cmd, 0, sizeof(mocap_rpm_cmd));
@@ -212,9 +200,6 @@ void CMUMavlinkHandler::handle_message_mocap_timesync(const mavlink_message_t *m
   // Specialized handler to ensure that time sync is wrt specific systems
   mavlink_mocap_timesync_t tsync;
   mavlink_msg_mocap_timesync_decode(msg, &tsync);
-
-  if (tsync.target_system != system_id)
-    return;
 
   mavlink_timesync_t timesync_struct;
   timesync_struct.tc1 = tsync.tc1;
@@ -268,9 +253,6 @@ void CMUMavlinkHandler::handle_message_mocap_position_cmd(const mavlink_message_
   mavlink_mocap_position_cmd_t mcmd;
   mavlink_msg_mocap_position_cmd_decode(msg, &mcmd);
 
-  if (mcmd.target_system != system_id)
-    return;
-
   struct mocap_position_command_s cmd;
   memset(&cmd, 0, sizeof(cmd));
 
@@ -293,9 +275,6 @@ void CMUMavlinkHandler::handle_message_mocap_position_cmd_gains(const mavlink_me
 {
   mavlink_mocap_position_cmd_gains_t mcmd_gains;
   mavlink_msg_mocap_position_cmd_gains_decode(msg, &mcmd_gains);
-
-  if (mcmd_gains.target_system != system_id)
-    return;
 
   struct mocap_position_command_gains_s cmd_gains;
   memset(&cmd_gains, 0, sizeof(cmd_gains));
