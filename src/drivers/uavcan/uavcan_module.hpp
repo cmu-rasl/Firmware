@@ -78,5 +78,8 @@
  */
 #define UAVCAN_IOCS_HARDPOINT_SET       _UAVCAN_IOC(10)
 
+#define UAVCAN_IOCS_RAW_SET _UAVCAN_IOC(11)
+#define UAVCAN_IOCS_RPM_SET _UAVCAN_IOC(12)
+
 // public prototypes
 extern "C" __EXPORT int uavcan_main(int argc, char *argv[]);

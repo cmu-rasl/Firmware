@@ -46,6 +46,7 @@
 
 #include <uavcan/uavcan.hpp>
 #include <uavcan/equipment/esc/RawCommand.hpp>
+#include <uavcan/equipment/esc/RPMCommand.hpp>
 #include <uavcan/equipment/esc/Status.hpp>
 #include <perf/perf_counter.h>
 #include <uORB/topics/esc_status.h>
@@ -60,6 +61,9 @@ public:
 	~UavcanEscController();
 
 	int init();
+
+  void set_raw(const uint16_t *raw, unsigned num_outputs);
+  void set_rpm(const uint16_t *rpm, unsigned num_outputs);
 
 	void update_outputs(float *outputs, unsigned num_outputs);
 
@@ -114,6 +118,7 @@ private:
 	uavcan::MonotonicTime							_prev_cmd_pub;   ///< rate limiting
 	uavcan::INode								&_node;
 	uavcan::Publisher<uavcan::equipment::esc::RawCommand>			_uavcan_pub_raw_cmd;
+	uavcan::Publisher<uavcan::equipment::esc::RPMCommand>			_uavcan_pub_rpm_cmd;
 	uavcan::Subscriber<uavcan::equipment::esc::Status, StatusCbBinder>	_uavcan_sub_status;
 	uavcan::TimerEventForwarder<TimerCbBinder>				_orb_timer;
 

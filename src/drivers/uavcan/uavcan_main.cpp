@@ -1140,6 +1140,18 @@ UavcanNode::ioctl(file *filp, int cmd, unsigned long arg)
 		}
 		break;
 
+	case UAVCAN_IOCS_RAW_SET: {
+			const uint16_t *buf = (const uint16_t *)arg;
+      _esc_controller.set_raw(buf, 4);
+		}
+		break;
+
+	case UAVCAN_IOCS_RPM_SET: {
+			const uint16_t *buf = (const uint16_t *)arg;
+      _esc_controller.set_rpm(buf, 4);
+		}
+		break;
+
 	case UAVCAN_IOCG_NODEID_INPROGRESS: {
 			UavcanServers   *_servers = UavcanServers::instance();
 
