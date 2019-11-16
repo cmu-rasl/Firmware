@@ -27,16 +27,11 @@ px4_add_board(
 		gps
 		heater
 		imu # all available imu drivers
-		irlock
 		lights/blinkm
 		lights/rgbled
 		lights/rgbled_ncp5623c
 		magnetometer # all available magnetometer drivers
 		mkblctrl
-		pca9685
-		pwm_input
-		pwm_out_sim
-		px4fmu
 		rc_input
 		safety_button
 		tap_esc
@@ -47,6 +42,7 @@ px4_add_board(
 
 	MODULES
 		attitude_estimator_q
+		battery_status
 		camera_feedback
 		commander
 		dataman
@@ -62,8 +58,6 @@ px4_add_board(
 		mc_pos_control
 		navigator
 		sensors
-		vmount
-		vtol_att_control
 
     mocap_control
     mocap_status_monitor
@@ -97,14 +91,8 @@ px4_add_board(
 		work_queue
 
 	EXAMPLES
-		bottle_drop # OBC challenge
-		fixedwing_control # Tutorial code from https://px4.io/dev/example_fixedwing_control
 		hello
 		hwtest # Hardware test
 		#matlab_csv_serial
 		px4_mavlink_debug # Tutorial code from https://px4.io/dev/debug_values
-		px4_simple_app # Tutorial code from https://px4.io/dev/px4_simple_app
-		rover_steering_control # Rover example app
-		uuv_example_app
-
 	)
