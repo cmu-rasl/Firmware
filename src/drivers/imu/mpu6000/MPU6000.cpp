@@ -31,6 +31,7 @@
  *
  ****************************************************************************/
 
+#include <inttypes.h>
 #include "MPU6000.hpp"
 
 /*
@@ -174,7 +175,7 @@ int MPU6000::reset()
 	_set_dlpf_filter(MPU6000_DEFAULT_ONCHIP_FILTER_FREQ);
 
 	if (is_icm_device()) {
-		_set_icm_acc_dlpf_filter(MPU6000_DEFAULT_ONCHIP_FILTER_FREQ);
+		_set_icm_acc_dlpf_filter(MPU6000_DEFAULT_ONCHIP_ACCEL_FILTER_FREQ);
 	}
 
 	px4_usleep(1000);
@@ -903,6 +904,9 @@ MPU6000::print_info()
 
 	_px4_accel.print_status();
 	_px4_gyro.print_status();
+
+  printf("ICM ACC DLPF FILTER VALUE IS %" PRIu8 "\n", read_reg(ICMREG_ACCEL_CONFIG2));
+  printf("ICM GYR DLPF FILTER VALUE IS %" PRIu8 "\n", read_reg(MPUREG_CONFIG));
 }
 
 void
