@@ -76,6 +76,7 @@
 #include <uORB/topics/manual_control_setpoint.h>
 #include <uORB/topics/mavlink_log.h>
 #include <uORB/topics/mocap_pwm_debug.h>
+#include <uORB/topics/att_ctrl_debug.h>
 #include <uORB/topics/vehicle_trajectory_waypoint.h>
 #include <uORB/topics/obstacle_distance.h>
 #include <uORB/topics/optical_flow.h>
@@ -5175,6 +5176,86 @@ protected:
   }
 };
 
+class MavlinkStreamAttCtrlDebug : public MavlinkStream
+{
+public:
+  const char *get_name() const
+  {
+    return MavlinkStreamAttCtrlDebug::get_name_static();
+  }
+
+  static const char *get_name_static()
+  {
+    return "ATT_CTRL_DEBUG";
+  }
+
+  static uint16_t get_id_static()
+  {
+    return MAVLINK_MSG_ID_ATT_CTRL_DEBUG;
+  }
+
+  uint16_t get_id()
+  {
+    return get_id_static();
+  }
+
+  static MavlinkStream *new_instance(Mavlink *mavlink)
+  {
+    return new MavlinkStreamAttCtrlDebug(mavlink);
+  }
+
+  unsigned get_size()
+  {
+    return MAVLINK_MSG_ID_ATT_CTRL_DEBUG_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES;
+  }
+
+private:
+  MavlinkOrbSubscription *_att_ctrl_sub;
+
+  /* do not allow top copying this class */
+  MavlinkStreamAttCtrlDebug(MavlinkStreamL1AdaptiveDebug &);
+  MavlinkStreamAttCtrlDebug& operator = (const MavlinkStreamL1AdaptiveDebug &);
+
+protected:
+  explicit MavlinkStreamAttCtrlDebug(Mavlink *mavlink) : MavlinkStream(mavlink),
+                                                          _att_ctrl_sub(_mavlink->add_orb_subscription(ORB_ID(att_ctrl_debug)))
+  {}
+
+  bool send(const hrt_abstime t)
+  {
+    struct att_ctrl_debug_s acd;
+
+    if (_att_ctrl_sub->update(&acd))
+    {
+      mavlink_att_ctrl_debug_t ac_msg;
+
+      for (int i = 0; i < 4; ++i)
+        ac_msg.rpm[i] = acd.rpm[i];
+
+      for (int i = 0; i < 3; ++i)
+      {
+        ac_msg.ang_vel_err[i] = acd.ang_vel_err[i];
+        ac_msg.ang_vel_des[i] = acd.ang_vel_des[i];
+        ac_msg.orientation_err[i] = acd.orientation_err[i];
+        ac_msg.mb[i] = acd.mb[i];
+      }
+
+      for (int i = 0; i < 9; ++i)
+      {
+        ac_msg.orientation_des[i] = acd.orientation_des[i];
+        ac_msg.orientation_act[i] = acd.orientation_act[i];
+      }
+
+      ac_msg.body_cmd_fbz = acd.body_cmd_fbz;
+
+      mavlink_msg_att_ctrl_debug_send_struct(_mavlink->get_channel(), &ac_msg);
+      return true;
+    }
+
+    return false;
+  }
+};
+
 class MavlinkStreamObstacleDistance : public MavlinkStream
 {
 public:
@@ -5310,6 +5391,7 @@ static const StreamListItem streams_list[] = {
 	StreamListItem(&MavlinkStreamOrbitStatus::new_instance, &MavlinkStreamOrbitStatus::get_name_static, &MavlinkStreamOrbitStatus::get_id_static),
 	StreamListItem(&MavlinkStreamL1AdaptiveDebug::new_instance, &MavlinkStreamL1AdaptiveDebug::get_name_static, &MavlinkStreamL1AdaptiveDebug::get_id_static),
 	StreamListItem(&MavlinkStreamMocapPWMDebug::new_instance, &MavlinkStreamMocapPWMDebug::get_name_static, &MavlinkStreamMocapPWMDebug::get_id_static),
+	StreamListItem(&MavlinkStreamAttCtrlDebug::new_instance, &MavlinkStreamAttCtrlDebug::get_name_static, &MavlinkStreamAttCtrlDebug::get_id_static),
 	StreamListItem(&MavlinkStreamObstacleDistance::new_instance, &MavlinkStreamObstacleDistance::get_name_static, &MavlinkStreamObstacleDistance::get_id_static)
 };
 

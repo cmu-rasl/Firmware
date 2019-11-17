@@ -158,6 +158,7 @@ set(msg_files
 	mocap_pwm_debug.msg
 	l1_linvel_debug.msg
 	l1_angvel_debug.msg
+	att_ctrl_debug.msg
 	)
 
 if(NOT EXTERNAL_MODULES_LOCATION STREQUAL "")
