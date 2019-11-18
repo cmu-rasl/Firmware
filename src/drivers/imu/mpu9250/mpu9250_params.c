@@ -1,4 +1,3 @@
 #include <parameters/param.h>
 PARAM_DEFINE_INT32(MPU9250_GYR_FFQ, 92);
 PARAM_DEFINE_INT32(MPU9250_ACC_FBT, 3);
-

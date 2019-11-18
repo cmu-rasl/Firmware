@@ -32,6 +32,7 @@
  ****************************************************************************/
 
 #include "MPU6000.hpp"
+#include <parameters/param.h>
 
 /*
   list of registers that will be checked in check_registers(). Note
@@ -171,11 +172,41 @@ int MPU6000::reset()
 	_set_sample_rate(1000);
 	px4_usleep(1000);
 
-	_set_dlpf_filter(MPU6000_DEFAULT_ONCHIP_FILTER_FREQ);
+  param_t param_h = param_find("MPU6000_GYRO_FFQ");
 
-	if (is_icm_device()) {
-		_set_icm_acc_dlpf_filter(MPU6000_DEFAULT_ONCHIP_FILTER_FREQ);
-	}
+  if (param_h != PARAM_INVALID)
+  {
+    int filter_freq_out;
+    param_get(param_h, &filter_freq_out);
+
+    _set_dlpf_filter(filter_freq_out);
+
+    printf("MPU6000 set onchip gyro filter freq to %d\n", filter_freq_out);
+  }
+  else
+  {
+    _set_dlpf_filter(MPU6000_DEFAULT_ONCHIP_FILTER_FREQ);
+    printf("MPU6000 driver got invalid parameter for onchip gyro filter freq! Using default of %d\n", MPU6000_DEFAULT_ONCHIP_FILTER_FREQ);
+  }
+
+
+  if (is_icm_device()) {
+    param_h = param_find("MPU6000_ACC_FFQ");
+    if (param_h != PARAM_INVALID)
+    {
+      int filter_freq_out;
+      param_get(param_h, &filter_freq_out);
+
+      _set_icm_acc_dlpf_filter(filter_freq_out);
+
+      printf("MPU6000 set onchip accel filter freq to %d\n", filter_freq_out);
+    }
+    else
+    {
+      _set_icm_acc_dlpf_filter(MPU6000_DEFAULT_ONCHIP_FILTER_FREQ);
+      printf("MPU6000 driver got invalid parameter for onchip accel filter freq! Using default of %d\n", MPU6000_DEFAULT_ONCHIP_FILTER_FREQ);
+    }
+  }
 
 	px4_usleep(1000);
 	// Gyro scale 2000 deg/s ()
