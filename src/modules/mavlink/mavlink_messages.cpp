@@ -68,6 +68,7 @@
 #include <uORB/topics/debug_array.h>
 #include <uORB/topics/differential_pressure.h>
 #include <uORB/topics/distance_sensor.h>
+#include <uORB/topics/esc_status.h>
 #include <uORB/topics/estimator_status.h>
 #include <uORB/topics/geofence_result.h>
 #include <uORB/topics/home_position.h>
@@ -5170,6 +5171,78 @@ protected:
   }
 };
 
+class MavlinkStreamEscStatus : public MavlinkStream
+{
+public:
+  const char *get_name() const
+  {
+    return MavlinkStreamEscStatus::get_name_static();
+  }
+
+  static const char *get_name_static()
+  {
+    return "ESC_STATUS";
+  }
+
+  static uint16_t get_id_static()
+  {
+    return MAVLINK_MSG_ID_ESC_STATUS;
+  }
+
+  uint16_t get_id()
+  {
+    return get_id_static();
+  }
+
+  static MavlinkStream *new_instance(Mavlink *mavlink)
+  {
+    return new MavlinkStreamEscStatus(mavlink);
+  }
+
+  unsigned get_size()
+  {
+    return MAVLINK_MSG_ID_ESC_STATUS_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES;
+  }
+
+private:
+  MavlinkOrbSubscription *_esc_status_sub;
+
+  /* do not allow top copying this class */
+  MavlinkStreamEscStatus(MavlinkStreamEscStatus &);
+  MavlinkStreamEscStatus& operator = (const MavlinkStreamEscStatus &);
+
+protected:
+  explicit MavlinkStreamEscStatus(Mavlink *mavlink) : MavlinkStream(mavlink),
+                                                          _esc_status_sub(_mavlink->add_orb_subscription(ORB_ID(esc_status)))
+  {}
+
+  bool send(const hrt_abstime t)
+  {
+    struct esc_status_s es;
+
+    if (_esc_status_sub->update_if_changed(&es))
+    {
+      mavlink_esc_status_t es_msg;
+      es_msg.time_usec = es.timestamp;
+      for (int i = 0; i < 4; i++)
+      {
+        es_msg.voltage[i] = es.esc[i].esc_voltage;
+        es_msg.current[i] = es.esc[i].esc_current;
+        es_msg.error_count[i] = es.esc[i].esc_errorcount;
+        es_msg.rpm[i] = es.esc[i].esc_rpm;
+        es_msg.rpm_setpoint[i] = es.esc[i].esc_setpoint_raw;
+        es_msg.temp[i] = es.esc[i].esc_temperature;
+      }
+
+      mavlink_msg_esc_status_send_struct(_mavlink->get_channel(), &es_msg);
+      return true;
+    }
+
+    return false;
+  }
+};
+
+
 class MavlinkStreamObstacleDistance : public MavlinkStream
 {
 public:
@@ -5305,6 +5378,7 @@ static const StreamListItem streams_list[] = {
 	StreamListItem(&MavlinkStreamOrbitStatus::new_instance, &MavlinkStreamOrbitStatus::get_name_static, &MavlinkStreamOrbitStatus::get_id_static),
 	StreamListItem(&MavlinkStreamL1AdaptiveDebug::new_instance, &MavlinkStreamL1AdaptiveDebug::get_name_static, &MavlinkStreamL1AdaptiveDebug::get_id_static),
 	StreamListItem(&MavlinkStreamMocapPWMDebug::new_instance, &MavlinkStreamMocapPWMDebug::get_name_static, &MavlinkStreamMocapPWMDebug::get_id_static),
+	StreamListItem(&MavlinkStreamEscStatus::new_instance, &MavlinkStreamEscStatus::get_name_static, &MavlinkStreamEscStatus::get_id_static),
 	StreamListItem(&MavlinkStreamObstacleDistance::new_instance, &MavlinkStreamObstacleDistance::get_name_static, &MavlinkStreamObstacleDistance::get_id_static)
 };
 
