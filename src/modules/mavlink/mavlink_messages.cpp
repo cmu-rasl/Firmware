@@ -5154,7 +5154,7 @@ protected:
   {
     struct mocap_pwm_debug_s mpd;
 
-    if (_mocap_pwm_debug_sub->update(&mpd))
+    if (_mocap_pwm_debug_sub->update_if_changed(&mpd))
     {
       mavlink_mocap_pwm_debug_t mpd_msg;
       mpd_msg.time_usec = mpd.timestamp;
