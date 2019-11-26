@@ -7,6 +7,8 @@
 #include <uORB/topics/mocap_rpm_command.h>
 #include <uORB/topics/mocap_position_command.h>
 #include <uORB/topics/mocap_position_command_gains.h>
+#include <uORB/topics/vehicle_attitude.h>
+#include <uORB/topics/vehicle_angular_velocity.h>
 #include <uORB/topics/vehicle_odometry.h>
 
 #include "cmu_mavlink_handler.h"
@@ -23,6 +25,8 @@ CMUMavlinkHandler::CMUMavlinkHandler() :
   mocap_pwm_cmd_pub(nullptr),
   mocap_position_command_pub(nullptr),
   mocap_position_command_gains_pub(nullptr),
+  vehicle_attitude_pub(nullptr),
+  vehicle_angular_velocity_pub(nullptr),
   vehicle_mocap_odometry_pub(nullptr)
 {
   return;
@@ -73,6 +77,12 @@ void CMUMavlinkHandler::handle_message(const mavlink_message_t *msg)
       break;
     case MAVLINK_MSG_ID_MOCAP_POSITION_CMD_GAINS:
       handle_message_mocap_position_cmd_gains(msg);
+      break;
+    case MAVLINK_MSG_ID_VEHICLE_ATTITUDE:
+      handle_message_hil_vehicle_attitude(msg);
+      break;
+    case MAVLINK_MSG_ID_VEHICLE_ANGULAR_VELOCITY:
+      handle_message_hil_vehicle_angular_velocity(msg);
       break;
   }
 }
@@ -311,6 +321,53 @@ void CMUMavlinkHandler::handle_message_mocap_position_cmd_gains(const mavlink_me
   orb_publish_auto(ORB_ID(mocap_position_command_gains),
                    &mocap_position_command_gains_pub,
                    &mcmd_gains, &inst, ORB_PRIO_HIGH);
+}
+
+void CMUMavlinkHandler::handle_message_hil_vehicle_attitude(const mavlink_message_t *msg)
+{
+  mavlink_vehicle_attitude_t mavlink_vehicle_attitude;
+  mavlink_msg_vehicle_attitude_decode(msg, &mavlink_vehicle_attitude);
+
+  struct vehicle_attitude_s vehicle_attitude;
+  memset(&vehicle_attitude, 0, sizeof(vehicle_attitude));
+
+  vehicle_attitude.timestamp = mavlink_vehicle_attitude.time_usec;
+
+  matrix::Quaternionf q(mavlink_vehicle_attitude.q);
+  q.normalize();
+
+  for (unsigned int i = 0; i < 4; i++)
+    vehicle_attitude.q[i] = q(i);
+
+  int inst; // Not used
+  orb_publish_auto(ORB_ID(vehicle_attitude), &vehicle_attitude_pub,
+                   &vehicle_attitude, &inst, ORB_PRIO_HIGH);
+
+  static int counter = 0;
+
+  if (counter++ == 100)
+  {
+    counter = 0;
+    printf("got to hil\n");
+  }
+}
+
+void CMUMavlinkHandler::handle_message_hil_vehicle_angular_velocity(const mavlink_message_t *msg)
+{
+  mavlink_vehicle_angular_velocity_t mavlink_vehicle_angular_velocity;
+  mavlink_msg_vehicle_angular_velocity_decode(msg, &mavlink_vehicle_angular_velocity);
+
+  struct vehicle_angular_velocity_s vehicle_angular_velocity;
+  memset(&vehicle_angular_velocity, 0, sizeof(vehicle_angular_velocity));
+
+  vehicle_angular_velocity.timestamp = mavlink_vehicle_angular_velocity.time_usec;
+
+  for (unsigned int i = 0; i < 3; i++)
+    vehicle_angular_velocity.xyz[i] = mavlink_vehicle_angular_velocity.xyz[i];
+
+  int inst; // Not used
+  orb_publish_auto(ORB_ID(vehicle_angular_velocity), &vehicle_angular_velocity_pub,
+                   &vehicle_angular_velocity, &inst, ORB_PRIO_HIGH);
 }
 
 void CMUMavlinkHandler::pack_publish_mocap(uint64_t time,

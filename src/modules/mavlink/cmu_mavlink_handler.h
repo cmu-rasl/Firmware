@@ -34,6 +34,8 @@ private:
   void handle_message_mocap_multi_pose(const mavlink_message_t *msg);
   void handle_message_mocap_position_cmd(const mavlink_message_t *msg);
   void handle_message_mocap_position_cmd_gains(const mavlink_message_t *msg);
+  void handle_message_hil_vehicle_attitude(const mavlink_message_t *msg);
+  void handle_message_hil_vehicle_angular_velocity(const mavlink_message_t *msg);
 
   void pack_publish_mocap(uint64_t time,
                           float x, float y, float z, float heading);
@@ -50,6 +52,8 @@ private:
   orb_advert_t mocap_pwm_cmd_pub;
   orb_advert_t mocap_position_command_pub;
   orb_advert_t mocap_position_command_gains_pub;
+  orb_advert_t vehicle_attitude_pub;
+  orb_advert_t vehicle_angular_velocity_pub;
   orb_advert_t vehicle_mocap_odometry_pub;
 };
 #endif
