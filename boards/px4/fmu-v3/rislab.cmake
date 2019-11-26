@@ -8,6 +8,8 @@ px4_add_board(
 	ARCHITECTURE cortex-m4
 	ROMFSROOT px4fmu_common
 	IO px4_io-v2_default
+	TESTING
+	UAVCAN_INTERFACES 2
 
 	SERIAL_PORTS
 		GPS1:/dev/ttyS3
@@ -16,7 +18,9 @@ px4_add_board(
 		TEL4:/dev/ttyS6
 
 	DRIVERS
+    adc
 		barometer/ms5611
+    dshot
     #heater
 		imu/l3gd20
 		imu/lsm303d
@@ -25,9 +29,6 @@ px4_add_board(
 		pwm_input
 		px4fmu
 		px4io
-		stm32
-		stm32/adc
-		stm32/tone_alarm
 		tone_alarm
 
 	MODULES
@@ -43,7 +44,7 @@ px4_add_board(
     commander
     mc_att_control
     mc_pos_control # Required for mc_att_control (MPC_MAN_Y_MAX)
-    navigator # Required for mc_pos_contorl ?
+    navigator # Required for mc_pos_control ?
 
 	SYSTEMCMDS
     config
