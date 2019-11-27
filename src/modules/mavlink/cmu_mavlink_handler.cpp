@@ -342,14 +342,6 @@ void CMUMavlinkHandler::handle_message_hil_vehicle_attitude(const mavlink_messag
   int inst; // Not used
   orb_publish_auto(ORB_ID(vehicle_attitude), &vehicle_attitude_pub,
                    &vehicle_attitude, &inst, ORB_PRIO_HIGH);
-
-  static int counter = 0;
-
-  if (counter++ == 100)
-  {
-    counter = 0;
-    printf("got to hil\n");
-  }
 }
 
 void CMUMavlinkHandler::handle_message_hil_vehicle_angular_velocity(const mavlink_message_t *msg)
