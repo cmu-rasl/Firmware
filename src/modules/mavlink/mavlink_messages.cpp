@@ -77,6 +77,7 @@
 #include <uORB/topics/mavlink_log.h>
 #include <uORB/topics/mocap_pwm_debug.h>
 #include <uORB/topics/att_ctrl_debug.h>
+#include <uORB/topics/hitl_rpm_command.h>
 #include <uORB/topics/vehicle_trajectory_waypoint.h>
 #include <uORB/topics/obstacle_distance.h>
 #include <uORB/topics/optical_flow.h>
@@ -5256,6 +5257,70 @@ protected:
   }
 };
 
+class MavlinkStreamHILRPMCommand: public MavlinkStream
+{
+public:
+  const char *get_name() const
+  {
+    return MavlinkStreamHILRPMCommand::get_name_static();
+  }
+
+  static const char *get_name_static()
+  {
+    return "HITL_RPM_COMMAND";
+  }
+
+  static uint16_t get_id_static()
+  {
+    return MAVLINK_MSG_ID_HITL_RPM_COMMAND;
+  }
+
+  uint16_t get_id()
+  {
+    return get_id_static();
+  }
+
+  static MavlinkStream *new_instance(Mavlink *mavlink)
+  {
+    return new MavlinkStreamHILRPMCommand(mavlink);
+  }
+
+  unsigned get_size()
+  {
+    return MAVLINK_MSG_ID_HITL_RPM_COMMAND_LEN + MAVLINK_NUM_NON_PAYLOAD_BYTES;
+  }
+
+private:
+  MavlinkOrbSubscription *_hil_rpm_cmd_sub;
+
+  /* do not allow top copying this class */
+  MavlinkStreamHILRPMCommand(MavlinkStreamHILRPMCommand &);
+  MavlinkStreamHILRPMCommand& operator = (const MavlinkStreamHILRPMCommand &);
+
+protected:
+  explicit MavlinkStreamHILRPMCommand(Mavlink *mavlink) : MavlinkStream(mavlink),
+                                                          _hil_rpm_cmd_sub(_mavlink->add_orb_subscription(ORB_ID(hitl_rpm_command)))
+  {}
+
+  bool send(const hrt_abstime t)
+  {
+    struct hitl_rpm_command_s hrc;
+
+    if (_hil_rpm_cmd_sub->update(&hrc))
+    {
+      mavlink_hitl_rpm_command_t hrc_msg;
+
+      for (int i = 0; i < 4; ++i)
+        hrc_msg.rpm[i] = hrc.rpm[i];
+
+      mavlink_msg_hitl_rpm_command_send_struct(_mavlink->get_channel(), &hrc_msg);
+      return true;
+    }
+
+    return false;
+  }
+};
+
 class MavlinkStreamObstacleDistance : public MavlinkStream
 {
 public:
@@ -5392,6 +5457,7 @@ static const StreamListItem streams_list[] = {
 	StreamListItem(&MavlinkStreamL1AdaptiveDebug::new_instance, &MavlinkStreamL1AdaptiveDebug::get_name_static, &MavlinkStreamL1AdaptiveDebug::get_id_static),
 	StreamListItem(&MavlinkStreamMocapPWMDebug::new_instance, &MavlinkStreamMocapPWMDebug::get_name_static, &MavlinkStreamMocapPWMDebug::get_id_static),
 	StreamListItem(&MavlinkStreamAttCtrlDebug::new_instance, &MavlinkStreamAttCtrlDebug::get_name_static, &MavlinkStreamAttCtrlDebug::get_id_static),
+	StreamListItem(&MavlinkStreamHILRPMCommand::new_instance, &MavlinkStreamHILRPMCommand::get_name_static, &MavlinkStreamHILRPMCommand::get_id_static),
 	StreamListItem(&MavlinkStreamObstacleDistance::new_instance, &MavlinkStreamObstacleDistance::get_name_static, &MavlinkStreamObstacleDistance::get_id_static)
 };
 

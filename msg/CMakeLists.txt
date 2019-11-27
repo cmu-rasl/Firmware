@@ -159,6 +159,7 @@ set(msg_files
 	l1_linvel_debug.msg
 	l1_angvel_debug.msg
 	att_ctrl_debug.msg
+	hitl_rpm_command.msg
 	)
 
 if(NOT EXTERNAL_MODULES_LOCATION STREQUAL "")
