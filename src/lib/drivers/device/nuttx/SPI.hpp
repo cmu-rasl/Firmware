@@ -50,6 +50,9 @@ namespace device __EXPORT
  */
 class __EXPORT SPI : public CDev
 {
+public:
+	virtual int	init();
+
 protected:
 	/**
 	 * Constructor
@@ -72,8 +75,6 @@ protected:
 		LOCK_THREADS,		/**< lock only against other threads, using SPI_LOCK */
 		LOCK_NONE		/**< perform no locking, only safe if the bus is entirely private */
 	};
-
-	virtual int	init();
 
 	/**
 	 * Check for the presence of the device on the bus.

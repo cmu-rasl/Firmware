@@ -139,7 +139,7 @@ int MPU6000::reset()
 		// Wake up device and select GyroZ clock. Note that the
 		// MPU6000 starts up in sleep mode, and it can take some time
 		// for it to come out of sleep
-		write_checked_reg(MPUREG_PWR_MGMT_1, MPU_CLK_SEL_PLLGYROZ);
+		write_checked_reg(MPUREG_PWR_MGMT_1, MPU_CLK_SEL_PLLGYROX);
 		up_udelay(1000);
 
 		// Enable I2C bus or Disable I2C bus (recommended on data sheet)
@@ -148,7 +148,7 @@ int MPU6000::reset()
 
 		px4_leave_critical_section(state);
 
-		if (read_reg(MPUREG_PWR_MGMT_1) == MPU_CLK_SEL_PLLGYROZ) {
+		if (read_reg(MPUREG_PWR_MGMT_1) == MPU_CLK_SEL_PLLGYROX) {
 			break;
 		}
 
@@ -162,7 +162,7 @@ int MPU6000::reset()
 	_reset_wait = hrt_absolute_time() + 30000;
 	px4_leave_critical_section(state);
 
-	if (read_reg(MPUREG_PWR_MGMT_1) != MPU_CLK_SEL_PLLGYROZ) {
+	if (read_reg(MPUREG_PWR_MGMT_1) != MPU_CLK_SEL_PLLGYROX) {
 		return -EIO;
 	}
 
@@ -772,16 +772,6 @@ MPU6000::measure()
 	}
 
 	struct MPUReport mpu_report;
-
-	struct Report {
-		int16_t		accel_x;
-		int16_t		accel_y;
-		int16_t		accel_z;
-		int16_t		temp;
-		int16_t		gyro_x;
-		int16_t		gyro_y;
-		int16_t		gyro_z;
-	} report;
 
 	/* start measuring */
 	perf_begin(_sample_perf);

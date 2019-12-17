@@ -310,6 +310,16 @@ public:
 
 	virtual int		init();
 
+	struct Report {
+		int16_t		accel_x;
+		int16_t		accel_y;
+		int16_t		accel_z;
+		int16_t		temp;
+		int16_t		gyro_x;
+		int16_t		gyro_y;
+		int16_t		gyro_z;
+	} report;
+
 	/**
 	 * Diagnostics - print some basic information about the driver.
 	 */
@@ -340,6 +350,11 @@ public:
 	 * Resets the chip and measurements ranges, but not scale and offset.
 	 */
 	int			reset();
+
+	/**
+	 * Fetch measurements from the sensor and update the report buffers.
+	 */
+	int			measure();
 
 protected:
 	device::Device			*_interface;
@@ -412,11 +427,6 @@ private:
 	 * is_mpu_device
 	 */
 	bool 		is_mpu_device() { return _device_type == MPU_DEVICE_TYPE_MPU6000; }
-
-	/**
-	 * Fetch measurements from the sensor and update the report buffers.
-	 */
-	int			measure();
 
 	/**
 	 * Read a register from the MPU6000
