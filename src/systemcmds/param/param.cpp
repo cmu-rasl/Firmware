@@ -82,6 +82,8 @@ enum class COMPARE_ERROR_LEVEL {
 #define PARAM_PRINT PX4_INFO_RAW
 #endif
 
+#define FLOAT_FORMAT "%12.12f"
+
 static int 	do_save(const char *param_file_name);
 static int	do_save_default();
 static int 	do_load(const char *param_file_name);
@@ -497,7 +499,7 @@ do_show_quiet(const char *param_name)
 
 	case PARAM_TYPE_FLOAT:
 		if (!param_get(param, &ff)) {
-			PARAM_PRINT("%4.4f", (double)ff);
+			PARAM_PRINT(FLOAT_FORMAT, (double)ff);
 		}
 
 		break;
@@ -558,7 +560,7 @@ do_show_index(const char *index, bool used_index)
 
 	case PARAM_TYPE_FLOAT:
 		if (!param_get(param, &ff)) {
-			PARAM_PRINT("%4.4f\n", (double)ff);
+			PARAM_PRINT(FLOAT_FORMAT "\n", (double)ff);
 		}
 
 		break;
@@ -633,7 +635,7 @@ do_show_print(void *arg, param_t param)
 
 	case PARAM_TYPE_FLOAT:
 		if (!param_get(param, &f)) {
-			PARAM_PRINT("%4.4f\n", (double)f);
+			PARAM_PRINT(FLOAT_FORMAT "\n", (double)f);
 			return;
 		}
 
@@ -703,9 +705,9 @@ do_set(const char *name, const char *val, bool fail_on_not_found)
 				PARAM_PRINT("%c %s: ",
 					    param_value_unsaved(param) ? '*' : (param_value_is_default(param) ? ' ' : '+'),
 					    param_name(param));
-				PARAM_PRINT("curr: %4.4f", (double)f);
+				PARAM_PRINT("curr: " FLOAT_FORMAT, (double)f);
 				param_set(param, &newval);
-				PARAM_PRINT(" -> new: %4.4f\n", (double)newval);
+				PARAM_PRINT(" -> new: " FLOAT_FORMAT "\n", (double)newval);
 			}
 
 		}
@@ -776,7 +778,7 @@ do_compare(const char *name, char *vals[], unsigned comparisons, enum COMPARE_OP
 
 				if (((cmp_op == COMPARE_OPERATOR::EQUAL) && (fabsf(f - g) < 1e-7f)) ||
 				    ((cmp_op == COMPARE_OPERATOR::GREATER) && (f > g))) {
-					PX4_DEBUG(" %4.4f: ", (double)f);
+					PX4_DEBUG(" " FLOAT_FORMAT " ", (double)f);
 					ret = 0;
 				}
 			}
