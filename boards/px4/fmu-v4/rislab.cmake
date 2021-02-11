@@ -51,11 +51,9 @@ px4_add_board(
 		land_detector
 		landing_target_estimator
 		load_mon
-		local_position_estimator
 		logger
 		mavlink
-		mc_att_control
-		mc_pos_control
+    #mc_att_control
 		navigator
 		sensors
 
@@ -82,7 +80,7 @@ px4_add_board(
 		reflect
 		sd_bench
 		shutdown
-		tests # tests and test runner
+    #tests # tests and test runner
 		top
 		topic_listener
 		tune_control

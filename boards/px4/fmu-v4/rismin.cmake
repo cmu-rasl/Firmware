@@ -31,6 +31,7 @@ px4_add_board(
 		config
 		dumpfile
 		hardfault_log
+		mixer
 		mtd
 		nshterm
 		param
