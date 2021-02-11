@@ -99,6 +99,14 @@ set(msg_files
 	rc_parameter_map.msg
 	safety.msg
 	satellite_info.msg
+  attest2.msg
+  attestbias.msg
+  attestdist.msg
+  imu.msg
+  rpm.msg
+  tvcmd.msg
+  qcmd.msg
+  flcmd.msg
 	sensor_accel.msg
 	sensor_baro.msg
 	sensor_bias.msg
