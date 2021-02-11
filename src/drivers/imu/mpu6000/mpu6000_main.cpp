@@ -280,20 +280,20 @@ regdump(enum MPU6000_BUS busid)
 /**
  * deliberately produce an error to test recovery
  */
-void
-testerror(enum MPU6000_BUS busid)
-{
-	struct mpu6000_bus_option &bus = find_bus(busid);
-
-
-	if (bus.dev == nullptr) {
-		errx(1, "driver not running");
-	}
-
-	bus.dev->test_error();
-
-	exit(0);
-}
+//void
+//testerror(enum MPU6000_BUS busid)
+//{
+//	struct mpu6000_bus_option &bus = find_bus(busid);
+//
+//
+//	if (bus.dev == nullptr) {
+//		errx(1, "driver not running");
+//	}
+//
+//	bus.dev->test_error();
+//
+//	exit(0);
+//}
 
 #ifndef CONSTRAINED_FLASH
 /**
@@ -431,15 +431,15 @@ mpu6000_main(int argc, char *argv[])
 
 #ifndef CONSTRAINED_FLASH
 
-	if (!strcmp(verb, "factorytest")) {
-		mpu6000::factorytest(busid);
-	}
+	//if (!strcmp(verb, "factorytest")) {
+	//	mpu6000::factorytest(busid);
+	//}
 
 #endif
 
-	if (!strcmp(verb, "testerror")) {
-		mpu6000::testerror(busid);
-	}
+	//if (!strcmp(verb, "testerror")) {
+	//	mpu6000::testerror(busid);
+	//}
 
 	mpu6000::usage();
 	return -1;

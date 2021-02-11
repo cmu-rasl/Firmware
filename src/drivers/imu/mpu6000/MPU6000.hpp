@@ -176,6 +176,7 @@ enum MPU_DEVICE_TYPE {
 #define BITS_FS_500DPS			0x08
 #define BITS_FS_1000DPS			0x10
 #define BITS_FS_2000DPS			0x18
+#define BITS_GYRO_DLPF_DISABLE 0x02
 #define BITS_FS_MASK			0x18
 #define BIT_INT_ANYRD_2CLEAR	0x10
 #define BIT_RAW_RDY_EN			0x01
@@ -190,6 +191,7 @@ enum MPU_DEVICE_TYPE {
 // ICM2608 specific registers
 
 #define ICMREG_ACCEL_CONFIG2		0x1D
+#define ICM_ACC_DLPF_DISABLE 0x08
 #define ICM_ACC_DLPF_CFG_1046HZ_NOLPF	0x00
 #define ICM_ACC_DLPF_CFG_218HZ		0x01
 #define ICM_ACC_DLPF_CFG_99HZ		0x02
@@ -254,13 +256,15 @@ enum MPU_DEVICE_TYPE {
 struct MPUReport {
 	uint8_t		cmd;
 	uint8_t		status;
-	uint8_t		accel_x[2];
-	uint8_t		accel_y[2];
-	uint8_t		accel_z[2];
+  uint8_t   accel[6];
+	//uint8_t		accel_x[2];
+	//uint8_t		accel_y[2];
+	//uint8_t		accel_z[2];
 	uint8_t		temp[2];
-	uint8_t		gyro_x[2];
-	uint8_t		gyro_y[2];
-	uint8_t		gyro_z[2];
+  uint8_t gyro[6];
+	//uint8_t		gyro_x[2];
+	//uint8_t		gyro_y[2];
+	//uint8_t		gyro_z[2];
 };
 #pragma pack(pop)
 
@@ -311,13 +315,15 @@ public:
 	virtual int		init();
 
 	struct Report {
-		int16_t		accel_x;
-		int16_t		accel_y;
-		int16_t		accel_z;
+    int16_t   accel[3];
+		//int16_t		accel_x;
+		//int16_t		accel_y;
+		//int16_t		accel_z;
 		int16_t		temp;
-		int16_t		gyro_x;
-		int16_t		gyro_y;
-		int16_t		gyro_z;
+    int16_t   gyro[3];
+		//int16_t		gyro_x;
+		//int16_t		gyro_y;
+		//int16_t		gyro_z;
 	} report;
 
 	/**
