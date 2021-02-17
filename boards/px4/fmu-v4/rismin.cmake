@@ -21,6 +21,7 @@ px4_add_board(
     #imu # all available imu drivers
     imu/mpu6000
 		uavcan
+    rc_input
 
 	MODULES
     mocap_control

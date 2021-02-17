@@ -107,6 +107,7 @@ set(msg_files
   tvcmd.msg
   qcmd.msg
   flcmd.msg
+  rccmd.msg
 	sensor_accel.msg
 	sensor_baro.msg
 	sensor_bias.msg
